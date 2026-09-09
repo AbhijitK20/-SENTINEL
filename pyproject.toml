@@ -1,0 +1,83 @@
+[project]
+name = "trajectory-sih26153"
+version = "0.1.0"
+description = "Offline, explainable network attack forecasting prototype for SIH26153."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "joblib>=1.6.0",
+    "numpy>=2.0,<3",
+    "pandas>=2.2,<3",
+    "pydantic>=2.8,<3",
+    "pyyaml>=6.0,<7",
+    "scikit-learn>=1.5,<2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-cov>=5,<7",
+    "ruff>=0.9,<1",
+]
+presentation = [
+    "python-pptx>=1.0,<2",
+]
+
+[project.optional-dependencies]
+pcap = [
+    "scapy>=2.6,<3",
+]
+deep-learning = [
+    "torch>=2.4,<3",
+]
+dashboard = [
+    "networkx>=3.3,<4",
+    "plotly>=5.24,<7",
+    "streamlit>=1.40,<2",
+]
+all = [
+    "scapy>=2.6,<3",
+    "torch>=2.4,<3",
+    "networkx>=3.3,<4",
+    "plotly>=5.24,<7",
+    "streamlit>=1.40,<2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Slide copy lives in long string literals; wrapping them would hurt readability.
+"scripts/build_deck.py" = ["E501"]
+# pytest.importorskip forces non-top imports for optional-dep tests.
+"tests/test_temporal.py" = ["E402"]
+# HTML template is one long f-string; line wrapping breaks the embedded CSS.
+"scripts/render_snapshot.py" = ["E501"]
+"scripts/render_burndown.py" = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trajectory"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

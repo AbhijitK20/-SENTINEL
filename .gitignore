@@ -1,0 +1,30 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+*.egg-info/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Datasets and generated artifacts
+data/raw/
+data/interim/
+data/processed/
+models/checkpoints/
+reports/generated/
+*.pcap
+*.pcapng
+*.csv
+*.parquet
+*.pt
+*.pth
+*.onnx
+
+# Local editor and OS files
+.idea/
+.vscode/
+.DS_Store
