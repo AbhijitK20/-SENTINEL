@@ -169,8 +169,8 @@ def _render_html(inventory: list[dict[str, str]], forecast: dict[str, object]) -
   <aside>
     <section>
       <h2>Status</h2>
-      <div class="stat"><span class="label">Sprint</span><span><span class="badge good">10/10 complete + real-data benchmark</span></span></div>
-      <div class="stat"><span class="label">Tests</span><span>96 passed</span></div>
+      <div class="stat"><span class="label">Sprint</span><span><span class="badge good">11/11 complete incl. live demo</span></span></div>
+      <div class="stat"><span class="label">Tests</span><span>103 passed</span></div>
       <div class="stat"><span class="label">Lint / format</span><span><span class="badge good">clean</span></span></div>
       <div class="stat"><span class="label">uv lock</span><span><span class="badge good">in sync</span></span></div>
       <div class="stat"><span class="label">Baseline test P/R/F1</span>

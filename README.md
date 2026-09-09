@@ -23,7 +23,12 @@ uv run python scripts/run_temporal.py   # temporal -> reports/generated/temporal
 uv run python scripts/run_comparison.py # side-by-side -> reports/generated/comparison/
 uv run python scripts/run_replay.py     # walk-forward forecast-vs-reality
 uv run python scripts/run_rollout.py    # recursive rollout comparison
-uv run streamlit run src/trajectory/dashboard/app.py   # analyst demo UI
+uv run streamlit run src/trajectory/dashboard/app.py   # analyst demo UI (now with Live Detection tab)
+
+# Live demo: train in the dashboard, open Live Detection, press Start.
+# Or run the pieces manually (two terminals):
+uv run python scripts/attack_demo.py target                      # localhost echo target
+uv run python scripts/attack_demo.py attack --speed 2            # scripted attack → events.jsonl
 ```
 
 Optional extras: `--extra pcap` (Scapy), `--extra dashboard`, or `--group presentation` for the slide generator.
