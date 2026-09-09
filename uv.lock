@@ -1431,12 +1431,17 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "joblib" },
+    { name = "networkx" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pandas" },
+    { name = "plotly" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "scikit-learn" },
+    { name = "streamlit" },
+    { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
 ]
 
 [package.optional-dependencies]
@@ -1474,10 +1479,12 @@ presentation = [
 [package.metadata]
 requires-dist = [
     { name = "joblib", specifier = ">=1.6.0" },
+    { name = "networkx", specifier = ">=3.3,<4" },
     { name = "networkx", marker = "extra == 'all'", specifier = ">=3.3,<4" },
     { name = "networkx", marker = "extra == 'dashboard'", specifier = ">=3.3,<4" },
     { name = "numpy", specifier = ">=2.0,<3" },
     { name = "pandas", specifier = ">=2.2,<3" },
+    { name = "plotly", specifier = ">=5.24,<7" },
     { name = "plotly", marker = "extra == 'all'", specifier = ">=5.24,<7" },
     { name = "plotly", marker = "extra == 'dashboard'", specifier = ">=5.24,<7" },
     { name = "pydantic", specifier = ">=2.8,<3" },
@@ -1485,8 +1492,10 @@ requires-dist = [
     { name = "scapy", marker = "extra == 'all'", specifier = ">=2.6,<3" },
     { name = "scapy", marker = "extra == 'pcap'", specifier = ">=2.6,<3" },
     { name = "scikit-learn", specifier = ">=1.5,<2" },
+    { name = "streamlit", specifier = ">=1.40,<2" },
     { name = "streamlit", marker = "extra == 'all'", specifier = ">=1.40,<2" },
     { name = "streamlit", marker = "extra == 'dashboard'", specifier = ">=1.40,<2" },
+    { name = "torch", specifier = ">=2.4,<3", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "extra == 'all'", specifier = ">=2.4,<3", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "extra == 'deep-learning'", specifier = ">=2.4,<3", index = "https://download.pytorch.org/whl/cpu" },
 ]
