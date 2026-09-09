@@ -1,0 +1,30 @@
+project:
+  name: trajectory
+  problem_statement: SIH26153
+  random_seed: 42
+
+data:
+  window_seconds: 60
+  stride_seconds: 30
+  sequence_length: 8
+  forecast_horizon: 5
+
+split:
+  train_fraction: 0.6
+  validation_fraction: 0.2
+
+model:
+  baseline: logistic_regression
+  temporal: gru
+  baseline_config:
+    # Mean-aggregated endpoint identifiers carry entity-memorization risk
+    # (FEATURE_SPECIFICATION.md) and are not eligible for the baseline.
+    excluded_features: [source_port, destination_port, protocol, tcp_flags]
+    regularization_c: 1.0
+    class_weight: balanced
+    max_iterations: 1000
+    decision_threshold: 0.5
+
+runtime:
+  offline: true
+  device: cpu

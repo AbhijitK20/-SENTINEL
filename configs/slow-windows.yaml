@@ -1,0 +1,33 @@
+project:
+  name: trajectory
+  problem_statement: SIH26153
+  random_seed: 42
+
+data:
+  # Slower windows cover stage transitions that span minutes; the shorter
+  # sequence and horizon keep same-scenario targets in both classes (a
+  # 36-minute scenario yields ~14 states at this granularity).
+  window_seconds: 300
+  stride_seconds: 150
+  sequence_length: 4
+  forecast_horizon: 3
+
+split:
+  train_fraction: 0.6
+  validation_fraction: 0.2
+
+model:
+  baseline: logistic_regression
+  temporal: gru
+  baseline_config:
+    # Mean-aggregated endpoint identifiers carry entity-memorization risk
+    # (FEATURE_SPECIFICATION.md) and are not eligible for the baseline.
+    excluded_features: [source_port, destination_port, protocol, tcp_flags]
+    regularization_c: 1.0
+    class_weight: balanced
+    max_iterations: 1000
+    decision_threshold: 0.5
+
+runtime:
+  offline: true
+  device: cpu
