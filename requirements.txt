@@ -1,0 +1,7 @@
+# Streamlit Community Cloud reads this file directly. Keep the dashboard
+# dependencies explicit because they are optional in pyproject.toml.
+-e .
+streamlit>=1.40,<2
+plotly>=5.24,<7
+networkx>=3.3,<4
+torch>=2.4,<3
