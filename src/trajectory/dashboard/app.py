@@ -19,15 +19,17 @@ from trajectory.baseline import SPLIT_NAMES, train_baseline
 from trajectory.config import BaselineConfig
 from trajectory.evaluation import evaluate_replay
 from trajectory.features import fit_feature_schema
-from trajectory.live import CsvReplaySource, JsonlSensorSource, LiveEngine
+from trajectory.ledger import AlertLedger
+from trajectory.live import CsvReplaySource, EventReplaySource, JsonlSensorSource, LiveEngine
 from trajectory.predict import DECISION_THRESHOLD, artifacts_from_runs, forecast
 from trajectory.report import render_report
-from trajectory.synthetic import generate_labelled_states
+from trajectory.synthetic import generate_labelled_states, generate_scenario_events
 from trajectory.targets import build_sequence_samples, make_split_manifest
 from trajectory.temporal import TemporalConfig, train_temporal
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 REPORTS_DIR = ROOT / "reports" / "generated"
+LEDGER_PATH = REPORTS_DIR / "ledger" / "alerts.jsonl"
 DEFAULT_SCENARIOS = [f"scenario-{index:02d}" for index in range(1, 11)]
 
 # ── Page Config ───────────────────────────────────────────────────────
@@ -64,6 +66,8 @@ def generate_data(
     seed: int,
     window_seconds: int,
     stride_seconds: int,
+    sequence_length: int,
+    forecast_horizon: int,
 ) -> tuple:
     scenario_ids = DEFAULT_SCENARIOS[:scenario_count]
     labelled = generate_labelled_states(
@@ -74,7 +78,7 @@ def generate_data(
     )
     samples = build_sequence_samples(
         labelled,
-        sequence_length=8,
+        sequence_length=sequence_length,
         horizon=forecast_horizon,
     )
     manifest = make_split_manifest(scenario_ids, seed=seed)
@@ -87,6 +91,7 @@ def train_models(
     samples,
     manifest,
     seed: int,
+    forecast_horizon: int,
 ):
     config = BaselineConfig()
     baseline_run = train_baseline(labelled, samples, manifest, config=config, seed=seed)
@@ -119,12 +124,21 @@ def train_models(
 st.title("🛡️ Trajectory — Network Attack Forecasting Dashboard")
 
 # Generate data
-labelled, samples, manifest = generate_data(scenario_count, seed, window_seconds, stride_seconds)
+labelled, samples, manifest = generate_data(
+    scenario_count,
+    int(seed),
+    int(window_seconds),
+    int(stride_seconds),
+    int(sequence_length),
+    int(forecast_horizon),
+)
 
 # Train on button click
 if train_btn:
     with st.spinner("Training baseline + temporal model..."):
-        baseline_run, temporal_run, schema = train_models(labelled, samples, manifest, seed)
+        baseline_run, temporal_run, schema = train_models(
+            labelled, samples, manifest, int(seed), int(forecast_horizon)
+        )
     st.session_state["baseline_run"] = baseline_run
     st.session_state["temporal_run"] = temporal_run
     st.session_state["schema"] = schema
@@ -354,6 +368,56 @@ with tab_forecast:
                 st.warning(w)
         else:
             st.success("No warnings")
+
+    # Blockchain-theme integrity layer: only hashes and forecast metadata are
+    # recorded; raw traffic and sensitive evidence remain off-ledger.
+    st.subheader("Trust Ledger")
+    st.caption(
+        "This local append-only ledger chains forecast and evidence hashes. "
+        "It is the prototype boundary for a future permissioned blockchain."
+    )
+    ledger = AlertLedger(LEDGER_PATH)
+    verify_result = ledger.verify()
+    ledger_col1, ledger_col2, ledger_col3 = st.columns(3)
+    ledger_col1.metric("Registered Alerts", verify_result.records_checked)
+    ledger_col2.metric("Integrity", "Verified" if verify_result.valid else "Failed")
+    ledger_col3.metric("Ledger Version", "v1")
+    if verify_result.valid:
+        st.success("Forecast ledger integrity verified.")
+    else:
+        for error in verify_result.errors:
+            st.error(error)
+
+    action_col, verify_col = st.columns(2)
+    with action_col:
+        if st.button("Record Alert", type="primary"):
+            record = ledger.append_forecast(result)
+            st.session_state["last_alert_id"] = record.alert_id
+            st.success(f"Alert {record.alert_id} registered in the trust ledger.")
+    with verify_col:
+        if st.button("Verify Ledger"):
+            checked = ledger.verify()
+            if checked.valid:
+                st.success(f"Verified {checked.records_checked} ledger record(s).")
+            else:
+                st.error("Ledger verification failed: " + "; ".join(checked.errors))
+
+    records = ledger.records()
+    if records:
+        latest = records[-1]
+        st.json(
+            {
+                "alert_id": latest.alert_id,
+                "status": latest.status,
+                "predicted_stage": latest.predicted_stage,
+                "probability": latest.probability,
+                "model_version": latest.model_version,
+                "evidence_hash": latest.evidence_hash,
+                "forecast_hash": latest.forecast_hash,
+                "previous_hash": latest.previous_hash,
+                "record_hash": latest.record_hash,
+            }
+        )
 
 # ── Tab: Network States ──────────────────────────────────────────────
 with tab_states:
@@ -849,26 +913,28 @@ def _render_live_status(status) -> None:
         st.info("Source finished (end of stream). Press **Stop**, then **Start** to run again.")
 
 
-def _make_source(mode: str):
+def _make_source(mode: str, *, uploaded_file=None, replay_speed: float = 60.0):
     """Build the event source selected in the Live tab."""
-    if mode == "Demo attack (localhost)":
-        events_path = ROOT / "reports" / "live" / "events.jsonl"
-        return JsonlSensorSource(events_path, scenario_id="live-attack-demo")
+    if mode == "Synthetic attack replay":
+        events, _ = generate_scenario_events("hosted-demo", seed=int(seed))
+        return EventReplaySource(events, speed=replay_speed)
     if mode == "CSV replay":
-        csv_default = (
-            ROOT
-            / "data"
-            / "raw"
-            / "cic-ids2017"
-            / "TrafficLabelling"
-            / "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv"
-        )
-        path = st.text_input("CSV path", str(csv_default), key="live-csv-path")
-        speed = st.number_input("Replay speed (×)", 1.0, 1000.0, 60.0, key="live-csv-speed")
-        return CsvReplaySource(path, speed=float(speed))
-    events_path = ROOT / "reports" / "live" / "events.jsonl"
-    path = st.text_input("JSONL path", str(events_path), key="live-jsonl-path")
-    return JsonlSensorSource(path, scenario_id="live-sensor")
+        if uploaded_file is None:
+            raise ValueError("Upload a CICFlowMeter CSV before starting the replay")
+        import tempfile
+
+        handle = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
+        handle.write(uploaded_file.getvalue())
+        handle.close()
+        return CsvReplaySource(handle.name, speed=replay_speed)
+    if uploaded_file is None:
+        raise ValueError("Upload a JSONL sensor file before starting the replay")
+    import tempfile
+
+    handle = tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False, mode="wb")
+    handle.write(uploaded_file.getvalue())
+    handle.close()
+    return JsonlSensorSource(handle.name, scenario_id="uploaded-sensor")
 
 
 with tab_live:
@@ -876,49 +942,58 @@ with tab_live:
     st.caption(
         "Rolling windows over streaming events, scored by the same trained "
         "models as every other tab. OBSERVED = aggregated window features; "
-        "FORECAST = model probability. Demo attack is localhost-only and "
-        "simulated — it never exploits anything."
+        "FORECAST = model probability. Hosted replay is synthetic and safe — "
+        "it never exploits anything."
     )
 
     mode = st.radio(
         "Event source",
-        ["Demo attack (localhost)", "CSV replay", "JSONL sensor file"],
+        ["Synthetic attack replay", "CSV replay", "JSONL sensor file"],
         horizontal=True,
         key="live-mode",
     )
 
     col_a, col_b, col_c = st.columns(3)
-    live_window = col_a.number_input("Window (s)", 10, 300, 60, key="live-window")
-    live_stride = col_b.number_input("Stride (s)", 5, 300, 30, key="live-stride")
+    live_window = col_a.number_input("Window (s)", 10, 300, 30, key="live-window")
+    live_stride = col_b.number_input("Stride (s)", 5, 300, 15, key="live-stride")
     live_threshold = col_c.number_input(
         "Threshold", 0.05, 0.95, float(DECISION_THRESHOLD), 0.05, key="live-threshold"
     )
+    replay_speed = st.slider("Replay speed (simulated seconds / real second)", 1.0, 300.0, 60.0)
+    uploaded_file = None
+    if mode == "CSV replay":
+        uploaded_file = st.file_uploader(
+            "Upload a CICFlowMeter CSV", type=["csv"], key="live-csv-upload"
+        )
+        st.caption("The CSV must use the supported CICFlowMeter columns and labels.")
+    elif mode == "JSONL sensor file":
+        uploaded_file = st.file_uploader(
+            "Upload a JSONL sensor file", type=["jsonl", "txt"], key="live-jsonl-upload"
+        )
+        st.caption("Each line must contain timestamp, src, dst, and optional features.")
 
     col1, col2 = st.columns(2)
     if col1.button("▶ Start", type="primary", key="live-start"):
         try:
-            if mode == "Demo attack (localhost)":
-                import subprocess
+            source = _make_source(
+                mode,
+                uploaded_file=uploaded_file,
+                replay_speed=float(replay_speed),
+            )
+            # Prefer the saved (benchmark) artifacts for the live demo: they
+            # are the calibrated, tested models with the known narrated
+            # behaviour. The freshly trained in-memory models are the fallback
+            # when no saved run exists (fresh clones).
+            live_artifacts = loaded
+            if (REPORTS_DIR / "baseline" / "baseline_result.json").is_file():
+                try:
+                    from trajectory.predict import load_artifacts
 
-                events_path = ROOT / "reports" / "live" / "events.jsonl"
-                events_path.parent.mkdir(parents=True, exist_ok=True)
-                events_path.write_text("", encoding="utf-8")
-                subprocess.Popen(
-                    [
-                        sys.executable,
-                        str(ROOT / "scripts" / "attack_demo.py"),
-                        "attack",
-                        "--events",
-                        str(events_path),
-                        "--speed",
-                        "2.0",
-                    ],
-                    cwd=ROOT,
-                )
-                st.toast("Demo attack launched — benign → recon → failed logins → lateral transfer")
-            source = _make_source(mode)
+                    live_artifacts = load_artifacts(REPORTS_DIR / "baseline")
+                except Exception:  # noqa: BLE001 - fall back to in-memory models
+                    live_artifacts = loaded
             engine = LiveEngine(
-                loaded,
+                live_artifacts,
                 source=source,
                 window_seconds=int(live_window),
                 stride_seconds=int(live_stride),
@@ -943,6 +1018,7 @@ with tab_live:
 
     if "live_engine" not in st.session_state:
         st.info(
-            "Choose a source and press **Start**. Demo attack runs ~2 minutes at "
-            "speed 2.0. CSV replay needs a local CIC-IDS2017 file (git-ignored)."
+        "Choose a source and press **Start**. Synthetic replay works in the "
+        "hosted app; CSV and JSONL modes use the uploaded file directly. "
+        "The original localhost terminal demo is not required here."
         )
