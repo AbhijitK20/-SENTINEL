@@ -206,6 +206,41 @@ class JsonlSensorSource(_SourceBase):
         events.put(_SENTINEL)
 
 
+class EventReplaySource(_SourceBase):
+    """Replay already-normalized events without a local file or subprocess.
+
+    This source is suitable for hosted demos because the events live in memory
+    and the dashboard only needs to start one short-lived worker thread.
+    """
+
+    name = "event-replay"
+
+    def __init__(
+        self,
+        events: list[UnifiedEvent] | tuple[UnifiedEvent, ...],
+        *,
+        speed: float = 60.0,
+    ):
+        super().__init__()
+        if speed <= 0:
+            raise ValueError("speed must be positive")
+        self._events = tuple(sorted(events, key=lambda event: event.timestamp))
+        self._speed = speed
+
+    def run(self, events: queue.Queue[UnifiedEvent], stop: threading.Event) -> None:
+        previous_ts: datetime | None = None
+        for event in self._events:
+            if stop.is_set():
+                return
+            if previous_ts is not None:
+                delay = (event.timestamp - previous_ts).total_seconds() / self._speed
+                if delay > 0:
+                    time.sleep(min(delay, 0.25))
+            previous_ts = event.timestamp
+            events.put(event)
+        events.put(_SENTINEL)
+
+
 class ScapyInterfaceSource(_SourceBase):
     """Sniff a live interface into packet events (requires scapy).
 
@@ -471,6 +506,7 @@ def _packet_to_event(packet, counter: int) -> UnifiedEvent | None:  # noqa: ANN0
 __all__ = [
     "LIVE_ENGINE_VERSION",
     "CsvReplaySource",
+    "EventReplaySource",
     "EventSource",
     "JsonlSensorSource",
     "LiveEngine",

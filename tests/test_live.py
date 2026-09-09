@@ -14,6 +14,7 @@ from trajectory.baseline import save_baseline_artifacts, train_baseline
 from trajectory.config import BaselineConfig
 from trajectory.live import (
     CsvReplaySource,
+    EventReplaySource,
     JsonlSensorSource,
     LiveEngine,
 )
@@ -125,6 +126,18 @@ def test_invalid_configuration_rejected(tmp_path: Path) -> None:
             window_seconds=30,
             stride_seconds=60,
         )
+
+
+def test_event_replay_source_streams_in_memory_events() -> None:
+    source = EventReplaySource([_event(0.0, 1), _event(1.0, 2)], speed=1_000_000)
+    events: queue.Queue = queue.Queue()
+    stop = threading.Event()
+    source.run(events, stop)
+
+    first = events.get_nowait()
+    second = events.get_nowait()
+    assert first.event_id == "t1"
+    assert second.event_id == "t2"
 
 
 def _write_jsonl(path: Path, count: int) -> None:
