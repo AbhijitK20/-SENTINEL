@@ -19,6 +19,7 @@ from trajectory.baseline import SPLIT_NAMES, train_baseline
 from trajectory.config import BaselineConfig
 from trajectory.evaluation import evaluate_replay
 from trajectory.features import fit_feature_schema
+from trajectory.live import CsvReplaySource, JsonlSensorSource, LiveEngine
 from trajectory.predict import DECISION_THRESHOLD, artifacts_from_runs, forecast
 from trajectory.report import render_report
 from trajectory.synthetic import generate_labelled_states
@@ -146,8 +147,19 @@ schema = st.session_state.get("schema")
 loaded = artifacts_from_runs(baseline_run, temporal_run=temporal_run)
 
 # ── Tabs ──────────────────────────────────────────────────────────────
-tab_overview, tab_forecast, tab_states, tab_compare, tab_replay, tab_demo, tab_metrics = st.tabs(
-    ["Overview", "Forecast", "Network States", "Comparison", "Replay", "Demo", "Metrics"]
+tab_overview, tab_forecast, tab_states, tab_compare, tab_replay, tab_demo, tab_live, tab_metrics = (
+    st.tabs(
+        [
+            "Overview",
+            "Forecast",
+            "Network States",
+            "Comparison",
+            "Replay",
+            "Demo",
+            "Live Detection",
+            "Metrics",
+        ]
+    )
 )
 
 # ── Tab: Overview ─────────────────────────────────────────────────────
@@ -759,3 +771,178 @@ with tab_metrics:
 
     st.subheader("Model Config")
     st.json(baseline_run.result.config.model_dump())
+
+
+# ── Tab: Live Detection ──────────────────────────────────────────────
+@st.fragment(run_every=2.0)
+def _live_poll_fragment() -> None:
+    """Auto-refreshing live status: polls the engine and redraws."""
+    engine = st.session_state.get("live_engine")
+    if engine is None:
+        return
+    _render_live_status(engine.poll())
+
+
+def _render_live_status(status) -> None:
+    """Draw one LiveStatus snapshot. OBSERVED = window features, FORECAST = model."""
+    latest = status.history[-1] if status.history else None
+    alert = latest is not None and latest.probability >= latest.threshold
+
+    if alert:
+        st.error(
+            f"🚨 **ALERT — {latest.stage}** · P(infiltration) = "
+            f"{latest.probability:.2f} ≥ threshold {latest.threshold:.2f} · "
+            f"{latest.mitre_reference or 'stage evidence only'}"
+        )
+    else:
+        st.success(
+            f"✅ Monitoring — last window {latest.event_count} events · "
+            f"P(infiltration) = {latest.probability:.2f}"
+            if latest
+            else "Waiting for the first window…"
+        )
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Events seen", status.events_seen)
+    col2.metric("Windows", status.windows_emitted)
+    col3.metric("Current stage", latest.stage if latest else "—")
+    col4.metric("Threshold", f"{status.threshold:.2f}")
+
+    if status.history:
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=[w.window_start for w in status.history],
+                y=[w.probability for w in status.history],
+                mode="lines+markers",
+                name="P(infiltration)",
+            )
+        )
+        fig.add_hline(y=status.threshold, line_dash="dot", annotation_text="threshold")
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0b0d12",
+            plot_bgcolor="#0b0d12",
+            title="Live probability timeline",
+            xaxis_title="Event time",
+            yaxis=dict(range=[0, 1], title="P(infiltration)"),
+            height=380,
+        )
+        st.plotly_chart(fig, use_container_width=True, key="live-timeline")
+
+        with st.expander("Stage evidence (latest window)", expanded=alert):
+            if latest.stage_evidence:
+                for ev in latest.stage_evidence:
+                    observed = (
+                        f" — observed {ev.observed_value:g}"
+                        if ev.observed_value is not None
+                        else ""
+                    )
+                    st.markdown(f"- **{ev.name}**{observed} · confidence {ev.confidence:.2f}")
+                    st.caption(ev.description)
+            else:
+                st.caption("No evidence rules fired for the latest window.")
+
+    if status.last_error:
+        st.warning(f"Source error: {status.last_error}")
+    if not status.running:
+        st.info("Source finished (end of stream). Press **Stop**, then **Start** to run again.")
+
+
+def _make_source(mode: str):
+    """Build the event source selected in the Live tab."""
+    if mode == "Demo attack (localhost)":
+        events_path = ROOT / "reports" / "live" / "events.jsonl"
+        return JsonlSensorSource(events_path, scenario_id="live-attack-demo")
+    if mode == "CSV replay":
+        csv_default = (
+            ROOT
+            / "data"
+            / "raw"
+            / "cic-ids2017"
+            / "TrafficLabelling"
+            / "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv"
+        )
+        path = st.text_input("CSV path", str(csv_default), key="live-csv-path")
+        speed = st.number_input("Replay speed (×)", 1.0, 1000.0, 60.0, key="live-csv-speed")
+        return CsvReplaySource(path, speed=float(speed))
+    events_path = ROOT / "reports" / "live" / "events.jsonl"
+    path = st.text_input("JSONL path", str(events_path), key="live-jsonl-path")
+    return JsonlSensorSource(path, scenario_id="live-sensor")
+
+
+with tab_live:
+    st.subheader("Live Detection")
+    st.caption(
+        "Rolling windows over streaming events, scored by the same trained "
+        "models as every other tab. OBSERVED = aggregated window features; "
+        "FORECAST = model probability. Demo attack is localhost-only and "
+        "simulated — it never exploits anything."
+    )
+
+    mode = st.radio(
+        "Event source",
+        ["Demo attack (localhost)", "CSV replay", "JSONL sensor file"],
+        horizontal=True,
+        key="live-mode",
+    )
+
+    col_a, col_b, col_c = st.columns(3)
+    live_window = col_a.number_input("Window (s)", 10, 300, 60, key="live-window")
+    live_stride = col_b.number_input("Stride (s)", 5, 300, 30, key="live-stride")
+    live_threshold = col_c.number_input(
+        "Threshold", 0.05, 0.95, float(DECISION_THRESHOLD), 0.05, key="live-threshold"
+    )
+
+    col1, col2 = st.columns(2)
+    if col1.button("▶ Start", type="primary", key="live-start"):
+        try:
+            if mode == "Demo attack (localhost)":
+                import subprocess
+
+                events_path = ROOT / "reports" / "live" / "events.jsonl"
+                events_path.parent.mkdir(parents=True, exist_ok=True)
+                events_path.write_text("", encoding="utf-8")
+                subprocess.Popen(
+                    [
+                        sys.executable,
+                        str(ROOT / "scripts" / "attack_demo.py"),
+                        "attack",
+                        "--events",
+                        str(events_path),
+                        "--speed",
+                        "2.0",
+                    ],
+                    cwd=ROOT,
+                )
+                st.toast("Demo attack launched — benign → recon → failed logins → lateral transfer")
+            source = _make_source(mode)
+            engine = LiveEngine(
+                loaded,
+                source=source,
+                window_seconds=int(live_window),
+                stride_seconds=int(live_stride),
+                history=3,
+                threshold=float(live_threshold),
+            )
+            engine.start()
+            st.session_state["live_engine"] = engine
+            st.toast("Live engine started")
+        except Exception as error:  # noqa: BLE001 - surface the problem in the UI
+            st.error(f"Failed to start: {error}")
+
+    if col2.button("■ Stop", key="live-stop"):
+        engine = st.session_state.get("live_engine")
+        if engine is not None:
+            engine.stop()
+        st.session_state.pop("live_engine", None)
+        st.toast("Live engine stopped")
+
+    if "live_engine" in st.session_state:
+        _live_poll_fragment()
+
+    if "live_engine" not in st.session_state:
+        st.info(
+            "Choose a source and press **Start**. Demo attack runs ~2 minutes at "
+            "speed 2.0. CSV replay needs a local CIC-IDS2017 file (git-ignored)."
+        )
