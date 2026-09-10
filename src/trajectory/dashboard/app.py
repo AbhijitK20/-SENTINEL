@@ -1042,7 +1042,7 @@ with tab_live:
     live_threshold = col_c.number_input(
         "Threshold", 0.05, 0.95, float(DECISION_THRESHOLD), 0.05, key="live-threshold"
     )
-    replay_speed = st.slider("Replay speed (simulated seconds / real second)", 1.0, 600.0, 300.0)
+    replay_speed = st.slider("Replay speed (simulated seconds / real second)", 1.0, 600.0, 60.0)
     uploaded_file = None
     if mode == "CSV replay":
         uploaded_file = st.file_uploader(
@@ -1062,15 +1062,17 @@ with tab_live:
             "With the default speed, the first suspicious phase appears in a few seconds."
         )
     col1, col2, col3 = st.columns(3)
-    start_requested = col1.button(
-        "🚨 Initiate Synthetic Attack" if mode == "Synthetic attack replay" else "▶ Start",
-        type="primary",
-        key="live-start",
+    start_requested = col1.button("▶ Start", type="primary", key="live-start")
+    attack_requested = col2.button(
+        "🚨 Initiate Synthetic Attack", type="primary", key="live-attack"
     )
-    if start_requested:
+    stop_requested = col3.button("■ Stop", key="live-stop")
+
+    requested_mode = "Synthetic attack replay" if attack_requested else mode
+    if start_requested or attack_requested:
         try:
             source = _make_source(
-                mode,
+                requested_mode,
                 uploaded_file=uploaded_file,
                 replay_speed=float(replay_speed),
             )
@@ -1100,7 +1102,7 @@ with tab_live:
             )
             engine.start()
             st.session_state["live_engine"] = engine
-            if mode == "Synthetic attack replay":
+            if attack_requested:
                 st.success(
                     "Synthetic attack initiated. Watch the event count, completed windows, "
                     "and stage change below."
@@ -1110,35 +1112,12 @@ with tab_live:
         except Exception as error:  # noqa: BLE001 - surface the problem in the UI
             st.error(f"Failed to start: {error}")
 
-    if col2.button("■ Stop", key="live-stop"):
+    if stop_requested:
         engine = st.session_state.get("live_engine")
         if engine is not None:
             engine.stop()
         st.session_state.pop("live_engine", None)
         st.toast("Live engine stopped")
-
-    live_ledger = AlertLedger(LEDGER_PATH)
-    if col3.button("Verify Trust Ledger", key="live-verify-ledger"):
-        verification = live_ledger.verify()
-        if verification.valid:
-            st.success(f"Trust ledger verified ({verification.records_checked} record(s)).")
-        else:
-            st.error("Tampering detected: " + "; ".join(verification.errors))
-
-    ledger_col1, ledger_col2 = st.columns(2)
-    if ledger_col1.button("Simulate Ledger Tampering", key="live-tamper-ledger"):
-        if live_ledger.tamper_latest_for_demo():
-            verification = live_ledger.verify()
-            st.error(
-                "Tampering detected: " + "; ".join(verification.errors)
-                if not verification.valid
-                else "Unexpectedly verified; try again."
-            )
-        else:
-            st.warning("Record an alert from the Forecast tab before simulating tampering.")
-    if ledger_col2.button("Reset Trust Ledger", key="live-reset-ledger"):
-        live_ledger.reset()
-        st.success("Trust ledger reset.")
 
     if "live_engine" in st.session_state:
         _live_poll_fragment()
