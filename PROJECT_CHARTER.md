@@ -2,7 +2,7 @@
 
 ## Project
 
-- Name: Trajectory
+- Name: SENTINEL
 - SIH problem statement: SIH26153
 - Title: AI based Network Attack Forecasting from Network Traffic Data
 - Organization: National Technical Research Organisation (NTRO)

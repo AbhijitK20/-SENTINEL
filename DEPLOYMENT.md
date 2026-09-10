@@ -1,4 +1,4 @@
-# Trajectory Demo Deployment
+# SENTINEL Demo Deployment
 
 This deployment packages the existing Streamlit dashboard as a Docker-based
 Hugging Face Space. It is intended for a teacher-friendly demonstration of the

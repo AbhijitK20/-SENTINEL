@@ -1,4 +1,4 @@
-"""Trajectory Dashboard — offline interactive demo for SIH26153.
+"""SENTINEL Dashboard — offline interactive demo for SIH26153.
 
 Run with:
     uv run streamlit run src/trajectory/dashboard/app.py
@@ -34,7 +34,7 @@ DEFAULT_SCENARIOS = [f"scenario-{index:02d}" for index in range(1, 11)]
 
 # ── Page Config ───────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Trajectory — SIH26153",
+    page_title="SENTINEL — SIH26153",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -42,7 +42,7 @@ st.set_page_config(
 
 # ── Sidebar ───────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("Trajectory")
+    st.title("SENTINEL")
     st.caption("SIH26153 — AI Network Attack Forecasting")
     st.divider()
     st.subheader("Settings")
@@ -127,7 +127,7 @@ def train_models(
 
 
 # ── Main ──────────────────────────────────────────────────────────────
-st.title("🛡️ Trajectory — Network Attack Forecasting Dashboard")
+st.title("🛡️ SENTINEL — Network Attack Forecasting Dashboard")
 
 # Generate data
 labelled, samples, manifest = generate_data(
