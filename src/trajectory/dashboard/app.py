@@ -1102,7 +1102,7 @@ with tab_live:
         "Threshold",
         0.05,
         0.95,
-        float(DECISION_THRESHOLD),
+        0.20,
         0.05,
         key="live-threshold",
     )
