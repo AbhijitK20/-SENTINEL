@@ -1126,7 +1126,7 @@ with tab_live:
         "Threshold",
         0.05,
         0.95,
-        0.20,
+        float(DECISION_THRESHOLD),
         0.05,
         key="live-threshold",
     )
@@ -1215,7 +1215,16 @@ with tab_live:
                 try:
                     from trajectory.predict import load_artifacts
 
-                    live_artifacts = load_artifacts(REPORTS_DIR / "baseline")
+                    temporal_dir = (
+                        REPORTS_DIR / "temporal"
+                        if (REPORTS_DIR / "temporal" / "temporal_result.json").is_file()
+                        else None
+                    )
+                    if temporal_dir is not None or loaded.temporal_result is None:
+                        live_artifacts = load_artifacts(
+                            REPORTS_DIR / "baseline",
+                            temporal_dir=temporal_dir,
+                        )
                 except Exception:  # noqa: BLE001 - fall back to in-memory models
                     live_artifacts = loaded
             engine = LiveEngine(
