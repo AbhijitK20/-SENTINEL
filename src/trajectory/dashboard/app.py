@@ -903,6 +903,12 @@ def _render_live_status(status) -> None:
     col3.metric("Current stage", latest.stage if latest else "—")
     col4.metric("Threshold", f"{status.threshold:.2f}")
 
+    if status.running and latest is None:
+        st.info(
+            "Attack replay is running. Waiting for the first completed time window... "
+            f"Events received: {status.events_seen}."
+        )
+
     if status.history:
         fig = go.Figure()
         fig.add_trace(
@@ -938,6 +944,11 @@ def _render_live_status(status) -> None:
             else:
                 st.caption("No evidence rules fired for the latest window.")
 
+        if latest.warnings:
+            with st.expander("Forecast warnings", expanded=False):
+                for warning in latest.warnings:
+                    st.warning(warning)
+
     if status.last_error:
         st.warning(f"Source error: {status.last_error}")
     if not status.running:
@@ -947,7 +958,15 @@ def _render_live_status(status) -> None:
 def _make_source(mode: str, *, uploaded_file=None, replay_speed: float = 60.0):
     """Build the event source selected in the Live tab."""
     if mode == "Synthetic attack replay":
-        events, _ = generate_scenario_events("hosted-demo", seed=int(seed))
+        # Keep the hosted story short: suspicious behavior should appear within
+        # a few seconds instead of making a teacher wait through a full replay.
+        events, _ = generate_scenario_events(
+            "hosted-demo",
+            seed=int(seed),
+            benign_minutes=1,
+            recon_minutes=1,
+            lateral_minutes=2,
+        )
         return EventReplaySource(events, speed=replay_speed)
     if mode == "CSV replay":
         if uploaded_file is None:
@@ -1006,7 +1025,8 @@ with tab_live:
     if mode == "Synthetic attack replay":
         st.info(
             "This is a safe simulated attack. Click the button to initiate "
-            "benign traffic → reconnaissance → lateral movement."
+            "benign traffic → reconnaissance → lateral movement. "
+            "With the default speed, the first suspicious phase appears in about one second."
         )
     col1, col2, col3 = st.columns(3)
     start_requested = col1.button(
