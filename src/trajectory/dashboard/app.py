@@ -1158,8 +1158,19 @@ with tab_live:
             engine = LiveEngine(
                 live_artifacts,
                 source=source,
-                window_seconds=int(live_window),
-                stride_seconds=int(live_stride),
+                # The fast localhost attack lasts about one minute. Smaller
+                # windows keep benign, scan, login, and bulk-transfer phases
+                # separate enough for the 0.50 alert threshold to be visible.
+                window_seconds=(
+                    30
+                    if attack_requested and _local_attack_demo_available()
+                    else int(live_window)
+                ),
+                stride_seconds=(
+                    15
+                    if attack_requested and _local_attack_demo_available()
+                    else int(live_stride)
+                ),
                 history=120,
                 threshold=float(live_threshold),
             )
