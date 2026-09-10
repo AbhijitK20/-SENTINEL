@@ -242,9 +242,21 @@ with tab_overview:
 
 # ── Tab: Forecast ─────────────────────────────────────────────────────
 with tab_forecast:
+    scenario_split = {
+        scenario: split
+        for split in SPLIT_NAMES
+        for scenario in getattr(manifest, f"{split}_scenarios")
+    }
+    all_scenarios = sorted(scenario_split)
     scenario_choice = st.selectbox(
         "Select scenario for forecast",
-        manifest.test_scenarios or manifest.validation_scenarios,
+        all_scenarios,
+        format_func=lambda scenario: f"{scenario} ({scenario_split[scenario]})",
+    )
+    st.caption(
+        f"Showing all {len(all_scenarios)} scenarios. The split label is shown so you "
+        "can explore training, validation, and test behavior; Replay evaluation "
+        "remains test-only for an honest holdout measurement."
     )
     scenario_states = [item.state for item in labelled if item.scenario_id == scenario_choice]
 
@@ -654,6 +666,12 @@ with tab_replay:
         col4.metric("Scenarios", replay_eval.scenarios_evaluated)
 
         st.markdown("#### Forecast vs Reality (rows)")
+        replay_scenarios = sorted({s.scenario_id for s in replay_eval.summaries})
+        selected_replay_scenario = st.selectbox(
+            "Scenario",
+            replay_scenarios,
+            key="replay_row_scenario",
+        )
         rows_data = [
             {
                 "scenario": row.scenario_id,
@@ -666,30 +684,28 @@ with tab_replay:
                 "direction_ok": row.correct_direction,
             }
             for row in replay_eval.rows
-            if row.scenario_id
-            == st.selectbox(
-                "Scenario",
-                sorted({s.scenario_id for s in replay_eval.summaries}),
-                key="replay_row_scenario",
-            )
+            if row.scenario_id == selected_replay_scenario
         ]
         st.dataframe(rows_data, use_container_width=True, hide_index=True)
 
-        report_md = render_report(
-            forecast(
-                [i.state for i in labelled if i.scenario_id == rows_data[0]["scenario"]],
-                loaded,
-                max_horizon=forecast_horizon,
-            ),
-            scenario_id=rows_data[0]["scenario"],
-            evaluation=replay_eval,
-        )
-        st.download_button(
-            "Download analyst report (Markdown)",
-            data=report_md,
-            file_name="forecast_report.md",
-            mime="text/markdown",
-        )
+        if rows_data:
+            report_md = render_report(
+                forecast(
+                    [i.state for i in labelled if i.scenario_id == selected_replay_scenario],
+                    loaded,
+                    max_horizon=forecast_horizon,
+                ),
+                scenario_id=selected_replay_scenario,
+                evaluation=replay_eval,
+            )
+            st.download_button(
+                "Download analyst report (Markdown)",
+                data=report_md,
+                file_name="forecast_report.md",
+                mime="text/markdown",
+            )
+        else:
+            st.warning("No replay rows are available for the selected scenario.")
 
 # ── Tab: Demo ────────────────────────────────────────────────────
 with tab_demo:
@@ -934,7 +950,7 @@ def _make_source(mode: str, *, uploaded_file=None, replay_speed: float = 60.0):
     handle = tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False, mode="wb")
     handle.write(uploaded_file.getvalue())
     handle.close()
-    return JsonlSensorSource(handle.name, scenario_id="uploaded-sensor")
+    return JsonlSensorSource(handle.name, scenario_id="uploaded-sensor", follow=False)
 
 
 with tab_live:

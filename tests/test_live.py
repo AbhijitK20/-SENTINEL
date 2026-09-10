@@ -183,6 +183,25 @@ def test_jsonl_sensor_source_streams_events(tmp_path: Path) -> None:
     assert collected[0].timestamp == START
 
 
+def test_jsonl_sensor_source_can_finish_uploaded_replay(tmp_path: Path) -> None:
+    path = tmp_path / "events.jsonl"
+    _write_jsonl(path, 2)
+    source = JsonlSensorSource(path, follow=False)
+    events: queue.Queue = queue.Queue()
+    stop = threading.Event()
+    source.run(events, stop)
+
+    collected = []
+    from trajectory.live import _SENTINEL
+
+    while True:
+        item = events.get_nowait()
+        if item is _SENTINEL:
+            break
+        collected.append(item)
+    assert len(collected) == 2
+
+
 COLUMNS = [
     "Flow ID",
     "Source IP",
