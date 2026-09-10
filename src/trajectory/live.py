@@ -171,12 +171,18 @@ class JsonlSensorSource(_SourceBase):
     name = "jsonl-sensor"
 
     def __init__(
-        self, path: str | Path, *, scenario_id: str = "live-sensor", poll_seconds: float = 0.25
+        self,
+        path: str | Path,
+        *,
+        scenario_id: str = "live-sensor",
+        poll_seconds: float = 0.25,
+        follow: bool = True,
     ) -> None:
         super().__init__()
         self._path = Path(path)
         self._scenario_id = scenario_id
         self._poll_seconds = poll_seconds
+        self._follow = follow
 
     def run(self, events: queue.Queue[UnifiedEvent], stop: threading.Event) -> None:
         counter = 0
@@ -184,6 +190,8 @@ class JsonlSensorSource(_SourceBase):
             while not stop.is_set():
                 line = handle.readline()
                 if line == "":
+                    if not self._follow:
+                        break
                     time.sleep(self._poll_seconds)
                     continue
                 if not line.strip():
