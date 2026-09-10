@@ -1140,31 +1140,38 @@ with tab_live:
         )
         if _local_attack_demo_available():
             st.caption(
-                "Local mode: Initiate starts the localhost target plus the fast "
-                "attack script at speed 2."
+                "Initiate runs the exact local target and attack scripts at speed 2."
             )
         else:
-            st.caption("Hosted mode: Initiate uses the safe in-memory replay fallback.")
+            st.caption(
+                "This button requires the local SENTINEL dashboard; hosted Streamlit "
+                "cannot start localhost attack scripts."
+            )
     col1, col2, col3 = st.columns(3)
     start_requested = col1.button("▶ Start", type="primary", key="live-start")
     attack_requested = col2.button(
-        "🚨 Initiate Synthetic Attack", type="primary", key="live-attack"
+        "🚨 Initiate Attack", type="primary", key="live-attack"
     )
     stop_requested = col3.button("■ Stop", key="live-stop")
 
-    requested_mode = "Synthetic attack replay" if attack_requested else mode
     if start_requested or attack_requested:
         try:
-            if attack_requested and _local_attack_demo_available():
+            if attack_requested:
+                if not _local_attack_demo_available():
+                    raise RuntimeError(
+                        "The local attack scripts can only run on the machine hosting "
+                        "Streamlit. Run SENTINEL locally for this button."
+                    )
+                _stop_local_attack_demo()
                 # Match the documented fast local command exactly:
                 # uv run python scripts/attack_demo.py attack --speed 2
                 source = _start_local_attack_demo()
             else:
                 source = _make_source(
-                requested_mode,
-                uploaded_file=uploaded_file,
-                replay_speed=float(replay_speed),
-                capture_interface=capture_interface,
+                    mode,
+                    uploaded_file=uploaded_file,
+                    replay_speed=float(replay_speed),
+                    capture_interface=capture_interface,
             )
             # Prefer the saved (benchmark) artifacts for the live demo: they
             # are the calibrated, tested models with the known narrated
@@ -1210,8 +1217,8 @@ with tab_live:
             st.session_state["live_engine"] = engine
             if attack_requested:
                 st.success(
-                    "Synthetic attack initiated. Watch the event count, completed windows, "
-                    "and stage change below."
+                    "Local attack scripts started at speed 2. Watch the event count, "
+                    "completed windows, and stage change below."
                 )
             else:
                 st.toast("Live engine started")
