@@ -1009,7 +1009,7 @@ with tab_live:
     live_threshold = col_c.number_input(
         "Threshold", 0.05, 0.95, float(DECISION_THRESHOLD), 0.05, key="live-threshold"
     )
-    replay_speed = st.slider("Replay speed (simulated seconds / real second)", 1.0, 300.0, 60.0)
+    replay_speed = st.slider("Replay speed (simulated seconds / real second)", 1.0, 600.0, 300.0)
     uploaded_file = None
     if mode == "CSV replay":
         uploaded_file = st.file_uploader(
@@ -1026,7 +1026,7 @@ with tab_live:
         st.info(
             "This is a safe simulated attack. Click the button to initiate "
             "benign traffic → reconnaissance → lateral movement. "
-            "With the default speed, the first suspicious phase appears in about one second."
+            "With the default speed, the first suspicious phase appears in a few seconds."
         )
     col1, col2, col3 = st.columns(3)
     start_requested = col1.button(
@@ -1063,7 +1063,13 @@ with tab_live:
             )
             engine.start()
             st.session_state["live_engine"] = engine
-            st.toast("Live engine started")
+            if mode == "Synthetic attack replay":
+                st.success(
+                    "Synthetic attack initiated. Watch the event count, completed windows, "
+                    "and stage change below."
+                )
+            else:
+                st.toast("Live engine started")
         except Exception as error:  # noqa: BLE001 - surface the problem in the UI
             st.error(f"Failed to start: {error}")
 
