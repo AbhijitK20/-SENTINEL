@@ -32,6 +32,7 @@ from trajectory.temporal import TemporalConfig, train_temporal
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 REPORTS_DIR = ROOT / "reports" / "generated"
 LEDGER_PATH = REPORTS_DIR / "ledger" / "alerts.jsonl"
+LOCAL_ATTACK_SPEED = 2.0
 DEFAULT_SCENARIOS = [f"scenario-{index:02d}" for index in range(1, 11)]
 
 # ── Page Config ───────────────────────────────────────────────────────
@@ -1021,7 +1022,7 @@ def _local_attack_demo_available() -> bool:
     return not Path("/mount/src").exists()
 
 
-def _start_local_attack_demo(speed: float) -> JsonlSensorSource:
+def _start_local_attack_demo() -> JsonlSensorSource:
     """Start the harmless localhost target/attack pair and return its sensor source."""
     events_path = ROOT / "reports" / "live" / "events.jsonl"
     events_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1042,7 +1043,7 @@ def _start_local_attack_demo(speed: float) -> JsonlSensorSource:
             "--events",
             str(events_path),
             "--speed",
-            str(speed),
+            str(LOCAL_ATTACK_SPEED),
         ],
         cwd=ROOT,
         stdout=subprocess.DEVNULL,
@@ -1106,6 +1107,13 @@ with tab_live:
             "The complete deterministic replay runs through all three phases. "
             "The attack alert threshold is 0.50."
         )
+        if _local_attack_demo_available():
+            st.caption(
+                "Local mode: Initiate starts the localhost target plus the fast "
+                "attack script at speed 2."
+            )
+        else:
+            st.caption("Hosted mode: Initiate uses the safe in-memory replay fallback.")
     col1, col2, col3 = st.columns(3)
     start_requested = col1.button("▶ Start", type="primary", key="live-start")
     attack_requested = col2.button(
@@ -1117,7 +1125,9 @@ with tab_live:
     if start_requested or attack_requested:
         try:
             if attack_requested and _local_attack_demo_available():
-                source = _start_local_attack_demo(float(replay_speed))
+                # Match the documented fast local command exactly:
+                # uv run python scripts/attack_demo.py attack --speed 2
+                source = _start_local_attack_demo()
             else:
                 source = _make_source(
                     requested_mode,
