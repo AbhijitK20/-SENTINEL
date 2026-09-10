@@ -46,7 +46,7 @@ with st.sidebar:
     st.caption("SIH26153 — AI Network Attack Forecasting")
     st.divider()
     st.subheader("Settings")
-    scenario_count = st.slider("Scenarios", min_value=3, max_value=15, value=10)
+    scenario_count = st.slider("Scenarios", min_value=3, max_value=15, value=6)
     seed = st.number_input("Seed", min_value=0, max_value=9999, value=42)
     window_seconds = st.number_input("Window (s)", min_value=10, max_value=300, value=60)
     stride_seconds = st.number_input("Stride (s)", min_value=5, max_value=300, value=30)
@@ -54,6 +54,11 @@ with st.sidebar:
     forecast_horizon = st.number_input("Forecast horizon", min_value=1, max_value=10, value=5)
     st.divider()
     st.subheader("Models")
+    full_training = st.checkbox(
+        "Full temporal training (slower)",
+        value=False,
+        help="Leave off for the hosted demo. Full mode trains more GRU horizons and epochs.",
+    )
     train_btn = st.button("Train / Retrain", type="primary")
     st.divider()
     st.caption(f"Python {sys.version.split()[0]} · {platform.system()}")
@@ -92,6 +97,7 @@ def train_models(
     manifest,
     seed: int,
     forecast_horizon: int,
+    full_training: bool,
 ):
     config = BaselineConfig()
     baseline_run = train_baseline(labelled, samples, manifest, config=config, seed=seed)
@@ -103,10 +109,10 @@ def train_models(
     )
 
     temporal_config = TemporalConfig(
-        hidden_size=32,
+        hidden_size=32 if full_training else 16,
         num_layers=1,
-        max_epochs=50,
-        early_stopping_patience=8,
+        max_epochs=50 if full_training else 12,
+        early_stopping_patience=8 if full_training else 3,
     )
     temporal_run = train_temporal(
         labelled,
@@ -115,7 +121,7 @@ def train_models(
         feature_schema=schema,
         config=temporal_config,
         seed=seed,
-        max_horizon=min(forecast_horizon, 5),
+        max_horizon=min(forecast_horizon, 5 if full_training else 3),
     )
     return baseline_run, temporal_run, schema
 
@@ -137,7 +143,12 @@ labelled, samples, manifest = generate_data(
 if train_btn:
     with st.spinner("Training baseline + temporal model..."):
         baseline_run, temporal_run, schema = train_models(
-            labelled, samples, manifest, int(seed), int(forecast_horizon)
+            labelled,
+            samples,
+            manifest,
+            int(seed),
+            int(forecast_horizon),
+            full_training,
         )
     st.session_state["baseline_run"] = baseline_run
     st.session_state["temporal_run"] = temporal_run
