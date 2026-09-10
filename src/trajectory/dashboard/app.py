@@ -1003,8 +1003,18 @@ with tab_live:
         )
         st.caption("Each line must contain timestamp, src, dst, and optional features.")
 
-    col1, col2 = st.columns(2)
-    if col1.button("▶ Start", type="primary", key="live-start"):
+    if mode == "Synthetic attack replay":
+        st.info(
+            "This is a safe simulated attack. Click the button to initiate "
+            "benign traffic → reconnaissance → lateral movement."
+        )
+    col1, col2, col3 = st.columns(3)
+    start_requested = col1.button(
+        "🚨 Initiate Synthetic Attack" if mode == "Synthetic attack replay" else "▶ Start",
+        type="primary",
+        key="live-start",
+    )
+    if start_requested:
         try:
             source = _make_source(
                 mode,
@@ -1043,6 +1053,29 @@ with tab_live:
             engine.stop()
         st.session_state.pop("live_engine", None)
         st.toast("Live engine stopped")
+
+    live_ledger = AlertLedger(LEDGER_PATH)
+    if col3.button("Verify Trust Ledger", key="live-verify-ledger"):
+        verification = live_ledger.verify()
+        if verification.valid:
+            st.success(f"Trust ledger verified ({verification.records_checked} record(s)).")
+        else:
+            st.error("Tampering detected: " + "; ".join(verification.errors))
+
+    ledger_col1, ledger_col2 = st.columns(2)
+    if ledger_col1.button("Simulate Ledger Tampering", key="live-tamper-ledger"):
+        if live_ledger.tamper_latest_for_demo():
+            verification = live_ledger.verify()
+            st.error(
+                "Tampering detected: " + "; ".join(verification.errors)
+                if not verification.valid
+                else "Unexpectedly verified; try again."
+            )
+        else:
+            st.warning("Record an alert from the Forecast tab before simulating tampering.")
+    if ledger_col2.button("Reset Trust Ledger", key="live-reset-ledger"):
+        live_ledger.reset()
+        st.success("Trust ledger reset.")
 
     if "live_engine" in st.session_state:
         _live_poll_fragment()
