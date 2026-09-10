@@ -991,15 +991,9 @@ def _render_live_status(status) -> None:
 def _make_source(mode: str, *, uploaded_file=None, replay_speed: float = 60.0):
     """Build the event source selected in the Live tab."""
     if mode == "Synthetic attack replay":
-        # Keep the hosted story short: suspicious behavior should appear within
-        # a few seconds instead of making a teacher wait through a full replay.
-        events, _ = generate_scenario_events(
-            "hosted-demo",
-            seed=int(seed),
-            benign_minutes=1,
-            recon_minutes=1,
-            lateral_minutes=2,
-        )
+        # Use the complete deterministic attack story. The live engine keeps a
+        # bounded history, but does not truncate this replay into a short demo.
+        events, _ = generate_scenario_events("hosted-demo", seed=int(seed))
         return EventReplaySource(events, speed=replay_speed)
     if mode == "CSV replay":
         if uploaded_file is None:
@@ -1064,8 +1058,8 @@ with tab_live:
         st.info(
             "This is a safe simulated attack. Click the button to initiate "
             "benign traffic → reconnaissance → lateral movement. "
-            "The demo threshold defaults to 0.35 so its trained synthetic risk signal "
-            "produces a visible alert; other forecast tabs use 0.50."
+            "The complete deterministic replay runs through all three phases. "
+            "The demo threshold defaults to 0.35; other forecast tabs use 0.50."
         )
     col1, col2, col3 = st.columns(3)
     start_requested = col1.button("▶ Start", type="primary", key="live-start")
