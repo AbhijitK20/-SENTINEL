@@ -1,6 +1,16 @@
-# Trajectory
+---
+title: SENTINEL - SIH26153
+emoji: Shield
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 8501
+pinned: false
+---
 
-Trajectory is an offline, explainable network attack forecasting prototype for **SIH26153: AI based Network Attack Forecasting from Network Traffic Data**.
+# SENTINEL
+
+SENTINEL is an offline, explainable network attack forecasting prototype for **SIH26153: AI based Network Attack Forecasting from Network Traffic Data**.
 
 The system is intended to learn how network state changes over time, simulate likely future states, forecast attacker progression, map the forecast to recognised attack stages, and explain the evidence behind each prediction.
 
