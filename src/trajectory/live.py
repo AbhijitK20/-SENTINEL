@@ -281,13 +281,19 @@ class ScapyInterfaceSource(_SourceBase):
                 counter += 1
                 events.put(event)
 
-        sniff(
-            iface=self._interface or None,
-            prn=handle_packet,
-            stop_filter=lambda _packet: stop.is_set(),
-            store=False,
-        )
-        events.put(_SENTINEL)
+        try:
+            while not stop.is_set():
+                sniff(
+                    iface=self._interface or None,
+                    prn=handle_packet,
+                    timeout=1,
+                    store=False,
+                )
+        except Exception as error:  # noqa: BLE001 - surface capture errors in the UI
+            message = f"packet capture failed on {self._interface or 'default'}: {error}"
+            events.put(_SourceError(message))
+        finally:
+            events.put(_SENTINEL)
 
 
 class _SourceError:

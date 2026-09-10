@@ -22,7 +22,13 @@ from trajectory.config import BaselineConfig
 from trajectory.evaluation import evaluate_replay
 from trajectory.features import fit_feature_schema
 from trajectory.ledger import AlertLedger
-from trajectory.live import CsvReplaySource, EventReplaySource, JsonlSensorSource, LiveEngine
+from trajectory.live import (
+    CsvReplaySource,
+    EventReplaySource,
+    JsonlSensorSource,
+    LiveEngine,
+    ScapyInterfaceSource,
+)
 from trajectory.predict import DECISION_THRESHOLD, artifacts_from_runs, forecast
 from trajectory.report import render_report
 from trajectory.synthetic import generate_labelled_states, generate_scenario_events
@@ -991,7 +997,13 @@ def _render_live_status(status) -> None:
             st.info("Replay finished without crossing the threshold. Press **Start** to run again.")
 
 
-def _make_source(mode: str, *, uploaded_file=None, replay_speed: float = 60.0):
+def _make_source(
+    mode: str,
+    *,
+    uploaded_file=None,
+    replay_speed: float = 60.0,
+    capture_interface: str = "lo",
+):
     """Build the event source selected in the Live tab."""
     if mode == "Synthetic attack replay":
         # Use the complete deterministic attack story. The live engine keeps a
@@ -1007,6 +1019,8 @@ def _make_source(mode: str, *, uploaded_file=None, replay_speed: float = 60.0):
         handle.write(uploaded_file.getvalue())
         handle.close()
         return CsvReplaySource(handle.name, speed=replay_speed)
+    if mode == "Local loopback capture":
+        return ScapyInterfaceSource(capture_interface.strip() or "lo")
     if uploaded_file is None:
         raise ValueError("Upload a JSONL sensor file before starting the replay")
     import tempfile
@@ -1071,7 +1085,12 @@ with tab_live:
 
     mode = st.radio(
         "Event source",
-        ["Synthetic attack replay", "CSV replay", "JSONL sensor file"],
+        [
+            "Synthetic attack replay",
+            "CSV replay",
+            "JSONL sensor file",
+            "Local loopback capture",
+        ],
         horizontal=True,
         key="live-mode",
     )
@@ -1089,6 +1108,7 @@ with tab_live:
     )
     replay_speed = st.slider("Replay speed (simulated seconds / real second)", 1.0, 600.0, 60.0)
     uploaded_file = None
+    capture_interface = "lo"
     if mode == "CSV replay":
         uploaded_file = st.file_uploader(
             "Upload a CICFlowMeter CSV", type=["csv"], key="live-csv-upload"
@@ -1099,6 +1119,17 @@ with tab_live:
             "Upload a JSONL sensor file", type=["jsonl", "txt"], key="live-jsonl-upload"
         )
         st.caption("Each line must contain timestamp, src, dst, and optional features.")
+    elif mode == "Local loopback capture":
+        capture_interface = st.text_input(
+            "Capture interface",
+            value="lo",
+            help="Linux loopback is usually 'lo'. Scapy and capture privileges are required.",
+        )
+        st.warning(
+            "Packet capture runs on the machine hosting this dashboard. It observes packets "
+            "only and does not generate traffic. Local Linux privileges and the "
+            "pcap extra are required."
+        )
 
     if mode == "Synthetic attack replay":
         st.info(
@@ -1130,10 +1161,11 @@ with tab_live:
                 source = _start_local_attack_demo()
             else:
                 source = _make_source(
-                    requested_mode,
-                    uploaded_file=uploaded_file,
-                    replay_speed=float(replay_speed),
-                )
+                requested_mode,
+                uploaded_file=uploaded_file,
+                replay_speed=float(replay_speed),
+                capture_interface=capture_interface,
+            )
             # Prefer the saved (benchmark) artifacts for the live demo: they
             # are the calibrated, tested models with the known narrated
             # behaviour. The freshly trained in-memory models are the fallback
