@@ -1040,7 +1040,12 @@ with tab_live:
     live_window = col_a.number_input("Window (s)", 10, 300, 60, key="live-window")
     live_stride = col_b.number_input("Stride (s)", 5, 300, 30, key="live-stride")
     live_threshold = col_c.number_input(
-        "Threshold", 0.05, 0.95, float(DECISION_THRESHOLD), 0.05, key="live-threshold"
+        "Threshold",
+        0.05,
+        0.95,
+        0.35 if mode == "Synthetic attack replay" else float(DECISION_THRESHOLD),
+        0.05,
+        key="live-threshold",
     )
     replay_speed = st.slider("Replay speed (simulated seconds / real second)", 1.0, 600.0, 60.0)
     uploaded_file = None
@@ -1059,7 +1064,8 @@ with tab_live:
         st.info(
             "This is a safe simulated attack. Click the button to initiate "
             "benign traffic → reconnaissance → lateral movement. "
-            "With the default speed, the first suspicious phase appears in a few seconds."
+            "The demo threshold defaults to 0.35 so its trained synthetic risk signal "
+            "produces a visible alert; other forecast tabs use 0.50."
         )
     col1, col2, col3 = st.columns(3)
     start_requested = col1.button("▶ Start", type="primary", key="live-start")
