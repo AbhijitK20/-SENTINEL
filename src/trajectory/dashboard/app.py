@@ -1110,6 +1110,10 @@ with tab_live:
         "FORECAST = model probability. Hosted replay is synthetic and safe — "
         "it never exploits anything."
     )
+    st.caption(
+        "Stage evidence describes observed behavior; an alert is raised only when "
+        "the peak infiltration probability crosses the threshold."
+    )
 
     mode = st.radio(
         "Event source",
