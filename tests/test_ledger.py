@@ -45,6 +45,18 @@ def test_ledger_detects_tampering(tmp_path: Path) -> None:
     assert any("hash mismatch" in error for error in verification.errors)
 
 
+def test_ledger_demo_tampering_changes_latest_record(tmp_path: Path) -> None:
+    result = _forecast(tmp_path)
+    ledger = AlertLedger(tmp_path / "alerts.jsonl")
+    ledger.append_forecast(result)
+
+    assert ledger.tamper_latest_for_demo()
+    verification = ledger.verify()
+    assert not verification.valid
+    assert any("hash mismatch" in error for error in verification.errors)
+    assert ledger.tamper_latest_for_demo()
+
+
 def test_ledger_chains_records(tmp_path: Path) -> None:
     result = _forecast(tmp_path)
     ledger = AlertLedger(tmp_path / "alerts.jsonl")
@@ -54,3 +66,15 @@ def test_ledger_chains_records(tmp_path: Path) -> None:
 
     assert second.previous_hash == first.record_hash
     assert ledger.verify().valid
+
+
+def test_ledger_reset_removes_demo_records(tmp_path: Path) -> None:
+    result = _forecast(tmp_path)
+    ledger = AlertLedger(tmp_path / "alerts.jsonl")
+    ledger.append_forecast(result)
+
+    ledger.reset()
+
+    assert not ledger.path.exists()
+    assert ledger.verify().valid
+    assert ledger.verify().records_checked == 0
