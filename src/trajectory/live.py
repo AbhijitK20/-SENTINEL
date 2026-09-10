@@ -86,6 +86,8 @@ class LiveStatus(BaseModel):
     events_seen: int
     windows_emitted: int
     threshold: float
+    peak_probability: float | None = None
+    alert_status: str = "monitoring"
     model_version: str
     history: list[LiveWindow] = Field(default_factory=list)
     last_error: str | None = None
@@ -414,12 +416,21 @@ class LiveEngine:
             with self._lock:
                 self._accept(item)
         with self._lock:
+            peak = max((window.probability for window in self._history), default=None)
             return LiveStatus(
                 source=self._source.name,
                 running=not self._stop.is_set(),
                 events_seen=self._events_seen,
                 windows_emitted=len(self._history),
                 threshold=self.effective_threshold,
+                peak_probability=peak,
+                alert_status=(
+                    "alert"
+                    if peak is not None and peak >= self.effective_threshold
+                    else "below-threshold"
+                    if peak is not None
+                    else "monitoring"
+                ),
                 model_version=self._artifacts.baseline_result.model_version,
                 history=list(self._history),
                 last_error=self._last_error,

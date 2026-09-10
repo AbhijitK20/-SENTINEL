@@ -928,6 +928,10 @@ def _render_live_status(status) -> None:
     col2.metric("Windows", status.windows_emitted)
     col3.metric("Current stage", latest.stage if latest else "—")
     col4.metric("Peak probability", f"{peak.probability:.2f}" if peak else "—")
+    st.caption(
+        f"Alert status: **{status.alert_status.replace('-', ' ').title()}** · "
+        f"{status.windows_emitted} completed window(s)"
+    )
     if peak is not None and not alert:
         st.warning(
             f"Peak live probability was {peak.probability:.2f}, below the "
