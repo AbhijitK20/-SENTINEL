@@ -154,15 +154,50 @@ class AlertLedger:
             errors=errors,
         )
 
+    def tamper_latest_for_demo(self) -> bool:
+        """Alter the latest record for the UI's integrity-failure demonstration.
+
+        This intentionally changes the stored record hash without updating the
+        signed payload. It is a demo-only operation and returns ``False`` when
+        there is no record to tamper with.
+        """
+        if not self.path.exists():
+            return False
+        lines = self.path.read_text(encoding="utf-8").splitlines()
+        for index in range(len(lines) - 1, -1, -1):
+            if not lines[index].strip():
+                continue
+            try:
+                payload = json.loads(lines[index])
+            except json.JSONDecodeError:
+                return False
+            current_hash = str(payload.get("record_hash", ""))
+            replacement_hash = "f" * 64 if current_hash != "f" * 64 else "e" * 64
+            payload["record_hash"] = replacement_hash
+            lines[index] = _canonical_json(payload)
+            self.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            return True
+        return False
+
+    def reset(self) -> None:
+        """Clear the local demo ledger so a new integrity demonstration can start."""
+        self.path.unlink(missing_ok=True)
+
     def records(self) -> list[AlertRecord]:
         """Read validly-shaped records for display; use verify() for integrity."""
         if not self.path.exists():
             return []
-        return [
-            AlertRecord.model_validate_json(line)
-            for line in self.path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
+        records: list[AlertRecord] = []
+        for line in self.path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                records.append(AlertRecord.model_validate_json(line))
+            except Exception:
+                # verify() reports malformed lines; the dashboard should still
+                # render and let the user repair or reset the demo ledger.
+                continue
+        return records
 
     def _last_record(self) -> AlertRecord | None:
         records = self.records()

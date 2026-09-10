@@ -400,7 +400,7 @@ with tab_forecast:
         for error in verify_result.errors:
             st.error(error)
 
-    action_col, verify_col = st.columns(2)
+    action_col, verify_col, tamper_col, reset_col = st.columns(4)
     with action_col:
         if st.button("Record Alert", type="primary"):
             record = ledger.append_forecast(result)
@@ -413,6 +413,21 @@ with tab_forecast:
                 st.success(f"Verified {checked.records_checked} ledger record(s).")
             else:
                 st.error("Ledger verification failed: " + "; ".join(checked.errors))
+    with tamper_col:
+        if st.button("Simulate Tampering"):
+            if ledger.tamper_latest_for_demo():
+                checked = ledger.verify()
+                st.error(
+                    "Tampering detected: " + "; ".join(checked.errors)
+                    if not checked.valid
+                    else "Unexpectedly verified; refresh and try again."
+                )
+            else:
+                st.warning("Record an alert before simulating tampering.")
+    with reset_col:
+        if st.button("Reset Demo Ledger"):
+            ledger.reset()
+            st.success("Demo ledger reset. Record a new alert to start again.")
 
     records = ledger.records()
     if records:
