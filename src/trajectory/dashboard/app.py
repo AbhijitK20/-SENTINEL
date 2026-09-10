@@ -881,14 +881,20 @@ def _live_poll_fragment() -> None:
 def _render_live_status(status) -> None:
     """Draw one LiveStatus snapshot. OBSERVED = window features, FORECAST = model."""
     latest = status.history[-1] if status.history else None
-    alert = latest is not None and latest.probability >= latest.threshold
+    peak = max(status.history, key=lambda window: window.probability) if status.history else None
+    alert = peak is not None and peak.probability >= peak.threshold
 
     if alert:
         st.error(
-            f"🚨 **ALERT — {latest.stage}** · P(infiltration) = "
-            f"{latest.probability:.2f} ≥ threshold {latest.threshold:.2f} · "
-            f"{latest.mitre_reference or 'stage evidence only'}"
+            f"🚨 **ALERT observed — {peak.stage}** · peak P(infiltration) = "
+            f"{peak.probability:.2f} ≥ threshold {peak.threshold:.2f} · "
+            f"{peak.mitre_reference or 'stage evidence only'}"
         )
+        if latest is not None and latest is not peak:
+            st.caption(
+                f"Current window: {latest.stage}, P(infiltration) = {latest.probability:.2f}. "
+                "The alert remains visible because it was observed earlier in the replay."
+            )
     else:
         st.success(
             f"✅ Monitoring — last window {latest.event_count} events · "
@@ -947,12 +953,21 @@ def _render_live_status(status) -> None:
         if latest.warnings:
             with st.expander("Forecast warnings", expanded=False):
                 for warning in latest.warnings:
-                    st.warning(warning)
+                    if "below the decision threshold" in warning and alert:
+                        st.info(
+                            "The latest window is below threshold, but an earlier live window "
+                            "crossed it; the alert above is retained."
+                        )
+                    else:
+                        st.warning(warning)
 
     if status.last_error:
         st.warning(f"Source error: {status.last_error}")
     if not status.running:
-        st.info("Source finished (end of stream). Press **Stop**, then **Start** to run again.")
+        if peak is not None and alert:
+            st.info("Replay finished. The peak alert above was observed during the replay.")
+        else:
+            st.info("Replay finished without crossing the threshold. Press **Start** to run again.")
 
 
 def _make_source(mode: str, *, uploaded_file=None, replay_speed: float = 60.0):
@@ -1004,8 +1019,8 @@ with tab_live:
     )
 
     col_a, col_b, col_c = st.columns(3)
-    live_window = col_a.number_input("Window (s)", 10, 300, 30, key="live-window")
-    live_stride = col_b.number_input("Stride (s)", 5, 300, 15, key="live-stride")
+    live_window = col_a.number_input("Window (s)", 10, 300, 60, key="live-window")
+    live_stride = col_b.number_input("Stride (s)", 5, 300, 30, key="live-stride")
     live_threshold = col_c.number_input(
         "Threshold", 0.05, 0.95, float(DECISION_THRESHOLD), 0.05, key="live-threshold"
     )
@@ -1058,7 +1073,7 @@ with tab_live:
                 source=source,
                 window_seconds=int(live_window),
                 stride_seconds=int(live_stride),
-                history=3,
+                history=120,
                 threshold=float(live_threshold),
             )
             engine.start()
