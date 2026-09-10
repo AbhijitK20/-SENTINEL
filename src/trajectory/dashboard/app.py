@@ -918,7 +918,14 @@ def _render_live_status(status) -> None:
     col1.metric("Events seen", status.events_seen)
     col2.metric("Windows", status.windows_emitted)
     col3.metric("Current stage", latest.stage if latest else "—")
-    col4.metric("Threshold", f"{status.threshold:.2f}")
+    col4.metric("Peak probability", f"{peak.probability:.2f}" if peak else "—")
+    if peak is not None and not alert:
+        st.warning(
+            f"Peak live probability was {peak.probability:.2f}, below the "
+            f"{status.threshold:.2f} alert threshold. Current stage evidence is "
+            f"{latest.stage if latest else 'not available'}; stage evidence alone "
+            "does not trigger an alert."
+        )
 
     if status.running and latest is None:
         st.info(
@@ -1071,8 +1078,12 @@ with tab_live:
             # are the calibrated, tested models with the known narrated
             # behaviour. The freshly trained in-memory models are the fallback
             # when no saved run exists (fresh clones).
+            # Synthetic replay must use the model trained in this session so
+            # the displayed training settings and live behavior stay aligned.
             live_artifacts = loaded
-            if (REPORTS_DIR / "baseline" / "baseline_result.json").is_file():
+            if mode != "Synthetic attack replay" and (
+                REPORTS_DIR / "baseline" / "baseline_result.json"
+            ).is_file():
                 try:
                     from trajectory.predict import load_artifacts
 
