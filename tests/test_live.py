@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import queue
 import threading
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from trajectory.live import (
     JsonlSensorSource,
     LiveEngine,
 )
-from trajectory.predict import DECISION_THRESHOLD, load_artifacts
+from trajectory.predict import DECISION_THRESHOLD, artifacts_from_runs, load_artifacts
 from trajectory.schemas import UnifiedEvent
 from trajectory.synthetic import generate_labelled_states
 from trajectory.targets import build_sequence_samples, make_split_manifest
@@ -107,6 +108,68 @@ def test_forecast_comes_from_real_artifacts(tmp_path: Path) -> None:
     assert 0.0 <= latest.probability <= 1.0
     assert latest.threshold == status.threshold
     assert latest.stage  # stage mapping always yields a stage or Unknown
+
+
+def test_fast_attack_shaped_windows_cross_threshold(tmp_path: Path) -> None:
+    """The local speed-2 attack path must produce a visible alert spike."""
+    labelled = generate_labelled_states(
+        [f"attack-{index}" for index in range(1, 7)],
+        seed=42,
+        window_seconds=60,
+        stride_seconds=30,
+    )
+    samples = build_sequence_samples(labelled, sequence_length=8, horizon=5)
+    manifest = make_split_manifest([f"attack-{index}" for index in range(1, 7)], seed=42)
+    run = train_baseline(
+        labelled,
+        samples,
+        manifest,
+        config=BaselineConfig(decision_threshold=DECISION_THRESHOLD),
+        seed=42,
+    )
+
+    attack_events = [
+        _event(0.0, 1, bytes=64.0, packets=6.0),
+        *[
+            _event(
+                10.0 + (index % 20) * 0.05,
+                index,
+                bytes=0.0,
+                packets=1.0,
+                syn_count=1.0,
+                rst_count=1.0,
+            )
+            for index in range(2, 252)
+        ],
+        *[
+            _event(
+                35.0 + (index % 25) * 0.05,
+                index,
+                bytes=48000.0,
+                packets=40.0,
+                syn_count=1.0,
+                ack_count=39.0,
+            )
+            for index in range(252, 285)
+        ],
+    ]
+    source = EventReplaySource(attack_events, speed=1_000_000)
+    engine = LiveEngine(
+        artifacts_from_runs(run),
+        source=source,
+        window_seconds=30,
+        stride_seconds=15,
+        history=120,
+        threshold=DECISION_THRESHOLD,
+    )
+    engine.start()
+    for _ in range(100):
+        status = engine.poll()
+        if not status.running:
+            break
+        time.sleep(0.01)
+    assert status.windows_emitted >= 1
+    assert max(window.probability for window in status.history) >= DECISION_THRESHOLD
 
 
 def test_history_is_bounded(tmp_path: Path) -> None:
