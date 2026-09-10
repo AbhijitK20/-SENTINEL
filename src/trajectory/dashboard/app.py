@@ -9,7 +9,9 @@ No cloud APIs required. All inference runs from saved local artifacts.
 from __future__ import annotations
 
 import platform
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -1014,6 +1016,49 @@ def _make_source(mode: str, *, uploaded_file=None, replay_speed: float = 60.0):
     return JsonlSensorSource(handle.name, scenario_id="uploaded-sensor", follow=False)
 
 
+def _local_attack_demo_available() -> bool:
+    """Return whether the app is running where the localhost demo can execute."""
+    return not Path("/mount/src").exists()
+
+
+def _start_local_attack_demo(speed: float) -> JsonlSensorSource:
+    """Start the harmless localhost target/attack pair and return its sensor source."""
+    events_path = ROOT / "reports" / "live" / "events.jsonl"
+    events_path.parent.mkdir(parents=True, exist_ok=True)
+    events_path.write_text("", encoding="utf-8")
+
+    target = subprocess.Popen(
+        [sys.executable, str(ROOT / "scripts" / "attack_demo.py"), "target"],
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.STDOUT,
+    )
+    time.sleep(0.2)
+    attack = subprocess.Popen(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "attack_demo.py"),
+            "attack",
+            "--events",
+            str(events_path),
+            "--speed",
+            str(speed),
+        ],
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.STDOUT,
+    )
+    st.session_state["local_attack_processes"] = (target, attack)
+    return JsonlSensorSource(events_path, scenario_id="local-attack-demo", follow=True)
+
+
+def _stop_local_attack_demo() -> None:
+    """Stop local demo child processes without affecting hosted replay."""
+    for process in st.session_state.pop("local_attack_processes", ()):
+        if process.poll() is None:
+            process.terminate()
+
+
 with tab_live:
     st.subheader("Live Detection")
     st.caption(
@@ -1071,11 +1116,14 @@ with tab_live:
     requested_mode = "Synthetic attack replay" if attack_requested else mode
     if start_requested or attack_requested:
         try:
-            source = _make_source(
-                requested_mode,
-                uploaded_file=uploaded_file,
-                replay_speed=float(replay_speed),
-            )
+            if attack_requested and _local_attack_demo_available():
+                source = _start_local_attack_demo(float(replay_speed))
+            else:
+                source = _make_source(
+                    requested_mode,
+                    uploaded_file=uploaded_file,
+                    replay_speed=float(replay_speed),
+                )
             # Prefer the saved (benchmark) artifacts for the live demo: they
             # are the calibrated, tested models with the known narrated
             # behaviour. The freshly trained in-memory models are the fallback
@@ -1117,6 +1165,7 @@ with tab_live:
         if engine is not None:
             engine.stop()
         st.session_state.pop("live_engine", None)
+        _stop_local_attack_demo()
         st.toast("Live engine stopped")
 
     if "live_engine" in st.session_state:
