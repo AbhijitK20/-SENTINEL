@@ -946,12 +946,36 @@ def _render_live_status(status) -> None:
         fig = go.Figure()
         fig.add_trace(
             go.Scatter(
-                x=[w.window_start for w in status.history],
+                x=[w.window_end for w in status.history],
                 y=[w.probability for w in status.history],
                 mode="lines+markers",
                 name="P(infiltration)",
+                text=[f"{w.probability:.2f}" for w in status.history],
+                textposition="top center",
+                customdata=[[w.stage, w.event_count] for w in status.history],
+                hovertemplate=(
+                    "Window end: %{x}<br>"
+                    "P(infiltration): %{y:.3f}<br>"
+                    "Stage: %{customdata[0]}<br>"
+                    "Events: %{customdata[1]}<extra></extra>"
+                ),
+                line=dict(color="#6dd3a8", width=3),
+                marker=dict(size=8),
             )
         )
+        if peak is not None:
+            fig.add_trace(
+                go.Scatter(
+                    x=[peak.window_end],
+                    y=[peak.probability],
+                    mode="markers+text",
+                    name="Peak observed",
+                    text=[f"Peak {peak.probability:.2f}"],
+                    textposition="bottom center",
+                    marker=dict(color="#ef6f6f", size=14, symbol="star"),
+                    hovertemplate="Peak observed: %{y:.3f}<extra></extra>",
+                )
+            )
         fig.add_hline(y=status.threshold, line_dash="dot", annotation_text="threshold")
         fig.update_layout(
             template="plotly_dark",
