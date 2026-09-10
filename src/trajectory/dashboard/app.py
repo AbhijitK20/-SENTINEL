@@ -1082,7 +1082,7 @@ with tab_live:
         "Threshold",
         0.05,
         0.95,
-        0.35 if mode == "Synthetic attack replay" else float(DECISION_THRESHOLD),
+        float(DECISION_THRESHOLD),
         0.05,
         key="live-threshold",
     )
@@ -1104,7 +1104,7 @@ with tab_live:
             "This is a safe simulated attack. Click the button to initiate "
             "benign traffic → reconnaissance → lateral movement. "
             "The complete deterministic replay runs through all three phases. "
-            "The demo threshold defaults to 0.35; other forecast tabs use 0.50."
+            "The attack alert threshold is 0.50."
         )
     col1, col2, col3 = st.columns(3)
     start_requested = col1.button("▶ Start", type="primary", key="live-start")
@@ -1131,6 +1131,11 @@ with tab_live:
             # Synthetic replay must use the model trained in this session so
             # the displayed training settings and live behavior stay aligned.
             live_artifacts = loaded
+            if attack_requested:
+                # The live attack story is scored with the transparent baseline
+                # so its observable attack-shaped spike is not smoothed away by
+                # the lightweight hosted GRU profile.
+                live_artifacts = artifacts_from_runs(baseline_run)
             if mode != "Synthetic attack replay" and (
                 REPORTS_DIR / "baseline" / "baseline_result.json"
             ).is_file():
