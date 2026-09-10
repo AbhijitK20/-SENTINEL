@@ -41,6 +41,17 @@ uv run python scripts/attack_demo.py target                      # localhost ech
 uv run python scripts/attack_demo.py attack --speed 2            # scripted attack → events.jsonl
 ```
 
+For local packet-derived signals, install Scapy and select `Local loopback capture`
+in the Live Detection tab:
+
+```bash
+uv sync --extra dashboard --extra pcap
+sudo -E uv run streamlit run src/trajectory/dashboard/app.py
+```
+
+Use interface `lo` on Linux. The localhost attack button remains a flow/JSONL
+sensor demo; loopback capture is the separate packet-feature path.
+
 Optional extras: `--extra pcap` (Scapy), `--extra dashboard`, or `--group presentation` for the slide generator.
 
 Baseline and temporal runs write JSON results (with model SHA-256 checksums) and Markdown reports. Numbers from synthetic data are pipeline checks, not benchmark claims — the claim status is stated in `RESULTS.md` and in every generated report.

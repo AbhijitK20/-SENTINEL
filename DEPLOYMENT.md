@@ -128,3 +128,18 @@ Cloud:
 
 The original localhost attack command is still useful for local development,
 but it is not required or used by the hosted workflow.
+
+### Local Packet Capture
+
+To include packet-derived features locally, install Scapy and run the dashboard
+with capture privileges:
+
+```bash
+uv sync --extra dashboard --extra pcap
+sudo -E uv run streamlit run src/trajectory/dashboard/app.py
+```
+
+Select `Local loopback capture` and interface `lo`. This captures packets on
+the machine hosting Streamlit. It is not available as a browser or hosted-cloud
+capture source. The synthetic/local attack button remains a safe flow/JSONL
+sensor simulation and may still show the packet-features-unavailable warning.
