@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 
+from trajectory.ledger import AlertLedger
 from trajectory.predict import forecast, load_artifacts, save_forecast
 from trajectory.synthetic import generate_labelled_states
 from trajectory.targets import make_split_manifest
@@ -43,6 +44,11 @@ def main() -> None:
         help="Override scenario id (defaults to first test scenario)",
     )
     parser.add_argument("--output", required=True)
+    parser.add_argument(
+        "--ledger",
+        default=None,
+        help="Optional JSONL trust ledger path for registering the forecast",
+    )
     args = parser.parse_args()
 
     loaded = load_artifacts(args.baseline, temporal_dir=args.temporal)
@@ -65,6 +71,10 @@ def main() -> None:
     # threshold stored with the artifacts → shipped 0.5 default.
     result = forecast(states, loaded, max_horizon=args.max_horizon, threshold=args.threshold)
     path = save_forecast(result, args.output)
+
+    if args.ledger:
+        record = AlertLedger(args.ledger).append_forecast(result)
+        print(f"alert_id={record.alert_id} ledger_path={args.ledger}")
 
     peak = max(result.probability_timeline, key=lambda point: point.infiltration_probability)
     print(

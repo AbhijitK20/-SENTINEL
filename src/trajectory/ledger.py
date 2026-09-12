@@ -113,11 +113,7 @@ class AlertLedger:
         # this avoids datetime normalization changing the signed payload.
         draft = AlertRecord(**payload, record_hash=GENESIS_HASH)
         record = draft.model_copy(
-            update={
-                "record_hash": _sha256(
-                    draft.model_dump(mode="json", exclude={"record_hash"})
-                )
-            }
+            update={"record_hash": _sha256(draft.model_dump(mode="json", exclude={"record_hash"}))}
         )
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:

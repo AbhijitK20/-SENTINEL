@@ -1171,9 +1171,7 @@ with tab_live:
             "The attack alert threshold is 0.50."
         )
         if _local_attack_demo_available():
-            st.caption(
-                "Initiate runs the exact local target and attack scripts at speed 2."
-            )
+            st.caption("Initiate runs the exact local target and attack scripts at speed 2.")
         else:
             st.caption(
                 "This button requires the local SENTINEL dashboard; hosted Streamlit "
@@ -1181,9 +1179,7 @@ with tab_live:
             )
     col1, col2, col3 = st.columns(3)
     start_requested = col1.button("▶ Start", type="primary", key="live-start")
-    attack_requested = col2.button(
-        "🚨 Initiate Attack", type="primary", key="live-attack"
-    )
+    attack_requested = col2.button("🚨 Initiate Attack", type="primary", key="live-attack")
     stop_requested = col3.button("■ Stop", key="live-stop")
 
     if start_requested or attack_requested:
@@ -1204,7 +1200,7 @@ with tab_live:
                     uploaded_file=uploaded_file,
                     replay_speed=float(replay_speed),
                     capture_interface=capture_interface,
-            )
+                )
             # Prefer the saved (benchmark) artifacts for the live demo: they
             # are the calibrated, tested models with the known narrated
             # behaviour. The freshly trained in-memory models are the fallback
@@ -1217,9 +1213,10 @@ with tab_live:
                 # so its observable attack-shaped spike is not smoothed away by
                 # the lightweight hosted GRU profile.
                 live_artifacts = artifacts_from_runs(baseline_run)
-            if mode != "Synthetic attack replay" and (
-                REPORTS_DIR / "baseline" / "baseline_result.json"
-            ).is_file():
+            if (
+                mode != "Synthetic attack replay"
+                and (REPORTS_DIR / "baseline" / "baseline_result.json").is_file()
+            ):
                 try:
                     from trajectory.predict import load_artifacts
 
@@ -1241,14 +1238,10 @@ with tab_live:
                 # Short local windows make the first graph point appear quickly
                 # while keeping scan, login, and bulk-transfer phases separate.
                 window_seconds=(
-                    15
-                    if attack_requested and _local_attack_demo_available()
-                    else int(live_window)
+                    15 if attack_requested and _local_attack_demo_available() else int(live_window)
                 ),
                 stride_seconds=(
-                    5
-                    if attack_requested and _local_attack_demo_available()
-                    else int(live_stride)
+                    5 if attack_requested and _local_attack_demo_available() else int(live_stride)
                 ),
                 history=120,
                 threshold=float(live_threshold),
@@ -1278,7 +1271,7 @@ with tab_live:
 
     if "live_engine" not in st.session_state:
         st.info(
-        "Choose a source and press **Start**. Synthetic replay works in the "
-        "hosted app; CSV and JSONL modes use the uploaded file directly. "
-        "The original localhost terminal demo is not required here."
+            "Choose a source and press **Start**. Synthetic replay works in the "
+            "hosted app; CSV and JSONL modes use the uploaded file directly. "
+            "The original localhost terminal demo is not required here."
         )
