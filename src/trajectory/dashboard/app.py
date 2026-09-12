@@ -19,6 +19,7 @@ import streamlit as st
 
 from trajectory.baseline import SPLIT_NAMES, train_baseline
 from trajectory.config import BaselineConfig
+from trajectory.dashboard.live_artifacts import select_live_artifacts
 from trajectory.evaluation import evaluate_replay
 from trajectory.features import fit_feature_schema
 from trajectory.ledger import AlertLedger
@@ -1201,37 +1202,13 @@ with tab_live:
                     replay_speed=float(replay_speed),
                     capture_interface=capture_interface,
                 )
-            # Prefer the saved (benchmark) artifacts for the live demo: they
-            # are the calibrated, tested models with the known narrated
-            # behaviour. The freshly trained in-memory models are the fallback
-            # when no saved run exists (fresh clones).
-            # Synthetic replay must use the model trained in this session so
-            # the displayed training settings and live behavior stay aligned.
-            live_artifacts = loaded
-            if attack_requested:
-                # The live attack story is scored with the transparent baseline
-                # so its observable attack-shaped spike is not smoothed away by
-                # the lightweight hosted GRU profile.
-                live_artifacts = artifacts_from_runs(baseline_run)
-            if (
-                mode != "Synthetic attack replay"
-                and (REPORTS_DIR / "baseline" / "baseline_result.json").is_file()
-            ):
-                try:
-                    from trajectory.predict import load_artifacts
-
-                    temporal_dir = (
-                        REPORTS_DIR / "temporal"
-                        if (REPORTS_DIR / "temporal" / "temporal_result.json").is_file()
-                        else None
-                    )
-                    if temporal_dir is not None or loaded.temporal_result is None:
-                        live_artifacts = load_artifacts(
-                            REPORTS_DIR / "baseline",
-                            temporal_dir=temporal_dir,
-                        )
-                except Exception:  # noqa: BLE001 - fall back to in-memory models
-                    live_artifacts = loaded
+            live_artifacts = select_live_artifacts(
+                mode=mode,
+                attack_requested=attack_requested,
+                loaded=loaded,
+                baseline_run=baseline_run,
+                reports_dir=REPORTS_DIR,
+            )
             engine = LiveEngine(
                 live_artifacts,
                 source=source,
