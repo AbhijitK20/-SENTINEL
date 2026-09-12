@@ -1307,13 +1307,13 @@ def slide_7(prs: Presentation) -> None:
         Inches(4.6),
         "Stage Storyline (measured in rehearsal)",
         [
-            "0:00 — Train the models live (~4 seconds, deterministic seed)",
+            "0:00 — Train the models live (~3 seconds, deterministic seed)",
             "0:10 — Press Start: benign chatter begins",
-            "0:30 — Quiet window: P(infiltration) = 0.12, no false alarms",
-            "0:33 — ALERT: scan burst detected at P = 0.97",
+            "0:19 — Quiet window: P(infiltration) = 0.12, no false alarms",
+            "0:34 — ALERT: scan burst detected at P = 0.99",
             "         Stage: Initial Access — MITRE ATT&CK TA0001",
-            "0:48 — Failed logins: P = 1.00, evidence panel grows",
-            "1:03 — ESCALATION: Lateral Movement — MITRE TA0008",
+            "0:49 — Failed logins: P = 1.00, evidence panel grows",
+            "1:04 — ESCALATION: Lateral Movement — MITRE TA0008",
             "Same trained artifacts as the offline benchmark",
             "Sources: demo attack, CIC-IDS2017 replay, live capture",
         ],
@@ -1323,9 +1323,9 @@ def slide_7(prs: Presentation) -> None:
     # Right: the three backup-demo frames (t0, alert, escalation).
     frames_dir = ROOT / "deliverables" / "backup_demo"
     frame_files = (
-        ("frame_0_t0s.png", "t=0 — benign, P=0.12"),
-        ("frame_1_t33s.png", "t=33s — ALERT, P=0.97"),
-        ("frame_3_t63s.png", "t=63s — Lateral Movement"),
+        ("frame_0_t19s.png", "t=19s — benign, P=0.12"),
+        ("frame_1_t34s.png", "t=34s — ALERT, P=0.99"),
+        ("frame_3_t64s.png", "t=64s — Lateral Movement"),
     )
     for index, (filename, caption) in enumerate(frame_files):
         path = frames_dir / filename
