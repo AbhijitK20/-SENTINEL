@@ -74,6 +74,14 @@ SPRINTS = [
         "tests": 103,
         "files": 53,
     },
+    {
+        "id": 12,
+        "name": "Presentation",
+        "points": 13,
+        "done": True,
+        "tests": 111,
+        "files": 60,
+    },
 ]
 
 TOTAL_POINTS = sum(s["points"] for s in SPRINTS)
@@ -81,8 +89,8 @@ COMPLETED_POINTS = sum(s["points"] for s in SPRINTS if s["done"])
 REMAINING_POINTS = TOTAL_POINTS - COMPLETED_POINTS
 SPRINTS_DONE = sum(1 for s in SPRINTS if s["done"])
 SPRINTS_TOTAL = len(SPRINTS)
-FILES_TOTAL = 53  # python files on disk (src + scripts + tests)
-TESTS_TOTAL = 103  # actual count
+FILES_TOTAL = 60  # python files on disk (src + scripts + tests)
+TESTS_TOTAL = 111  # actual count
 
 # ── SVG helpers ───────────────────────────────────────────────────────
 W, H = 900, 520
