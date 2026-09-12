@@ -26,25 +26,26 @@ ALERT = (239, 111, 111)
 TEXT = (232, 236, 244)
 MUTED = (140, 148, 163)
 
-# The rehearsed beats (from scripts/rehearse_demo.py verification runs).
+# The rehearsed beats (measured 2026-09-13 by scripts/rehearse_demo.py —
+# reports/generated/rehearsal.json is the source of truth for these numbers).
 BEATS = (
-    ("t=0s", "Benign background chatter", "P(infiltration) = 0.12", "Stage: Unknown", ACCENT),
+    ("t=19s", "Benign background chatter", "P(infiltration) = 0.12", "Stage: Unknown", ACCENT),
     (
-        "t=33s",
+        "t=34s",
         "Scan burst detected",
-        "P(infiltration) = 0.97",
+        "P(infiltration) = 0.99",
         "ALERT — Initial Access (TA0001)",
         ALERT,
     ),
     (
-        "t=48s",
+        "t=49s",
         "Failed logins observed",
         "P(infiltration) = 1.00",
         "Stage: Initial Access (TA0001)",
         ALERT,
     ),
     (
-        "t=63s",
+        "t=64s",
         "Bulk internal transfer",
         "P(infiltration) = 1.00",
         "ESCALATION — Lateral Movement (TA0008)",
@@ -70,7 +71,7 @@ def _curve_frame(progress: float, last: int) -> Image.Image:
     draw.text((chart[0] + 8, threshold_y - 22), "threshold 0.50", fill=MUTED)
 
     # Probability curve across beats.
-    probs = (0.12, 0.97, 1.00, 1.00)
+    probs = (0.12, 0.99, 1.00, 1.00)
     points = []
     for index, prob in enumerate(probs):
         x = chart[0] + int((chart[2] - chart[0]) * (0.15 + 0.28 * index))
