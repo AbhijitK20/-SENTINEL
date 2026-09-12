@@ -28,3 +28,9 @@ reports/generated/
 .idea/
 .vscode/
 .DS_Store
+
+# Live demo runtime data (events, recordings)
+reports/live/
+
+# Local trust-ledger records may contain operational alert metadata
+reports/generated/ledger/

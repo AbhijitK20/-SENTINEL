@@ -1287,12 +1287,76 @@ def slide_6(prs: Presentation) -> None:
     )
 
 
+def slide_7(prs: Presentation) -> None:
+    """Live demo slide: narrated storyline with measured beats and backup frames."""
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    add_bg(s)
+    header(
+        s,
+        "Live Demo — Watch the AI Detect an Attack",
+        "Real-time detection on a localhost attack simulation; deterministic and rehearsed",
+        7,
+    )
+
+    # Left: the narrated storyline with measured timings.
+    card(
+        s,
+        MARGIN,
+        Inches(1.2),
+        Inches(5.9),
+        Inches(4.6),
+        "Stage Storyline (measured in rehearsal)",
+        [
+            "0:00 — Train the models live (~4 seconds, deterministic seed)",
+            "0:10 — Press Start: benign chatter begins",
+            "0:30 — Quiet window: P(infiltration) = 0.12, no false alarms",
+            "0:33 — ALERT: scan burst detected at P = 0.97",
+            "         Stage: Initial Access — MITRE ATT&CK TA0001",
+            "0:48 — Failed logins: P = 1.00, evidence panel grows",
+            "1:03 — ESCALATION: Lateral Movement — MITRE TA0008",
+            "Same trained artifacts as the offline benchmark",
+            "Sources: demo attack, CIC-IDS2017 replay, live capture",
+        ],
+        size=11,
+    )
+
+    # Right: the three backup-demo frames (t0, alert, escalation).
+    frames_dir = ROOT / "deliverables" / "backup_demo"
+    frame_files = (
+        ("frame_0_t0s.png", "t=0 — benign, P=0.12"),
+        ("frame_1_t33s.png", "t=33s — ALERT, P=0.97"),
+        ("frame_3_t63s.png", "t=63s — Lateral Movement"),
+    )
+    for index, (filename, caption) in enumerate(frame_files):
+        path = frames_dir / filename
+        if not path.is_file():
+            continue
+        x = MARGIN + Inches(6.1)
+        y = Inches(1.25 + index * 1.55)
+        s.shapes.add_picture(str(path), x, y, width=Inches(2.6))
+        add_text(
+            s,
+            x + Inches(2.7),
+            y + Inches(0.55),
+            Inches(3.6),
+            Inches(0.4),
+            caption,
+            size=10,
+            color=ACCENT,
+        )
+
+    footer(
+        s,
+        "Backup if live infra fails: deliverables/backup_demo/backup_demo.gif (animated) — same numbers as the live run.",
+    )
+
+
 # --------------------------------------------------------------------------- main
 def build(pdf: bool = False) -> Path:
     prs = Presentation()
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
-    for fn in (slide_1, slide_2, slide_3, slide_4, slide_5, slide_6):
+    for fn in (slide_1, slide_2, slide_3, slide_4, slide_5, slide_6, slide_7):
         fn(prs)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     prs.save(OUT_FILE)
