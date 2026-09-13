@@ -1,0 +1,10 @@
+# Streamlit runtime configuration: analytics opt-out and brand theme.
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#6dd3a8"
+backgroundColor = "#0b0d12"
+secondaryBackgroundColor = "#151922"
+textColor = "#e8ecf1"

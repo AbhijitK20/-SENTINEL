@@ -17,6 +17,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 import streamlit as st
 
+from trajectory.assets import default_asset_registry
 from trajectory.baseline import SPLIT_NAMES, train_baseline
 from trajectory.config import BaselineConfig
 from trajectory.dashboard.live_artifacts import select_live_artifacts
@@ -1065,6 +1066,26 @@ def _render_live_status(status) -> None:
                     st.markdown("**Likely progression:** " + " → ".join(incident.progression))
                     if incident.affected_assets:
                         st.markdown("**Assets in scope:** " + ", ".join(incident.affected_assets))
+                        registry = default_asset_registry()
+                        known = [
+                            registry[asset]
+                            for asset in incident.affected_assets
+                            if asset in registry
+                        ]
+                        if known:
+                            st.dataframe(
+                                [
+                                    {
+                                        "asset": record.asset_id,
+                                        "role": record.role,
+                                        "owner": record.owner,
+                                        "criticality": record.criticality,
+                                        "zone": record.network_zone,
+                                    }
+                                    for record in known
+                                ],
+                                hide_index=True,
+                            )
                     st.caption(
                         f"First seen {incident.first_seen:%H:%M:%S} · last seen "
                         f"{incident.last_seen:%H:%M:%S} · risk = {incident.risk.formula}"
