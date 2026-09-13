@@ -505,6 +505,41 @@ def create_app(
             "incidents": [incident.model_dump(mode="json") for incident in status.incidents],
         }
 
+    @app.get("/v1/live")
+    def live_status() -> dict[str, Any]:
+        """Live push-engine state: findings, incidents, and recent windows.
+
+        Unlike GET /v1/alerts (the persisted ledger), this returns the
+        in-memory state of the push engine — the findings the demo
+        scanner generates in real time.
+        """
+        status = push_engine.poll()
+        return {
+            "events_seen": status.events_seen,
+            "windows_emitted": status.windows_emitted,
+            "peak_probability": status.peak_probability,
+            "alert_status": status.alert_status,
+            "incidents": [incident.model_dump(mode="json") for incident in status.incidents],
+            "findings": [
+                finding.model_dump(mode="json")
+                for finding in list(push_engine._findings)[-50:]
+            ],
+            "history": [
+                {
+                    "window_start": w.window_start.isoformat(),
+                    "window_end": w.window_end.isoformat(),
+                    "event_count": w.event_count,
+                    "probability": w.probability,
+                    "threshold": w.threshold,
+                    "stage": w.stage,
+                    "attack_findings": [
+                        f.model_dump(mode="json") for f in w.attack_findings
+                    ],
+                }
+                for w in list(push_engine._history)[-10:]
+            ],
+        }
+
     @app.get("/metrics")
     def metrics() -> Response:
         """Prometheus text-format endpoint (Phase 8)."""

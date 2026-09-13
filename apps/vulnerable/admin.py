@@ -10,6 +10,7 @@ Run: python apps/vulnerable/admin.py
 from __future__ import annotations
 
 import json
+import os
 import time
 import urllib.request
 from pathlib import Path
@@ -19,7 +20,7 @@ from flask import Flask, jsonify, render_template_string, request
 app = Flask(__name__)
 
 SENTINEL_API = "http://api:8000"
-API_KEY = ""
+API_KEY = os.environ.get("SENTINEL_BOOTSTRAP_KEY", "sent_demo_key_2026")
 BLOCKLIST_PATH = Path("apps/vulnerable/blocklist.jsonl")
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -143,7 +144,8 @@ def _api_get(path: str) -> dict | None:
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             return json.loads(resp.read())
-    except Exception:
+    except Exception as e:
+        print(f"[admin] API error {path}: {e}", flush=True)
         return None
 
 
@@ -177,27 +179,22 @@ def _read_log_tail(n: int = 20) -> list[str]:
 
 @app.route("/")
 def index():
-    alerts_data = _api_get("/v1/alerts") or {"incidents": []}
-    incidents = alerts_data.get("incidents", [])
+    live_data = _api_get("/v1/live") or {}
+    incidents = live_data.get("incidents", [])
+    findings_raw = live_data.get("findings", [])
     findings = []
-    for inc in incidents:
-        for f in inc.get("findings", []):
-            findings.append(f)
-            risk = inc.get("risk", {})
-            severity = "critical"
-            if risk.get("level") == "high":
-                severity = "high"
-            elif risk.get("level") == "medium":
-                severity = "medium"
-            findings[-1]["severity"] = severity
-            assets = inc.get("affected_assets", [])
-            findings[-1]["assets"] = ", ".join(assets[:3]) if assets else "unknown"
-            findings[-1]["ip"] = assets[0] if assets else ""
-            findings[-1]["time"] = inc.get("first_seen", "")[:19]
+    for f in findings_raw:
+        severity = "critical"
+        if f.get("probability", 0) >= 0.65:
+            severity = "high"
+        elif f.get("probability", 0) >= 0.40:
+            severity = "medium"
+        findings.append({**f, "severity": severity})
+    print(f"[admin] findings_raw={len(findings_raw)} processed={len(findings)}", flush=True)
 
     blocked = _read_blocklist()
     blocked_ips = [e["ip"] for e in blocked]
-    peak = alerts_data.get("peak_probability", 0)
+    peak = live_data.get("peak_probability", 0)
     peak_str = f"{peak:.1%}" if peak is not None else "—"
 
     status_ok = peak is None or peak < 0.15

@@ -33,7 +33,13 @@ def _read_new_lines(path: Path, offset: int) -> tuple[str, int]:
 
 
 def _parse_syslog_line(line: str, counter: int) -> dict | None:
-    """Parse ``<ISO-8601> <host> <app> src=... dport=... method=... path=...``"""
+    """Parse ``<ISO-8601> <host> <app> src=... dport=... method=... path=... status=...``
+
+    Emits a *flow* event (event_type="flow") with features the 9 detectors
+    key on: flow_event_count, failed_auth, rst_count, bytes, etc.  The
+    credential detector uses failed_auth (number of 401/403 responses) and
+    flow_event_count; the recon detector looks at rst_count and bytes.
+    """
     parts = line.split()
     if len(parts) < 8 or "src=" not in line:
         return None
@@ -47,6 +53,8 @@ def _parse_syslog_line(line: str, counter: int) -> dict | None:
     except (StopIteration, ValueError):
         return None
 
+    is_failed = status in (401, 403, 500)
+
     features = {
         "bytes": float(100 + len(path_val) + len(method)),
         "packets": 1.0,
@@ -58,6 +66,11 @@ def _parse_syslog_line(line: str, counter: int) -> dict | None:
         "fin_count": 1.0,
         "psh_count": 1.0,
         "retransmission": 0.0,
+        # Flow-level features the detectors key on:
+        "flow_event_count": 1.0,
+        "failed_auth": 1.0 if is_failed else 0.0,
+        "duration": 0.05,
+        "flow_iat_mean_ms": 50.0,
     }
 
     return {
@@ -65,7 +78,7 @@ def _parse_syslog_line(line: str, counter: int) -> dict | None:
         "timestamp": ts,
         "source_entity": src,
         "destination_entity": "127.0.0.1",
-        "event_type": "packet",
+        "event_type": "flow",
         "features": features,
         "source_format": "syslog",
         "provenance": f"sentinel-demo:{method} {path_val}",
