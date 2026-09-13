@@ -92,7 +92,7 @@ def fuse_risk(
     assets' exposure; with no registry, criticality contributes a neutral 0.5
     and the formula says so.
     """
-    registered = [a for a in affected_assets if a in registry]
+    registered = [a for a in affected_assets if a in registry] if registry else []
     worst = (
         max(CRITICALITY_WEIGHT.get(registry[a].criticality, 0.5) for a in registered)
         if registered
