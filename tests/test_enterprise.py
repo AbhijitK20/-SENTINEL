@@ -281,13 +281,33 @@ def test_correlation_includes_new_stages() -> None:
 # ── API endpoints ────────────────────────────────────────────────────────
 @pytest.fixture()
 def api_client(tmp_path: Path):
+    """API client against self-trained artifacts — no repo-local state needed
+    (the default artifacts dir is git-ignored and absent on CI)."""
     from fastapi.testclient import TestClient
 
     from trajectory.api import create_app
     from trajectory.auth import ApiKeyStore
+    from trajectory.baseline import save_baseline_artifacts, train_baseline
+    from trajectory.config import BaselineConfig
+    from trajectory.predict import DECISION_THRESHOLD
+    from trajectory.targets import build_sequence_samples, make_split_manifest
+
+    scenarios = [f"ent{i}" for i in range(5)]
+    labelled = generate_labelled_states(scenarios, seed=31, window_seconds=60, stride_seconds=60)
+    samples = build_sequence_samples(labelled, sequence_length=2, horizon=1)
+    manifest = make_split_manifest(scenarios, seed=31)
+    run = train_baseline(
+        labelled,
+        samples,
+        manifest,
+        config=BaselineConfig(decision_threshold=DECISION_THRESHOLD),
+        seed=31,
+    )
+    baseline_dir = tmp_path / "baseline"
+    save_baseline_artifacts(run, baseline_dir)
 
     auth_dir = tmp_path / "auth"
-    app = create_app(auth_dir=auth_dir)
+    app = create_app(baseline_dir, auth_dir=auth_dir)
     client = TestClient(app)
     raw, _ = ApiKeyStore(auth_dir / "keys.jsonl").create("admin")
     return client, {"X-API-Key": raw}
