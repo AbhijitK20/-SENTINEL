@@ -9,7 +9,7 @@ exists today, with the scale-level ladder from prototype to platform.
 | Level | Stack | Status |
 |---|---|---|
 | 1 — Hackathon demo | Streamlit + local files | **Current — done** |
-| 2 — Pilot / MVP | + FastAPI inference API | **API shipped** (`trajectory/api.py`) |
+| 2 — Pilot / MVP | + FastAPI inference API, key-based auth + RBAC + audit | **Shipped** (`trajectory/api.py`, `trajectory/auth.py`) |
 | 3 — Production SaaS | + React UI, Kafka, PostgreSQL, Redis, MLflow | Not started |
 | 4 — Enterprise platform | + TimescaleDB, Kubernetes, permissioned chain | Not started |
 | 5 — Ecosystem | Multi-tenant SaaS, federated learning, marketplace | Not started |
@@ -19,7 +19,7 @@ exists today, with the scale-level ladder from prototype to platform.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 — API layer | FastAPI service over the trained artifacts | ✅ `/health`, `/model`, `/v1/forecast`, `/v1/detect` with structured errors and per-request timing (`tests/test_api.py`) |
-| 2 — Auth + RBAC | SSO/OIDC, API keys, tenant isolation, audit logging | ❌ The ledger is hash-only today; no identity layer |
+| 2 — Auth + RBAC | API keys, RBAC, audit logging | 🟡 Shipped: hashed API keys (`trajectory/auth.py`), 4-role permission matrix on every endpoint, admin key lifecycle, append-only audit trail. Not built: SSO/OIDC, MFA, tenant isolation — these need a real identity provider |
 | 3 — Real-time ingestion | Kafka/syslog sources feeding the window builder | 🟡 `telemetry.py` DNS/auth stubs normalize into `UnifiedEvent`; no transport |
 | 4 — Enhanced detection | Scan classification, C2 from DNS/TLS, phishing, insider | 🟡 Six detectors shipped with measured thresholds; C2/DDoS are honest stubs pending real telemetry/scenario data |
 | 5 — Enterprise dashboard | Analyst console, CISO risk views, threat hunt | 🟡 Streamlit Live tab has risk grid + incidents + verdicts; no React split |

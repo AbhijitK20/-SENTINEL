@@ -69,7 +69,7 @@ Trajectory asks: "Given the current network trajectory, what is likely to happen
 - Technical: `ARCHITECTURE.md`, `DATASET_PLAN.md`, `DATA_CONTRACTS.md`, `FEATURE_SPECIFICATION.md`, `MODEL_PLAN.md`
 - Quality: `EVALUATION_PLAN.md`, `EXPLAINABILITY_PLAN.md`, `TEST_STRATEGY.md`, `QUALITY_GATES.md`, `KNOWN_LIMITATIONS.md`
 - Detectors: `DETECTORS.md` (attack-type detectors, incident correlation, asset risk fusion)
-- Platform: `ROADMAP.md` (enterprise roadmap, scale levels, phase status) + `trajectory/api.py` (FastAPI inference service)
+- Platform: `ROADMAP.md` (enterprise roadmap, scale levels, phase status) + `trajectory/api.py` (FastAPI inference service with key-based auth, RBAC, and audit logging — see `trajectory/auth.py`)
 - Delivery: `SPRINT_PLAN.md`, `DEMO_PLAN.md`, `DEMO_SCENARIO.md`, `SUBMISSION_PLAN.md`
 - Presentation: `PRESENTATION_OUTLINE.md` (content), `scripts/build_deck.py` (generates `deliverables/Trajectory_SIH26153_Idea_Deck.pptx` and `.pdf`)
 

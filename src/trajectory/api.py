@@ -15,18 +15,21 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from trajectory.auth import ApiKeyRecord, ApiKeyStore, AuditLog, role_can
 from trajectory.correlation import correlate
 from trajectory.detectors import DetectorSet, run_all_detectors
+from trajectory.ledger import AlertLedger
 from trajectory.predict import DECISION_THRESHOLD, load_artifacts
-from trajectory.schemas import UnifiedEvent
+from trajectory.schemas import Forecast, UnifiedEvent
 from trajectory.state_builder import build_network_states
 
 DEFAULT_ASSETS_DIR = Path("reports/generated/real-benchmark/baseline")
+DEFAULT_AUTH_DIR = Path("reports/api")
 
 
 class ForecastRequest(BaseModel):
@@ -52,10 +55,30 @@ def _error(code: str, message: str, status: int) -> JSONResponse:
     )
 
 
+class AlertAnchorRequest(BaseModel):
+    """A forecast result to anchor into the trust ledger."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    forecast: Forecast
+
+
+class KeyCreateRequest(BaseModel):
+    """Admin payload for issuing a new API key."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: str
+    label: str = ""
+    expires_at: datetime | None = None
+
+
 def create_app(
     artifacts_dir: str | Path | None = None,
     *,
     threshold: float | None = None,
+    auth_enabled: bool = True,
+    auth_dir: str | Path | None = None,
 ) -> FastAPI:
     """Build the API app against one artifacts directory.
 
@@ -72,6 +95,10 @@ def create_app(
         if threshold is not None
         else (artifacts.calibrated_threshold or DECISION_THRESHOLD)
     )
+    resolved_auth_dir = Path(auth_dir) if auth_dir else DEFAULT_AUTH_DIR
+    keys = ApiKeyStore(resolved_auth_dir / "keys.jsonl") if auth_enabled else None
+    audit = AuditLog(resolved_auth_dir / "audit.jsonl") if auth_enabled else None
+    ledger = AlertLedger(resolved_auth_dir / "alerts.jsonl")
 
     app = FastAPI(
         title="SENTINEL Trajectory API",
@@ -89,6 +116,44 @@ def create_app(
         # normalize it into the same {"error": {code, message}} contract.
         return _error("invalid_payload", str(exc.errors()[:3]), 422)
 
+    @app.exception_handler(HTTPException)
+    async def _http_handler(_: Request, exc: HTTPException) -> JSONResponse:
+        code = (
+            "unauthorized"
+            if exc.status_code == 401
+            else "forbidden"
+            if exc.status_code == 403
+            else "not_found"
+            if exc.status_code == 404
+            else "bad_request"
+        )
+        return _error(code, str(exc.detail), exc.status_code)
+
+    def require(method: str, path: str):
+        """Auth dependency: resolve the key, then check the permission matrix."""
+
+        def dependency(
+            request: Request,
+            x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+        ) -> ApiKeyRecord | None:
+            if keys is None:
+                return None
+            if not x_api_key:
+                raise HTTPException(status_code=401, detail="missing X-API-Key header")
+            try:
+                record = keys.authenticate(x_api_key)
+            except PermissionError as error:
+                raise HTTPException(status_code=401, detail=str(error)) from error
+            if not role_can(record.role, method, path):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"role '{record.role}' is not permitted {method} {path}",
+                )
+            request.state.auth_record = record
+            return record
+
+        return Depends(dependency)
+
     @app.exception_handler(ValueError)
     async def _value_handler(_: Request, exc: ValueError) -> JSONResponse:
         return _error("bad_request", str(exc), 400)
@@ -105,15 +170,17 @@ def create_app(
 
     @app.get("/health")
     def health() -> dict[str, Any]:
+        # Public by convention: orchestrator probes do not carry API keys.
         return {
             "status": "ok",
             "artifacts_dir": str(resolved_dir),
             "model_version": artifacts.baseline_result.model_version,
             "threshold": effective_threshold,
+            "auth_enabled": auth_enabled,
             "time": datetime.now(UTC).isoformat(),
         }
 
-    @app.get("/model")
+    @app.get("/model", dependencies=[require("GET", "/model")])
     def model() -> dict[str, Any]:
         baseline = artifacts.baseline_result
         return {
@@ -127,7 +194,7 @@ def create_app(
             "metrics_splits": sorted(baseline.metrics.keys()),
         }
 
-    @app.post("/v1/forecast")
+    @app.post("/v1/forecast", dependencies=[require("POST", "/v1/forecast")])
     def forecast_endpoint(request: ForecastRequest) -> dict[str, Any]:
         from trajectory.predict import forecast as run_forecast
 
@@ -143,7 +210,7 @@ def create_app(
             "warnings": list(result.warnings),
         }
 
-    @app.post("/v1/detect")
+    @app.post("/v1/detect", dependencies=[require("POST", "/v1/detect")])
     def detect_endpoint(request: ForecastRequest) -> dict[str, Any]:
         states = _windowed(request)
         if not states:
@@ -161,11 +228,79 @@ def create_app(
             "incidents": [i.model_dump(mode="json") for i in incidents],
         }
 
+    @app.get("/v1/alerts", dependencies=[require("GET", "/v1/alerts")])
+    def alerts_list() -> dict[str, Any]:
+        records = ledger.records()
+        verification = ledger.verify()
+        return {
+            "count": len(records),
+            "verification": verification.model_dump(mode="json"),
+            "records": [record.model_dump(mode="json") for record in records[-20:]],
+        }
+
+    @app.post("/v1/alerts", dependencies=[require("POST", "/v1/alerts")])
+    def alerts_anchor(payload: AlertAnchorRequest) -> dict[str, Any]:
+        record = ledger.append_forecast(payload.forecast)
+        return {
+            "alert_id": record.alert_id,
+            "record_hash": record.record_hash,
+            "previous_hash": record.previous_hash,
+        }
+
+    @app.get("/admin/keys", dependencies=[require("GET", "/admin/keys")])
+    def admin_keys_list() -> dict[str, Any]:
+        if keys is None:
+            raise HTTPException(status_code=409, detail="auth is disabled on this instance")
+        return {
+            "active": [
+                record.model_dump(mode="json", exclude={"key_hash"})
+                for record in keys.list_active()
+            ]
+        }
+
+    @app.post("/admin/keys", dependencies=[require("POST", "/admin/keys")])
+    def admin_keys_create(payload: KeyCreateRequest) -> dict[str, Any]:
+        if keys is None:
+            raise HTTPException(status_code=409, detail="auth is disabled on this instance")
+        try:
+            raw, record = keys.create(
+                payload.role, label=payload.label, expires_at=payload.expires_at
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return {
+            "raw_key": raw,
+            "key_id": record.key_id,
+            "role": record.role,
+            "note": (
+                "Store this key now — it cannot be retrieved later; only its SHA-256 hash is kept."
+            ),
+        }
+
+    @app.post("/admin/keys/{key_id}/revoke", dependencies=[require("POST", "/admin/keys")])
+    def admin_keys_revoke(key_id: str) -> dict[str, Any]:
+        if keys is None:
+            raise HTTPException(status_code=409, detail="auth is disabled on this instance")
+        if not keys.revoke(key_id):
+            raise HTTPException(status_code=404, detail=f"unknown or already-revoked key: {key_id}")
+        return {"revoked": key_id}
+
     @app.middleware("http")
     async def _timing(request: Request, call_next):  # noqa: ANN202 - starlette typing
         started = time.perf_counter()
         response = await call_next(request)
-        response.headers["x-process-time-ms"] = f"{(time.perf_counter() - started) * 1000:.1f}"
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        response.headers["x-process-time-ms"] = f"{elapsed_ms:.1f}"
+        if audit is not None and request.url.path != "/health":
+            record = getattr(request.state, "auth_record", None)
+            audit.record(
+                key_id=record.key_id if record else "-",
+                role=record.role if record else "anonymous",
+                method=request.method,
+                path=request.url.path,
+                status_code=response.status_code,
+                client=request.client.host if request.client else "-",
+            )
         return response
 
     return app

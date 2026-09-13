@@ -31,6 +31,7 @@ reports/generated/
 
 # Live demo runtime data (events, recordings)
 reports/live/
+reports/api/
 
 # Local trust-ledger records may contain operational alert metadata
 reports/generated/ledger/

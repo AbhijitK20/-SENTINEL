@@ -46,7 +46,9 @@ def client(tmp_path_factory) -> TestClient:
         seed=21,
     )
     save_baseline_artifacts(run, tmp / "baseline")
-    app = create_app(tmp / "baseline")
+    # Auth-disabled instance for endpoint-contract tests; the auth matrix
+    # (401/403, roles, key lifecycle, audit) is covered in tests/test_auth.py.
+    app = create_app(tmp / "baseline", auth_enabled=False)
     return TestClient(app)
 
 
