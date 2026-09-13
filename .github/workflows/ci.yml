@@ -30,11 +30,12 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
       - name: Build wheel
-        run: |
-          uv python install 3.12
-          uv sync --all-groups --extra all
-          uv build --wheel
+        run: uv build --wheel
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
