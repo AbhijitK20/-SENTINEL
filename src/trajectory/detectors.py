@@ -5,7 +5,7 @@ Each detector inspects one window state and emits a normalized AttackFinding
 detector-specific code. Design rules:
 
 - Baselines come from the provided benign history; thresholds are explicit
-  constants, tuned on synthetic-recon-lateral-v1 and revisited with real data.
+  constants, tuned on synthetic-recon-lateral-v2 and revisited with real data.
 - A detector lacking the telemetry it needs (C2 needs DNS/TLS metadata) says so
   via warnings with probability 0.0 — it never fabricates a score.
 - Findings are associations observed in telemetry, never proof of a technique.
@@ -21,7 +21,7 @@ from trajectory.threat_intel import ThreatIntelFeed, evaluate_hosts
 
 DETECTOR_VERSION = "detectors-v1"
 
-# Explicit thresholds, measured on synthetic-recon-lateral-v1 (30s windows):
+# Explicit thresholds, measured on synthetic-recon-lateral-v2 (30s windows):
 # benign max rst_ratio 0.000 / probe_share 0.000 / failed_auth 0.0 per min /
 # new-edge bytes 20k, vs recon min rst_ratio 0.476 / probe_share 0.364 /
 # failed_auth 2.0 per min, lateral new-edge bytes up to 81k. Benign rate

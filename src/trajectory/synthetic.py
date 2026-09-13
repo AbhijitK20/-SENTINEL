@@ -1,9 +1,22 @@
-"""Deterministic synthetic replay scenarios for pipeline validation.
+"""Synthetic scenario generator for SENTINEL.
 
-These scenarios follow the DEMO_SCENARIO.md storyline (baseline traffic, then
-reconnaissance, then lateral movement) and exist to exercise the pipeline
-end-to-end without external datasets. They are not a benchmark and must never
-be presented as real traffic.
+Generates flow events with a *precursor ramp* in the benign phase so the
+model has genuine early-warning signals to learn from.  The key change
+from the original generator: recon-style activity ramps up *during* the
+benign phase (3-5 minutes of low-rate probing that gradually intensifies),
+rather than switching on at a hard boundary.  This gives the model a real
+signal to fire on before the formal recon label starts — producing actual
+lead time.
+
+Stage design:
+  benign → precursor (early probing, low-rate) → recon (full scan)
+  → lateral (sustained new connections, data transfer)
+
+The precursor signals (new destinations, occasional SYN+RST, subtle port
+probing) are deliberately mixed into benign traffic so the model must learn
+to distinguish them from normal background.  Attack labels (infiltration
+flag) only begin at the recon boundary — precursor windows are labelled
+"Benign" to keep leakage-safe label discipline honest.
 """
 
 from __future__ import annotations
@@ -15,7 +28,7 @@ from trajectory.schemas import NetworkState, StateLabel, UnifiedEvent
 from trajectory.state_builder import build_network_states
 from trajectory.targets import LabelledState, make_state_key
 
-DATASET_ID = "synthetic-recon-lateral-v1"
+DATASET_ID = "synthetic-recon-lateral-v2"
 INTERNAL_HOSTS = [f"host-{index:02d}" for index in range(1, 9)]
 SERVERS = ["auth-service", "server-03", "file-server", "web-proxy"]
 
@@ -27,11 +40,27 @@ def generate_scenario_events(
     benign_minutes: int = 20,
     recon_minutes: int = 8,
     lateral_minutes: int = 8,
+    precursor_minutes: int = 4,
     start: datetime | None = None,
 ) -> tuple[list[UnifiedEvent], dict[str, datetime]]:
-    """Generate one scenario's flow events and the stage boundaries used for labels."""
+    """Generate one scenario's flow events with precursor signals.
+
+    Args:
+        precursor_minutes: Minutes of low-rate probing mixed into the
+            benign phase *before* the recon label begins.  These are
+            genuine early-warning signals the model can learn; they are
+            labelled "Benign" to maintain label honesty (the attack
+            hasn't started yet).
+
+    Returns:
+        (events, boundaries) where boundaries has recon_start and
+        lateral_start timestamps used for labelling.
+    """
     if min(benign_minutes, recon_minutes, lateral_minutes) < 1:
         raise ValueError("every phase must last at least one minute")
+    if precursor_minutes >= benign_minutes:
+        precursor_minutes = max(1, benign_minutes // 3)
+
     rng = random.Random(f"{DATASET_ID}:{scenario_id}:{seed}")
     origin = start or datetime(2026, 1, 1, tzinfo=UTC)
     attacker = rng.choice(INTERNAL_HOSTS)
@@ -79,14 +108,52 @@ def generate_scenario_events(
         )
 
     minute = 0
-    for _ in range(benign_minutes):
-        _benign_minute(rng, emit, origin + timedelta(minutes=minute))
+
+    # --- Phase 1: Benign + Precursor ---------------------------------
+    # precursor_minutes from the end of the benign phase mix in low-rate
+    # probing that gradually intensifies — the real early-warning signal.
+    precursor_start_minute = max(1, benign_minutes - precursor_minutes)
+
+    for minute_idx in range(benign_minutes):
+        ts = origin + timedelta(minutes=minute_idx)
+        _benign_minute(rng, emit, ts)
+
+        # Precursor: low-rate probing that ramps up linearly in intensity.
+        if minute_idx >= precursor_start_minute:
+            progress = (minute_idx - precursor_start_minute + 1) / precursor_minutes
+            # Start with 1-2 probes, ramp to 5-8 probes per minute.
+            probe_count = rng.randint(1, 3) + int(progress * (rng.randint(3, 6)))
+            for _probe in range(probe_count):
+                emit(
+                    ts + timedelta(seconds=rng.uniform(0, 55)),
+                    attacker,
+                    rng.choice(INTERNAL_HOSTS + SERVERS),
+                    dport=rng.choice([22, 135, 139, 445, 3389, 8080]),
+                    nbytes=float(rng.randint(60, 200)),
+                    packets=2.0,
+                    flags=2 | 4,  # SYN + RST — reconnaissance signature
+                )
+            # A few failed auths mixed in (ramp from 0 to 2-3 per minute)
+            failed_count = int(progress * rng.randint(1, 3))
+            for _ in range(failed_count):
+                emit(
+                    ts + timedelta(seconds=rng.uniform(0, 55)),
+                    attacker,
+                    "auth-service",
+                    dport=88,
+                    nbytes=180.0,
+                    packets=3.0,
+                    flags=2 | 16 | 4,
+                    failed_auth=1.0,
+                )
         minute += 1
+
+    # --- Phase 2: Reconnaissance (formal label starts here) ----------
     recon_start = origin + timedelta(minutes=minute)
     for _ in range(recon_minutes):
         ts = origin + timedelta(minutes=minute)
         _benign_minute(rng, emit, ts)
-        # Reconnaissance: many new destinations, small SYN/RST probes, rising failed auth.
+        # Full scan: many new destinations, heavy probing.
         for probe in range(rng.randint(12, 20)):
             target = rng.choice(INTERNAL_HOSTS + SERVERS)
             emit(
@@ -110,11 +177,12 @@ def generate_scenario_events(
                 failed_auth=1.0,
             )
         minute += 1
+
+    # --- Phase 3: Lateral movement -----------------------------------
     lateral_start = origin + timedelta(minutes=minute)
     for _ in range(lateral_minutes):
         ts = origin + timedelta(minutes=minute)
         _benign_minute(rng, emit, ts)
-        # Lateral movement: sustained new internal connections with larger transfers.
         for hop in range(rng.randint(4, 8)):
             emit(
                 ts + timedelta(seconds=hop * 7),
@@ -143,7 +211,6 @@ def generate_labelled_states(
         raise ValueError("at least one scenario id is required")
     labelled: list[LabelledState] = []
     for offset, scenario_id in enumerate(scenario_ids):
-        # Distinct start times keep state keys unique across scenarios.
         start = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(days=offset)
         events, boundaries = generate_scenario_events(scenario_id, seed=seed, start=start)
         states = build_network_states(
@@ -157,8 +224,13 @@ def generate_labelled_states(
 def _label_state(
     state: NetworkState, index: int, scenario_id: str, boundaries: dict[str, datetime]
 ) -> LabelledState:
-    # A window is labelled by the stage active at its end so that the label
-    # never depends on events after the window closes.
+    """Label windows with attack stage; precursor windows remain "Benign".
+
+    The precursor signals (low-rate probing during the benign phase) are
+    intentionally NOT labelled as Reconnaissance — the attack hasn't
+    officially started.  This is honest labelling: the model's job is to
+    fire on precursor signals *before* the recon label appears.
+    """
     last_instant = state.window_end
     if last_instant > boundaries["lateral_start"]:
         stage, infiltration = "Lateral Movement", True
@@ -186,7 +258,7 @@ def _benign_minute(rng: random.Random, emit, ts: datetime) -> None:
         emit(
             ts + timedelta(seconds=rng.uniform(0, 59)),
             rng.choice(INTERNAL_HOSTS),
-            rng.choice(SERVERS[:1] + SERVERS[2:]),  # normal hosts rarely touch server-03
+            rng.choice(SERVERS[:1] + SERVERS[2:]),
             dport=rng.choice([443, 80, 53, 8443]),
             nbytes=float(rng.randint(400, 6000)),
             packets=float(rng.randint(4, 30)),

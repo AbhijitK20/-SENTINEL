@@ -331,7 +331,7 @@ else:
         int(sequence_length),
         int(forecast_horizon),
     )
-    dataset_id = "synthetic-recon-lateral-v1"
+    dataset_id = "synthetic-recon-lateral-v2"
 
 # Invalidate stale trained models when the underlying dataset changes:
 # the hash covers the mode, day subset, seed, and windowing, so switching

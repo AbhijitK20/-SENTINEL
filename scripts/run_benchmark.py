@@ -179,7 +179,7 @@ def _aggregate(args, out: Path, calibration: dict, best_threshold: float) -> dic
             "seed": args.seed,
             "scenarios": args.scenarios,
             "horizon": args.horizon,
-            "dataset_id": "synthetic-recon-lateral-v1",
+            "dataset_id": "synthetic-recon-lateral-v2",
             "feature_version": baseline["feature_schema"]["version"],
             "baseline_model_version": baseline["model_version"],
             "temporal_model_version": temporal["model_version"],
