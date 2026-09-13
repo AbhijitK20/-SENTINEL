@@ -11,20 +11,26 @@ Run: ``uv run uvicorn trajectory.api:create_app --factory --port 8000``
 from __future__ import annotations
 
 import time
+from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from trajectory.auth import ApiKeyRecord, ApiKeyStore, AuditLog, role_can
+from trajectory.cases import CaseStore
+from trajectory.compliance import generate_report
 from trajectory.correlation import correlate
 from trajectory.detectors import DetectorSet, run_all_detectors
+from trajectory.drift import compare_feature
 from trajectory.ledger import AlertLedger
+from trajectory.live import LiveEngine
 from trajectory.predict import DECISION_THRESHOLD, load_artifacts
+from trajectory.registry import ModelRegistry
 from trajectory.schemas import Forecast, UnifiedEvent
 from trajectory.state_builder import build_network_states
 
@@ -71,6 +77,67 @@ class KeyCreateRequest(BaseModel):
     role: str
     label: str = ""
     expires_at: datetime | None = None
+    org_id: str = "default"
+
+
+class CaseOpenRequest(BaseModel):
+    """Open an analyst case for a correlated incident."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    incident_id: str = Field(min_length=1)
+    risk_level: str = Field(min_length=1)
+    assignee: str = ""
+
+
+class CaseTransitionRequest(BaseModel):
+    """Move a case through its lifecycle."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    to_status: str
+
+
+class RegistryActionRequest(BaseModel):
+    """Register, approve, or roll back a model version."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["register", "approve", "rollback"]
+    name: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    checksum: str = ""
+    feature_schema_version: str = ""
+    threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    training_dataset: str = ""
+    approver: str = ""
+
+
+class DriftCheckRequest(BaseModel):
+    """PSI drift check for one feature against a reference sample."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    feature: str = Field(min_length=1)
+    reference: list[float] = Field(min_length=10)
+    current: list[float] = Field(min_length=1)
+
+
+class EventsIngestRequest(BaseModel):
+    """Live events to push through the windowing engine."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    events: list[UnifiedEvent] = Field(min_length=1, max_length=5_000)
+
+
+class _PushSource:
+    """Null event source: the push engine is fed via ``ingest()`` only."""
+
+    name = "api-push"
+
+    def run(self, events, stop) -> None:  # noqa: ANN001, ARG002 - never started
+        raise RuntimeError("_PushSource is never started")
 
 
 def create_app(
@@ -99,6 +166,20 @@ def create_app(
     keys = ApiKeyStore(resolved_auth_dir / "keys.jsonl") if auth_enabled else None
     audit = AuditLog(resolved_auth_dir / "audit.jsonl") if auth_enabled else None
     ledger = AlertLedger(resolved_auth_dir / "alerts.jsonl")
+    cases = CaseStore(resolved_auth_dir / "cases.jsonl")
+    registry = ModelRegistry(resolved_auth_dir / "registry.jsonl")
+    push_engine = LiveEngine(
+        artifacts,
+        source=_PushSource(),
+        window_seconds=60,
+        stride_seconds=30,
+        history=3,
+    )
+    # Lightweight in-process metrics (Phase 8): per-status counters and a
+    # latency summary, rendered in Prometheus text format at /metrics.
+    request_counts: dict[int, int] = defaultdict(int)
+    latency_total_ms = 0.0
+    latency_count = 0
 
     app = FastAPI(
         title="SENTINEL Trajectory API",
@@ -264,7 +345,10 @@ def create_app(
             raise HTTPException(status_code=409, detail="auth is disabled on this instance")
         try:
             raw, record = keys.create(
-                payload.role, label=payload.label, expires_at=payload.expires_at
+                payload.role,
+                label=payload.label,
+                expires_at=payload.expires_at,
+                org_id=payload.org_id,
             )
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
@@ -285,17 +369,130 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"unknown or already-revoked key: {key_id}")
         return {"revoked": key_id}
 
+    @app.get("/v1/cases", dependencies=[require("GET", "/v1/cases")])
+    def cases_list() -> dict[str, Any]:
+        return {
+            "cases": [case.model_dump(mode="json") for case in cases.list_cases()],
+            "sla": cases.sla_report(),
+        }
+
+    @app.post("/v1/cases", dependencies=[require("POST", "/v1/cases")])
+    def cases_open(payload: CaseOpenRequest) -> dict[str, Any]:
+        case = cases.open_case(
+            payload.incident_id,
+            payload.risk_level,
+            assignee=payload.assignee or None,
+        )
+        return case.model_dump(mode="json")
+
+    @app.post("/v1/cases/{case_id}/transition", dependencies=[require("POST", "/v1/cases")])
+    def cases_transition(case_id: str, payload: CaseTransitionRequest) -> dict[str, Any]:
+        try:
+            case = cases.transition(case_id, payload.to_status)  # type: ignore[arg-type]
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return case.model_dump(mode="json")
+
+    @app.get("/v1/compliance", dependencies=[require("GET", "/v1/compliance")])
+    def compliance_endpoint() -> dict[str, Any]:
+        report = generate_report()
+        return {
+            "coverage": report.coverage,
+            "implemented": len(report.implemented),
+            "gaps": [gap.model_dump(mode="json") for gap in report.gaps],
+        }
+
+    @app.get("/v1/registry", dependencies=[require("GET", "/v1/registry")])
+    def registry_list() -> dict[str, Any]:
+        return {"models": registry.list_models()}
+
+    @app.post("/v1/registry", dependencies=[require("POST", "/v1/registry")])
+    def registry_action(payload: RegistryActionRequest) -> dict[str, Any]:
+        try:
+            if payload.action == "register":
+                if not payload.checksum or not payload.feature_schema_version:
+                    raise ValueError("register requires checksum and feature_schema_version")
+                if not payload.training_dataset:
+                    raise ValueError("register requires training_dataset")
+                record = registry.register(
+                    payload.name,
+                    version=payload.version,
+                    checksum=payload.checksum,
+                    feature_schema_version=payload.feature_schema_version,
+                    threshold=payload.threshold,
+                    training_dataset=payload.training_dataset,
+                )
+            elif payload.action == "approve":
+                record = registry.approve(
+                    payload.name, payload.version, approver=payload.approver or "api"
+                )
+            else:
+                record = registry.rollback(payload.name, payload.version)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return record.model_dump(mode="json")
+
+    @app.post("/v1/drift", dependencies=[require("POST", "/v1/drift")])
+    def drift_check(payload: DriftCheckRequest) -> dict[str, Any]:
+        report = compare_feature(payload.feature, payload.reference, payload.current)
+        return report.model_dump(mode="json")
+
+    @app.post("/v1/events", dependencies=[require("POST", "/v1/events")])
+    def events_ingest(payload: EventsIngestRequest) -> dict[str, Any]:
+        """Push events through the live windowing engine (Phase 3 transport)."""
+        for event in sorted(payload.events, key=lambda e: e.timestamp):
+            push_engine.ingest(event)
+        status = push_engine.poll()
+        return {
+            "events_seen": status.events_seen,
+            "windows_emitted": status.windows_emitted,
+            "peak_probability": status.peak_probability,
+            "alert_status": status.alert_status,
+            "incidents": [incident.model_dump(mode="json") for incident in status.incidents],
+        }
+
+    @app.get("/metrics")
+    def metrics() -> Response:
+        """Prometheus text-format endpoint (Phase 8)."""
+        lines = [
+            "# HELP sentinel_requests_total Requests by status code.",
+            "# TYPE sentinel_requests_total counter",
+        ]
+        for status_code, count in sorted(request_counts.items()):
+            lines.append(f'sentinel_requests_total{{code="{status_code}"}} {count}')
+        lines += [
+            "# HELP sentinel_request_latency_ms_sum Cumulative request latency in ms.",
+            "# TYPE sentinel_request_latency_ms_sum counter",
+            f"sentinel_request_latency_ms_sum {latency_total_ms:.1f}",
+            "# HELP sentinel_request_latency_ms_count Request count.",
+            "# TYPE sentinel_request_latency_ms_count counter",
+            f"sentinel_request_latency_ms_count {latency_count}",
+            "# HELP sentinel_windows_emitted_total Live push-engine windows emitted.",
+            "# TYPE sentinel_windows_emitted_total counter",
+            f"sentinel_windows_emitted_total {push_engine.poll().windows_emitted}",
+        ]
+        return Response(content="\n".join(lines) + "\n", media_type="text/plain")
+
     @app.middleware("http")
     async def _timing(request: Request, call_next):  # noqa: ANN202 - starlette typing
+        nonlocal latency_total_ms, latency_count
         started = time.perf_counter()
         response = await call_next(request)
         elapsed_ms = (time.perf_counter() - started) * 1000
         response.headers["x-process-time-ms"] = f"{elapsed_ms:.1f}"
+        request_counts[response.status_code] += 1
+        latency_total_ms += elapsed_ms
+        latency_count += 1
         if audit is not None and request.url.path != "/health":
             record = getattr(request.state, "auth_record", None)
             audit.record(
                 key_id=record.key_id if record else "-",
                 role=record.role if record else "anonymous",
+                org_id=record.org_id if record else "-",
                 method=request.method,
                 path=request.url.path,
                 status_code=response.status_code,

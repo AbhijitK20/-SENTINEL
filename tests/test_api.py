@@ -84,11 +84,11 @@ def test_forecast_scores_windows(client: TestClient) -> None:
     assert "x-process-time-ms" in response.headers
 
 
-def test_detect_emits_six_findings_per_window(client: TestClient) -> None:
+def test_detect_emits_nine_findings_per_window(client: TestClient) -> None:
     events = [_event(0.0, 1), _event(10.0, 2), _event(35.0, 3), _event(65.0, 4)]
     body = client.post("/v1/detect", json={"events": events}).json()
     assert body["windows"] == 3
-    assert len(body["findings"]) == 18  # 6 detectors x 3 windows
+    assert len(body["findings"]) == 27  # 9 detectors x 3 windows
     assert body["alerts"] == 0  # quiet synthetic traffic
     assert body["incidents"] == []
 

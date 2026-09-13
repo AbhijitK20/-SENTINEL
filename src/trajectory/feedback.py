@@ -7,10 +7,12 @@ retrained from unreviewed analyst input.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 from pathlib import Path
 
-from trajectory.schemas import AnalystFeedback
+from trajectory.schemas import AnalystFeedback, SignedFeedback
 
 VERDICTS = {
     "true_positive",
@@ -77,3 +79,24 @@ class FeedbackStore:
             return None
         fps = sum(1 for f in records if f.verdict == "false_positive")
         return fps / len(records)
+
+
+SIGNING_KEY_VERSION = "hmac-v1"
+
+
+def sign_feedback(feedback: AnalystFeedback, signing_key: bytes) -> SignedFeedback:
+    """HMAC-sign a feedback record over its canonical JSON (Phase 6)."""
+    digest = hmac.new(signing_key, feedback.model_dump_json().encode("utf-8"), hashlib.sha256)
+    return SignedFeedback(
+        feedback=feedback,
+        signature=digest.hexdigest(),
+        key_version=SIGNING_KEY_VERSION,
+    )
+
+
+def verify_feedback(signed: SignedFeedback, signing_key: bytes) -> bool:
+    """True when the signature matches; detects post-hoc tampering of stores."""
+    expected = hmac.new(
+        signing_key, signed.feedback.model_dump_json().encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signed.signature)

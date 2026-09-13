@@ -173,6 +173,9 @@ class AttackFinding(BaseModel):
         "lateral_movement",
         "command_and_control",
         "exfiltration",
+        "insider_threat",
+        "phishing",
+        "malware_activity",
     ]
     probability: float = Field(ge=0.0, le=1.0)
     severity: Literal["info", "low", "medium", "high", "critical"]
@@ -253,6 +256,21 @@ class AnalystFeedback(BaseModel):
     analyst: str = Field(min_length=1)
     recorded_at: datetime
     comment: str = ""
+
+
+class SignedFeedback(BaseModel):
+    """Analyst feedback with an HMAC signature over its content (Phase 6).
+
+    The signing key is shared secret between the platform and the analyst
+    tooling; verification catches post-hoc tampering of stored feedback.
+    Full asymmetric signatures with a PKI are future work.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    feedback: AnalystFeedback
+    signature: str = Field(min_length=1)
+    key_version: str = Field(min_length=1)
 
 
 class Forecast(BaseModel):

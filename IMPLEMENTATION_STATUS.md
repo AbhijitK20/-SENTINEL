@@ -325,6 +325,19 @@ verdict buttons). See `DETECTORS.md`. Validated on synthetic replay: zero
 detector false positives on benign-stage windows; the rehearsed demo story
 is unchanged (alert ~31 s, Lateral Movement ~61 s).
 
+## Enterprise Sprint (Phases 2-11 scope, in-process)
+
+Roadmap phases 7-11 gained honest in-process implementations: model registry
+with approve/rollback (`registry.py`), PSI drift monitoring (`drift.py`),
+case lifecycle with SLA (`cases.py`), NIST/ISO/SOC2 control reporting with
+gaps listed (`compliance.py`), FedAvg federated simulation (`federated.py`),
+HMAC-signed analyst feedback, org_id tenant fields on API keys, four
+telemetry-gated detectors (C2/phishing/insider/malware), a Prometheus
+`/metrics` endpoint, `POST /v1/events` live push, GitHub Actions CI, and a
+docker-compose pilot. What stays NOT built: SSO/OIDC, Kafka, React UI,
+Kubernetes, distributed ledgers, and real federated infrastructure — each
+requires infrastructure decisions this prototype deliberately does not fake.
+
 ## Next Milestone
 
 **Real-data evaluation (the only open backlog item, PB-001/PB-011)**

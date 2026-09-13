@@ -1,0 +1,22 @@
+# Local pilot compose: dashboard + REST API from one image.
+# This is NOT the production architecture (Kubernetes, Kafka, Postgres) —
+# those need real infrastructure decisions and stay in ROADMAP.md.
+services:
+  dashboard:
+    build: .
+    image: sentinel:local
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./reports:/app/reports
+    restart: unless-stopped
+
+  api:
+    image: sentinel:local
+    build: .
+    command: ["uv", "run", "--no-sync", "uvicorn", "trajectory.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./reports:/app/reports
+    restart: unless-stopped

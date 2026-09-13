@@ -99,7 +99,7 @@ def _trained_engine(tmp_path: Path, events: list[UnifiedEvent]) -> LiveEngine:
     )
 
 
-def test_engine_attaches_six_findings_to_every_window(tmp_path: Path) -> None:
+def test_engine_attaches_nine_findings_to_every_window(tmp_path: Path) -> None:
     events = [_event(0.0, 1), _event(10.0, 2), _event(35.0, 3), _event(65.0, 4)]
     engine = _trained_engine(tmp_path, events)
     for event in events:
@@ -107,8 +107,8 @@ def test_engine_attaches_six_findings_to_every_window(tmp_path: Path) -> None:
     status = engine.poll()
     assert status.windows_emitted == 2
     for window in status.history:
-        assert len(window.attack_findings) == 6
-    assert len(status.attack_findings) == 12
+        assert len(window.attack_findings) == 9
+    assert len(status.attack_findings) == 18  # 9 detectors x 2 windows
 
 
 def test_engine_attack_window_alerts_and_correlates(tmp_path: Path) -> None:

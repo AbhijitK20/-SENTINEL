@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Sync dependencies
+        run: uv sync --all-groups --extra all
+      - name: Lint
+        run: uv run ruff check src tests scripts
+      - name: Format check
+        run: uv run ruff format --check src tests scripts
+      - name: Tests
+        run: uv run pytest
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build wheel
+        run: |
+          uv python install 3.12
+          uv sync --all-groups --extra all
+          uv build --wheel
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl

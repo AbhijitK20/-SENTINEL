@@ -25,7 +25,7 @@ ROLES = ("viewer", "analyst", "engineer", "admin")
 # Explicit permission matrix. Endpoint patterns are prefix-matched against
 # "METHOD /path"; nothing outside this table is permitted.
 PERMISSIONS: dict[str, tuple[str, ...]] = {
-    "viewer": ("GET /health", "GET /model"),
+    "viewer": ("GET /health", "GET /model", "GET /v1/cases", "GET /v1/compliance"),
     "analyst": (
         "GET /health",
         "GET /model",
@@ -33,6 +33,9 @@ PERMISSIONS: dict[str, tuple[str, ...]] = {
         "POST /v1/detect",
         "GET /v1/alerts",
         "POST /v1/alerts",
+        "GET /v1/cases",
+        "POST /v1/cases",
+        "GET /v1/compliance",
     ),
     "engineer": (
         "GET /health",
@@ -41,6 +44,12 @@ PERMISSIONS: dict[str, tuple[str, ...]] = {
         "POST /v1/detect",
         "GET /v1/alerts",
         "POST /v1/alerts",
+        "GET /v1/cases",
+        "POST /v1/cases",
+        "GET /v1/compliance",
+        "GET /v1/registry",
+        "POST /v1/drift",
+        "GET /metrics",
         "GET /admin/keys",
     ),
     "admin": ("*",),
@@ -57,6 +66,7 @@ class ApiKeyRecord(BaseModel):
     key_id: str = Field(min_length=1)
     key_hash: str = Field(min_length=64, max_length=64)
     role: str
+    org_id: str = "default"
     label: str = ""
     created_at: datetime
     expires_at: datetime | None = None
@@ -71,6 +81,7 @@ class AuditRecord(BaseModel):
     timestamp: datetime
     key_id: str
     role: str
+    org_id: str = "-"
     method: str
     path: str
     status_code: int
@@ -123,6 +134,7 @@ class ApiKeyStore:
         *,
         label: str = "",
         expires_at: datetime | None = None,
+        org_id: str = "default",
     ) -> tuple[str, ApiKeyRecord]:
         """Create a key; returns ``(raw_key, record)`` — raw key shown once."""
         if role not in ROLES:
@@ -132,6 +144,7 @@ class ApiKeyStore:
             key_id=raw[:14],
             key_hash=hash_key(raw),
             role=role,
+            org_id=org_id,
             label=label,
             created_at=_now(),
             expires_at=expires_at,
@@ -206,11 +219,13 @@ class AuditLog:
         path: str,
         status_code: int,
         client: str,
+        org_id: str = "-",
     ) -> AuditRecord:
         entry = AuditRecord(
             timestamp=_now(),
             key_id=key_id,
             role=role,
+            org_id=org_id,
             method=method,
             path=path,
             status_code=status_code,

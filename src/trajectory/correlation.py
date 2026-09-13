@@ -10,7 +10,10 @@ CHAIN_GAP_SECONDS = 300.0
 PROGRESSION_ORDER = {
     "ddos": 0,
     "reconnaissance": 0,
+    "phishing": 0,
+    "malware_activity": 1,
     "credential_abuse": 1,
+    "insider_threat": 2,
     "lateral_movement": 2,
     "command_and_control": 3,
     "exfiltration": 3,
@@ -23,6 +26,9 @@ STAGE_NAMES = {
     "exfiltration": "Exfiltration",
     "ddos": "Volumetric Attack",
     "command_and_control": "Command and Control",
+    "insider_threat": "Insider Threat",
+    "phishing": "Phishing",
+    "malware_activity": "Malware Activity",
 }
 
 RECOMMENDATIONS = {
@@ -34,6 +40,11 @@ RECOMMENDATIONS = {
     "exfiltration": "Preserve evidence; review egress logs for the destination",
     "ddos": "Engage upstream scrubbing; rate-limit the targeted service",
     "command_and_control": "Review DNS/proxy logs; hunt the beacon pattern estate-wide",
+    "insider_threat": (
+        "Review the account's access history with HR; do not confront before evidence is preserved"
+    ),
+    "phishing": "Search mailboxes and proxy logs for the URL/sender; review click events",
+    "malware_activity": "Isolate the endpoint; collect process lineage and file hashes",
 }
 
 

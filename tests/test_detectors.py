@@ -7,7 +7,7 @@ import pytest
 from trajectory.detectors import (
     DetectorContext,
     DetectorSet,
-    detect_c2,
+    detect_c2_beacon,
     detect_credential,
     detect_ddos,
     detect_exfil,
@@ -104,7 +104,7 @@ def test_ddos_and_c2_are_honest_stubs(labelled) -> None:
     item = labelled[0]
     ddos = detect_ddos(_ctx(item.state, ()), DetectorSet())
     assert ddos.probability == 0.0  # no history -> no z-score -> no fabricated score
-    c2 = detect_c2(_ctx(item.state, ()), DetectorSet())
+    c2 = detect_c2_beacon(_ctx(item.state, ()), DetectorSet())
     assert c2.probability == 0.0
     assert not c2.is_alert
     assert c2.warnings, "C2 must state its telemetry gap explicitly"
@@ -114,7 +114,7 @@ def test_ddos_and_c2_are_honest_stubs(labelled) -> None:
 def test_every_detector_emits_all_contract_fields(labelled) -> None:
     item = labelled[-1]
     findings = run_all_detectors(item.state, ())
-    assert len(findings) == 6
+    assert len(findings) == 9
     for finding in findings:
         assert finding.model_version.startswith("detectors-")
         assert finding.severity in {"info", "low", "medium", "high", "critical"}

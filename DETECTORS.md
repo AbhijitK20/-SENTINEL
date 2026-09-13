@@ -1,4 +1,4 @@
-# Attack-Type Detector Suite (Phase 1)
+# Attack-Type Detector Suite (Phases 1 & 4)
 
 Status: implemented and tested (`tests/test_detectors.py`,
 `tests/test_telemetry.py`, `tests/test_correlation.py`). These detectors
@@ -77,12 +77,31 @@ analyst input. The Live tab records verdicts to `reports/live/feedback.jsonl`
 provenance. They are format-stubs demonstrating the multi-telemetry path, not
 validated ingestion for production log dialects.
 
+## Phase 4 detectors (telemetry-gated)
+
+Three detectors score only when their telemetry is present; otherwise they
+emit probability 0.0 with an explicit warning — they never fabricate scores.
+
+| Detector | Type (MITRE) | Signal | Disabled when |
+|---|---|---|---|
+| `detect_c2_beacon` | command_and_control (T1071) | sensor-supplied `c2_beacon_score` feature | no beacon telemetry in window |
+| `detect_phishing` | phishing (T1566) | DNS surrogate: `domain_length`, `dns_tunnel_marker` | no DNS features (email telemetry is the real path) |
+| `detect_malware` | malware_activity (T1059) | `malware_process_executions` × event count | no endpoint/process telemetry |
+| `detect_insider` | insider_threat (T1078) | behavioral z-score on transfer volume | cold start (capped sub-alert) |
+
+Insider-threat scoring note: the z-score branch maps a *constant* baseline
+(zero variance) to a maximum score by design; real benign telemetry always
+has variance, so treat constant-baseline alerts as a degenerate-input signal,
+not a detection.
+
 ## Known limitations
 
 - Trained on/validated against synthetic replay only; real-traffic detector
   evaluation is future work (the CIC-trained forecaster benchmarks live in
-  `REAL_BENCHMARK.md`).
-- DDoS and C2 are honest stubs (see above); no volumetric or beaconing
-  scenario exists to validate them against.
+  `REAL_BENCHMARK.md`). The Phase 4 detectors are validated quiet-on-benign
+  and by unit tests only — no attack scenario exercises them yet.
+- DDoS remains an honest stub (no volumetric scenario to validate against);
+  C2 and phishing score only from sensor-supplied telemetry that no bundled
+  scenario produces.
 - Windows are 30–60 s; DDoS tempo and long-horizon insider behaviour need
   parallel window scales (roadmap item 7).

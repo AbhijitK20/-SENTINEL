@@ -10,25 +10,25 @@ exists today, with the scale-level ladder from prototype to platform.
 |---|---|---|
 | 1 — Hackathon demo | Streamlit + local files | **Current — done** |
 | 2 — Pilot / MVP | + FastAPI inference API, key-based auth + RBAC + audit | **Shipped** (`trajectory/api.py`, `trajectory/auth.py`) |
-| 3 — Production SaaS | + React UI, Kafka, PostgreSQL, Redis, MLflow | Not started |
-| 4 — Enterprise platform | + TimescaleDB, Kubernetes, permissioned chain | Not started |
-| 5 — Ecosystem | Multi-tenant SaaS, federated learning, marketplace | Not started |
+| 3 — Production SaaS | + React UI, Kafka, PostgreSQL, Redis, MLflow | 🟡 API-side ops shipped in-process (`registry.py`, `drift.py`, `/metrics`); React/Kafka/Postgres/Redis not started |
+| 4 — Enterprise platform | + TimescaleDB, Kubernetes, permissioned chain | 🟡 Case lifecycle (`cases.py`), compliance exports, signed feedback; K8s/TSDB/permissioned chain not started |
+| 5 — Ecosystem | Multi-tenant SaaS, federated learning, marketplace | 🟡 FedAvg simulation (`federated.py`), org-scoped API keys; real federated infra not started |
 
 ## Phase status
 
 | Phase | Scope | Status |
 |---|---|---|
 | 1 — API layer | FastAPI service over the trained artifacts | ✅ `/health`, `/model`, `/v1/forecast`, `/v1/detect` with structured errors and per-request timing (`tests/test_api.py`) |
-| 2 — Auth + RBAC | API keys, RBAC, audit logging | 🟡 Shipped: hashed API keys (`trajectory/auth.py`), 4-role permission matrix on every endpoint, admin key lifecycle, append-only audit trail. Not built: SSO/OIDC, MFA, tenant isolation — these need a real identity provider |
-| 3 — Real-time ingestion | Kafka/syslog sources feeding the window builder | 🟡 `SyslogTailSource` tails syslog-format files into the live engine (Phase 3); DNS/auth stubs normalize into `UnifiedEvent`; Kafka/syslog-socket transport is future work |
-| 4 — Enhanced detection | Scan classification, C2 from DNS/TLS, phishing, insider | 🟡 Six detectors shipped with measured thresholds; C2/DDoS are honest stubs pending real telemetry/scenario data |
-| 5 — Enterprise dashboard | Analyst console, CISO risk views, threat hunt | 🟡 Streamlit Live tab has risk grid + incidents + verdicts; no React split |
-| 6 — Blockchain trust | Hash anchoring, cross-org verification | 🟡 `ledger.py` demonstrates the hash-chain path; no distributed ledger |
-| 7 — Model ops | Registry, drift, shadow deployment | 🟡 SHA-256 artifacts + calibration records exist; no registry/drift monitoring |
-| 8 — Observability | Prometheus, tracing, paging | ❌ Only `x-process-time-ms` timing header so far |
-| 9 — Deployment infra | K8s, CI/CD, Vault, Postgres | 🟡 Dockerfile + HF Spaces config + Streamlit Cloud config exist |
-| 10 — Enterprise features | Compliance exports, case management, retention | ❌ |
-| 11 — Advanced detection | GNN, federated learning, ZK proofs | ❌ Research scope |
+| 2 — Auth + RBAC | API keys, RBAC, audit logging | 🟡 Shipped: hashed API keys (`trajectory/auth.py`), 4-role permission matrix, admin key lifecycle, append-only audit trail, org_id tenant field on keys + audit. Not built: SSO/OIDC, MFA — these need a real identity provider |
+| 3 — Real-time ingestion | Kafka/syslog sources feeding the window builder | 🟡 `SyslogTailSource` tails syslog-format files into the live engine; `POST /v1/events` pushes events through the push engine over REST; Kafka transport is future work |
+| 4 — Enhanced detection | Scan classification, C2 from DNS/TLS, phishing, insider | 🟡 Nine detectors: C2 scores from sensor-supplied beacon scores, phishing from DNS surrogates, insider from behavioral z-scores, malware from endpoint exec bursts — each states its telemetry needs honestly; validated quiet-on-benign, not on real attack data |
+| 5 — Enterprise dashboard | Analyst console, CISO risk views, threat hunt | 🟡 Streamlit Live tab has risk grid + incidents + verdicts + case panel; no React split |
+| 6 — Blockchain trust | Hash anchoring, cross-org verification | 🟡 `ledger.py` hash chain + HMAC-signed analyst feedback (`feedback.py`); no distributed ledger or PKI |
+| 7 — Model ops | Registry, drift, shadow deployment | 🟡 `registry.py` (register→approve→rollback), `drift.py` (PSI monitoring + `POST /v1/drift`); shadow deployment not started |
+| 8 — Observability | Prometheus, tracing, paging | 🟡 `/metrics` Prometheus text endpoint (request counters, latency, live windows); tracing/paging not started |
+| 9 — Deployment infra | K8s, CI/CD, Vault, Postgres | 🟡 GitHub Actions CI (lint+tests+wheel), `docker-compose.yml` pilot (dashboard+API); K8s/Vault/Postgres not started |
+| 10 — Enterprise features | Compliance exports, case management, retention | 🟡 `cases.py` lifecycle (OPEN→RESOLVED, SLA by severity) with `/v1/cases`; `compliance.py` NIST CSF/ISO 27001/SOC 2 control report (0.75 coverage, gaps listed); retention policies not started |
+| 11 — Advanced detection | GNN, federated learning, ZK proofs | 🟡 `federated.py` FedAvg simulation (weights-only sharing, verified vs centralized); GNN/ZK remain research scope |
 
 ## What the roadmap builds on (already true)
 
@@ -41,8 +41,10 @@ exists today, with the scale-level ladder from prototype to platform.
 
 ## Honest constraints
 
-- The API is single-process, single-tenant, in-memory — level 2 by design.
-  Auth (Phase 2) is the gate to anything user-facing beyond the lab.
+- The API is single-process, in-memory — level 2 by design. Keys carry an
+  org_id for multi-tenancy, but per-org data isolation is not enforced yet.
+- Registry/drift/cases state lives in JSONL files, not a database — right
+  for a pilot, wrong for concurrent multi-instance deployments.
 - Detector validation remains synthetic-only; Phase 4 enhancements should
   start with real-traffic validation of the existing six before adding types.
 - Weeks-level estimates in the original proposal assume a team; a solo

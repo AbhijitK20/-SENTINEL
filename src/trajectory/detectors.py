@@ -49,6 +49,9 @@ MITRE = {
     "lateral_movement": "T1021",
     "command_and_control": "T1071",
     "exfiltration": "T1048",
+    "insider_threat": "T1078",
+    "phishing": "T1566",
+    "malware_activity": "T1059",
 }
 
 
@@ -141,6 +144,9 @@ class DetectorSet:
     credential: float = 0.70
     lateral: float = 0.70
     exfil: float = 0.80
+    insider: float = 0.70
+    phishing: float = 0.60
+    malware: float = 0.60
 
 
 COLD_START_WARNING = (
@@ -325,21 +331,6 @@ def detect_lateral(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFindi
     return _finding("lateral_movement", ctx, probability, evidence, warnings, thresholds.lateral)
 
 
-def detect_c2(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
-    """Explicit insufficient-telemetry stub: never fabricates a C2 score."""
-    return _finding(
-        "command_and_control",
-        ctx,
-        0.0,
-        [],
-        [
-            "C2 detection requires DNS/TLS metadata (beacon intervals, JA3/JA4, "
-            "rare domains) not present in flow telemetry — finding disabled"
-        ],
-        thresholds.exfil,  # unused; probability never crosses any threshold
-    )
-
-
 def detect_exfil(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
     """Transfer-volume spike vs benign history (zone-aware once a registry exists)."""
     state, warnings = ctx.state, []
@@ -371,6 +362,150 @@ def detect_exfil(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding
     return _finding("exfiltration", ctx, probability, evidence, warnings, thresholds.exfil)
 
 
+def detect_insider(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
+    """Behavioral deviation: transfer volume far outside this actor's baseline.
+
+    Data-staging or hoarding shows as window bytes far above the recent
+    benign baseline (same z-signal as exfiltration, scored at the stricter
+    insider threshold). Time-of-day context is recorded as evidence but not
+    scored: the synthetic baseline runs at a single UTC hour, so an off-hours
+    signal there would be an artifact, not a finding.
+    """
+    state = ctx.state
+    window_bytes = state.features.get("bytes", 0.0)
+    z = _zscore(window_bytes, [prior.features.get("bytes", 0.0) for prior in ctx.history])
+    probability = min(0.90, max(0.0, z) / Z_SCALE)
+    hour = state.window_start.hour
+    evidence = [
+        _evidence("bytes_zscore", "transfer volume vs actor baseline", round(z, 2)),
+        _evidence("window_hour_utc", "window start hour (UTC)", float(hour)),
+    ]
+    warnings = [
+        "behavioral-baseline heuristic — insider threat needs identity and "
+        "access telemetry for confirmation"
+    ]
+    if len(ctx.history) < MIN_HISTORY:
+        probability = min(probability, 0.5)
+        warnings.append(COLD_START_WARNING)
+    return _finding("insider_threat", ctx, probability, evidence, warnings, thresholds.insider)
+
+
+def detect_phishing(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
+    """DNS-visible phishing/tunneling indicators; honest when DNS is absent.
+
+    Email telemetry (headers, SPF/DKIM, click events) is the real phishing
+    path and is not available here; with DNS proxy telemetry present, high-
+    entropy long domains and flagged tunnel markers are the observable
+    surrogate. Without any DNS features the detector reports disabled.
+    """
+    state = ctx.state
+    features = state.features
+    has_dns = "domain_length" in features or "dns_tunnel_marker" in features
+    if not has_dns:
+        return _finding(
+            "phishing",
+            ctx,
+            0.0,
+            [],
+            [
+                "phishing detection needs email telemetry (headers, URL reputation, "
+                "click events); no DNS features in this window — detector disabled"
+            ],
+            thresholds.phishing,
+        )
+    domain_len = features.get("domain_length", 0.0)
+    tunnel_share = features.get("dns_tunnel_marker", 0.0)
+    probability = max(
+        _band_score(domain_len, 25.0, 45.0),
+        _band_score(tunnel_share, 0.10, 0.30),
+    )
+    evidence = [
+        _evidence("mean_domain_length", "mean queried-domain length", round(domain_len, 1)),
+        _evidence(
+            "tunnel_marker_share", "share of DNS events flagged as tunnels", round(tunnel_share, 3)
+        ),
+    ]
+    return _finding(
+        "phishing",
+        ctx,
+        probability,
+        evidence,
+        ["DNS surrogate only — email telemetry required for confirmed phishing"],
+        thresholds.phishing,
+    )
+
+
+def detect_c2_beacon(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
+    """C2 scoring when DNS/proxy telemetry provides a beacon score.
+
+    Upgrades the always-insufficient C2 stub: sensors that can compute a
+    beaconing score (periodic outbound intervals, rare-domain density) put
+    ``c2_beacon_score`` into event features; the window mean then drives the
+    finding. Without that telemetry the detector stays at 0.0 and says why.
+    """
+    state = ctx.state
+    score = state.features.get("c2_beacon_score")
+    if score is None:
+        return _finding(
+            "command_and_control",
+            ctx,
+            0.0,
+            [],
+            [
+                "C2 detection requires DNS/TLS metadata (beacon intervals, JA3/JA4, "
+                "rare domains) not present in flow telemetry — finding disabled"
+            ],
+            thresholds.exfil,  # unused; probability never crosses any threshold
+        )
+    probability = _band_score(score, 0.30, 0.60)
+    evidence = [_evidence("c2_beacon_score", "sensor-computed beaconing score", round(score, 3))]
+    return _finding(
+        "command_and_control",
+        ctx,
+        probability,
+        evidence,
+        ["beacon score is sensor-supplied — validate the sensor before trusting it"],
+        thresholds.exfil,
+    )
+
+
+def detect_malware(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
+    """Endpoint process-execution burst from EDR-style event features.
+
+    Sensors emit ``malware_process_executions`` per process-start event; the
+    window total (mean x event count) crosses the alert band at five or more
+    executions. Without endpoint telemetry the detector reports disabled —
+    flow data cannot see processes.
+    """
+    state = ctx.state
+    mean_exec = state.features.get("malware_process_executions")
+    if mean_exec is None:
+        return _finding(
+            "malware_activity",
+            ctx,
+            0.0,
+            [],
+            [
+                "malware detection needs endpoint/process telemetry; flow features "
+                "cannot observe process execution — finding disabled"
+            ],
+            thresholds.malware,
+        )
+    executions = mean_exec * state.features.get("event_count", 1.0)
+    probability = _band_score(executions, 2.0, 5.0)
+    evidence = [
+        _evidence("process_executions", "process-start events in window", round(executions, 0))
+    ]
+    return _finding(
+        "malware_activity",
+        ctx,
+        probability,
+        evidence,
+        ["execution burst is a heuristic — confirm with file-hash reputation"],
+        thresholds.malware,
+    )
+
+
 def run_all_detectors(
     state: NetworkState,
     history: tuple[NetworkState, ...],
@@ -385,6 +520,9 @@ def run_all_detectors(
         detect_recon(ctx, active),
         detect_credential(ctx, active),
         detect_lateral(ctx, active),
-        detect_c2(ctx, active),
+        detect_c2_beacon(ctx, active),
         detect_exfil(ctx, active),
+        detect_insider(ctx, active),
+        detect_phishing(ctx, active),
+        detect_malware(ctx, active),
     )
