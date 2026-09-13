@@ -17,9 +17,9 @@ class UnifiedEvent(BaseModel):
     timestamp: datetime
     source_entity: str = Field(min_length=1)
     destination_entity: str = Field(min_length=1)
-    event_type: Literal["flow", "packet", "authentication", "other"]
+    event_type: Literal["flow", "packet", "authentication", "dns_query", "auth_event", "other"]
     features: dict[str, float] = Field(default_factory=dict)
-    source_format: Literal["csv", "pcap", "replay", "other"]
+    source_format: Literal["csv", "pcap", "replay", "dns_log_stub", "auth_log_stub", "other"]
     provenance: str = Field(min_length=1)
 
 
@@ -152,6 +152,105 @@ class DrivingFeature(BaseModel):
     name: str = Field(min_length=1)
     contribution: float
     direction: Literal["increasing", "decreasing", "mixed", "unknown"]
+
+
+class AttackFinding(BaseModel):
+    """One attack-type detector's normalized output for a single window.
+
+    Every detector emits this contract regardless of its internal features, so
+    the fusion layer and dashboard need no detector-specific code. Findings are
+    associations observed in telemetry, never proof of a technique.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    attack_type: Literal[
+        "ddos",
+        "reconnaissance",
+        "credential_abuse",
+        "lateral_movement",
+        "command_and_control",
+        "exfiltration",
+    ]
+    probability: float = Field(ge=0.0, le=1.0)
+    severity: Literal["info", "low", "medium", "high", "critical"]
+    confidence: Literal["low", "medium", "high"]
+    is_alert: bool = False
+    window_start: datetime
+    window_end: datetime
+    mitre_technique: str | None = None
+    affected_assets: list[str] = Field(default_factory=list)
+    evidence: list[StageEvidence] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    model_version: str = Field(min_length=1)
+
+
+class AssetRecord(BaseModel):
+    """Static criticality metadata for one asset in the registry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    owner: str = Field(min_length=1)
+    criticality: Literal["low", "medium", "high", "critical"]
+    data_sensitivity: str = Field(min_length=1)
+    network_zone: str = Field(min_length=1)
+
+
+class RiskAssessment(BaseModel):
+    """Fused risk for a finding or incident, with the formula kept explicit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    score: float = Field(ge=0.0, le=1.0)
+    level: Literal["info", "low", "medium", "high", "critical"]
+    formula: str = Field(min_length=1)
+
+
+class Incident(BaseModel):
+    """Correlated chain of findings presented as one analyst-facing case.
+
+    ``progression`` lists attack stages in attack order (e.g. Reconnaissance →
+    Credential Abuse → Lateral Movement); ``recommended_actions`` are analyst-
+    approved suggestions only — the platform never auto-executes them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    incident_id: str = Field(min_length=1)
+    risk: RiskAssessment
+    progression: list[str] = Field(min_length=1)
+    finding_attack_types: list[str] = Field(min_length=1)
+    affected_assets: list[str] = Field(default_factory=list)
+    first_seen: datetime
+    last_seen: datetime
+    status: Literal["open", "investigating", "contained", "closed", "false_positive"] = "open"
+    recommended_actions: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class AnalystFeedback(BaseModel):
+    """Analyst verdict on a finding or incident.
+
+    Feedback is stored append-only for threshold recalibration and rule
+    improvement review. It is never used to automatically retrain models.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject_id: str = Field(min_length=1)
+    verdict: Literal[
+        "true_positive",
+        "false_positive",
+        "wrong_attack_type",
+        "late_alert",
+        "insufficient_evidence",
+        "useful_alert",
+    ]
+    analyst: str = Field(min_length=1)
+    recorded_at: datetime
+    comment: str = ""
 
 
 class Forecast(BaseModel):

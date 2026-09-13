@@ -34,11 +34,17 @@ from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from trajectory.assets import default_asset_registry
 from trajectory.cic_ids2017 import load_flow_csv
+from trajectory.correlation import correlate
+from trajectory.detectors import DetectorSet, run_all_detectors
 from trajectory.predict import DECISION_THRESHOLD, forecast
 from trajectory.schemas import (
+    AssetRecord,
+    AttackFinding,
     DrivingFeature,
     Forecast,
+    Incident,
     NetworkState,
     StageEvidence,
     UnifiedEvent,
@@ -73,6 +79,7 @@ class LiveWindow(BaseModel):
     stage_evidence: list[StageEvidence] = Field(default_factory=list)
     driving_features: list[DrivingFeature] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    attack_findings: list[AttackFinding] = Field(default_factory=list)
 
 
 class LiveStatus(BaseModel):
@@ -90,6 +97,8 @@ class LiveStatus(BaseModel):
     alert_status: str = "monitoring"
     model_version: str
     history: list[LiveWindow] = Field(default_factory=list)
+    attack_findings: list[AttackFinding] = Field(default_factory=list)
+    incidents: list[Incident] = Field(default_factory=list)
     last_error: str | None = None
 
 
@@ -324,6 +333,8 @@ class LiveEngine:
         history: int = 3,
         threshold: float | None = None,
         max_history: int = 120,
+        asset_registry: dict[str, AssetRecord] | None = None,
+        detector_thresholds: DetectorSet | None = None,
     ) -> None:
         if window_seconds <= 0 or stride_seconds <= 0:
             raise ValueError("window_seconds and stride_seconds must be positive")
@@ -349,6 +360,9 @@ class LiveEngine:
         self._next_boundary: datetime | None = None
         self._events_seen = 0
         self._last_forecast: Forecast | None = None
+        self._findings: deque[AttackFinding] = deque(maxlen=600)
+        self._detector_thresholds = detector_thresholds or DetectorSet()
+        self._asset_registry = asset_registry or default_asset_registry()
         self._last_error: str | None = None
         self._worker: threading.Thread | None = None
 
@@ -433,6 +447,8 @@ class LiveEngine:
                 ),
                 model_version=self._artifacts.baseline_result.model_version,
                 history=list(self._history),
+                attack_findings=list(self._findings),
+                incidents=list(correlate(tuple(self._findings), registry=self._asset_registry)),
                 last_error=self._last_error,
             )
 
@@ -456,6 +472,13 @@ class LiveEngine:
         self._last_forecast = result
         probability = result.probability_timeline[-1].infiltration_probability
         stage = result.stage_mapping
+        findings = run_all_detectors(
+            state,
+            tuple(self._states[:-1]),
+            thresholds=self._detector_thresholds,
+            asset_registry=self._asset_registry,
+        )
+        self._findings.extend(findings)
         self._history.append(
             LiveWindow(
                 window_start=start,
@@ -470,6 +493,7 @@ class LiveEngine:
                 stage_evidence=list(stage.evidence),
                 driving_features=list(result.driving_features),
                 warnings=list(result.warnings),
+                attack_findings=list(findings),
             )
         )
 
@@ -538,4 +562,5 @@ __all__ = [
     "LiveStatus",
     "LiveWindow",
     "ScapyInterfaceSource",
+    "run_all_detectors",
 ]

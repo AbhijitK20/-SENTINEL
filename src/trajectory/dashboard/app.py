@@ -22,6 +22,8 @@ from trajectory.config import BaselineConfig
 from trajectory.dashboard.live_artifacts import select_live_artifacts
 from trajectory.evaluation import evaluate_replay
 from trajectory.features import fit_feature_schema
+from trajectory.feedback import VERDICTS as FEEDBACK_VERDICTS
+from trajectory.feedback import FeedbackStore
 from trajectory.ledger import AlertLedger
 from trajectory.live import (
     CsvReplaySource,
@@ -1016,6 +1018,78 @@ def _render_live_status(status) -> None:
                         )
                     else:
                         st.warning(warning)
+
+        # ── Phase 1: attack-type detectors + incident correlation ─────
+        if latest.attack_findings:
+            st.subheader("Attack-type risk grid")
+            by_type = {f.attack_type: f for f in latest.attack_findings}
+            grid_labels = [
+                ("ddos", "DDoS"),
+                ("reconnaissance", "Recon"),
+                ("credential_abuse", "Credential"),
+                ("lateral_movement", "Lateral"),
+                ("command_and_control", "C2"),
+                ("exfiltration", "Exfil"),
+            ]
+            grid_cols = st.columns(len(grid_labels))
+            for col, (attack_type, label) in zip(grid_cols, grid_labels, strict=True):
+                finding = by_type.get(attack_type)
+                col.markdown(f"**{label}")
+                if finding is None:
+                    col.markdown("—")
+                    continue
+                if finding.is_alert:
+                    tone = "red"
+                elif finding.probability >= 0.40:
+                    tone = "orange"
+                else:
+                    tone = "green"
+                col.markdown(f":{tone}[**{finding.probability:.2f}**]")
+                col.caption(f"{finding.severity} · {finding.mitre_technique}")
+            c2 = by_type.get("command_and_control")
+            if c2 is not None and c2.warnings:
+                st.caption(f"ℹ️ {c2.warnings[0]}")
+            st.caption(
+                "Detector scores are per-window telemetry associations, not proof. "
+                "Alerts feed the incident panel below."
+            )
+
+        if status.incidents:
+            st.subheader("Correlated incidents")
+            for incident in reversed(status.incidents[-3:]):
+                header = (
+                    f"{incident.incident_id} · risk {incident.risk.level} "
+                    f"({incident.risk.score:.2f})"
+                )
+                with st.expander(header, expanded=False):
+                    st.markdown("**Likely progression:** " + " → ".join(incident.progression))
+                    if incident.affected_assets:
+                        st.markdown("**Assets in scope:** " + ", ".join(incident.affected_assets))
+                    st.caption(
+                        f"First seen {incident.first_seen:%H:%M:%S} · last seen "
+                        f"{incident.last_seen:%H:%M:%S} · risk = {incident.risk.formula}"
+                    )
+                    if incident.recommended_actions:
+                        st.markdown(
+                            "**Recommended actions** (analyst-approved; never auto-executed):"
+                        )
+                        for action in incident.recommended_actions:
+                            st.markdown(f"- {action}")
+                    verdict = st.selectbox(
+                        "Analyst verdict",
+                        sorted(FEEDBACK_VERDICTS),
+                        key=f"fb-verdict-{incident.incident_id}-{incident.last_seen}",
+                    )
+                    if st.button(
+                        "Record feedback",
+                        key=f"fb-record-{incident.incident_id}-{incident.last_seen}",
+                    ):
+                        FeedbackStore(ROOT / "reports" / "live" / "feedback.jsonl").record(
+                            incident.incident_id,
+                            verdict,
+                            analyst="dashboard",
+                        )
+                        st.success(f"Recorded {verdict} for {incident.incident_id}.")
 
     if status.last_error:
         st.warning(f"Source error: {status.last_error}")

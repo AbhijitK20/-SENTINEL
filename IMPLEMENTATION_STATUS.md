@@ -310,6 +310,21 @@ must not appear in submission material as real-traffic results.**
 - Per-horizon temporal weights persist to disk and load for inference;
   directories written before this change keep the documented decay fallback.
 
+## Attack-Type Detector Layer (Phase 1 + Phase 2 stubs)
+
+Implemented beyond the original backlog: six attack-type detectors
+(`trajectory/detectors.py`) with measured thresholds and explicit
+insufficient-telemetry behaviour (C2, DDoS), asset criticality + risk fusion
+(`trajectory/assets.py`), incident correlation into analyst-facing cases
+(`trajectory/correlation.py`), an append-only analyst feedback store with no
+auto-retrain path (`trajectory/feedback.py`), and DNS/auth-log telemetry
+stubs normalizing into `UnifiedEvent` (`trajectory/telemetry.py`). The live
+engine attaches all six findings to every window and correlates alerts into
+incidents surfaced on the dashboard Live tab (risk grid, incident panel,
+verdict buttons). See `DETECTORS.md`. Validated on synthetic replay: zero
+detector false positives on benign-stage windows; the rehearsed demo story
+is unchanged (alert ~31 s, Lateral Movement ~61 s).
+
 ## Next Milestone
 
 **Real-data evaluation (the only open backlog item, PB-001/PB-011)**

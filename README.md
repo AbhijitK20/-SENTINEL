@@ -68,6 +68,7 @@ Trajectory asks: "Given the current network trajectory, what is likely to happen
 - Agile: `EPICS.md`, `USER_STORIES.md`, `FEATURE_CATALOG.md`, `PRODUCT_BACKLOG.md`, `AGILE_WORKFLOW.md`
 - Technical: `ARCHITECTURE.md`, `DATASET_PLAN.md`, `DATA_CONTRACTS.md`, `FEATURE_SPECIFICATION.md`, `MODEL_PLAN.md`
 - Quality: `EVALUATION_PLAN.md`, `EXPLAINABILITY_PLAN.md`, `TEST_STRATEGY.md`, `QUALITY_GATES.md`, `KNOWN_LIMITATIONS.md`
+- Detectors: `DETECTORS.md` (attack-type detectors, incident correlation, asset risk fusion)
 - Delivery: `SPRINT_PLAN.md`, `DEMO_PLAN.md`, `DEMO_SCENARIO.md`, `SUBMISSION_PLAN.md`
 - Presentation: `PRESENTATION_OUTLINE.md` (content), `scripts/build_deck.py` (generates `deliverables/Trajectory_SIH26153_Idea_Deck.pptx` and `.pdf`)
 
