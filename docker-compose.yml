@@ -22,6 +22,7 @@ services:
     environment:
       SENTINEL_ARTIFACTS_DIR: /app/reports/generated/real-benchmark/baseline
       SENTINEL_THREAT_FEED_FILE: /app/reports/threat_intel/feed.json
+      SENTINEL_BOOTSTRAP_KEY: ${SENTINEL_BOOTSTRAP_KEY:-sent_demo_key_2026}
     ports:
       - "8000:8000"
     volumes:
@@ -119,5 +120,71 @@ services:
     restart: unless-stopped
     profiles: ["realtime"]
 
+  # ── demo: vulnerable app + attacks + admin dashboard ────────────────
+  # A complete "attack → detect → respond" demo stack.  The vulnerable
+  # app writes HTTP logs; the scanner tail-copies them into the SENTINEL
+  # push engine (detectors fire on real traffic); the admin dashboard
+  # reads the live alerts and exposes one-click IP ban / unban.
+  #
+  # Start: docker compose --profile demo up -d
+  # Watch: docker compose logs -f demo-sentinel
+  # Admin: http://localhost:5001
+  # Attack: docker compose run --rm demo-attack attacks.brute_force
+  vulnerable-app:
+    build: apps/vulnerable
+    image: sentinel-demo-app:local
+    ports:
+      - "5000:5000"
+    volumes:
+      - demo-logs:/logs
+    restart: unless-stopped
+    profiles: ["demo"]
+
+  demo-sentinel:
+    image: sentinel:local
+    build: .
+    command:
+      - python
+      - apps/vulnerable/scanner.py
+      - --api
+      - http://api:8000
+      - --log
+      - /logs/access.log
+    volumes:
+      - demo-logs:/logs
+    environment:
+      SENTINEL_API_KEY: ${SENTINEL_BOOTSTRAP_KEY:-sent_demo_key_2026}
+    depends_on: [api]
+    restart: unless-stopped
+    profiles: ["demo"]
+
+  demo-admin:
+    build: apps/vulnerable
+    image: sentinel-demo-app:local
+    command: python admin.py
+    ports:
+      - "5001:5001"
+    volumes:
+      - demo-logs:/logs
+    depends_on: [api]
+    restart: unless-stopped
+    profiles: ["demo"]
+
+  demo-attack:
+    image: python:3.12-slim
+    working_dir: /src
+    volumes:
+      - .:/src
+    entrypoint: ["python", "-m"]
+    command: ["apps.vulnerable.attacks.brute_force"]
+    profiles: ["demo"]
+    # Run different attacks:
+    #   docker compose run --rm demo-attack attacks.brute_force
+    #   docker compose run --rm demo-attack attacks.sqli
+    #   docker compose run --rm demo-attack attacks.scan
+
 networks:
   demo-net:
+
+volumes:
+  demo-logs:
