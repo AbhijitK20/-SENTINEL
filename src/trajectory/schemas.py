@@ -19,7 +19,9 @@ class UnifiedEvent(BaseModel):
     destination_entity: str = Field(min_length=1)
     event_type: Literal["flow", "packet", "authentication", "dns_query", "auth_event", "other"]
     features: dict[str, float] = Field(default_factory=dict)
-    source_format: Literal["csv", "pcap", "replay", "dns_log_stub", "auth_log_stub", "other"]
+    source_format: Literal[
+        "csv", "pcap", "replay", "dns_log_stub", "auth_log_stub", "syslog", "other"
+    ]
     provenance: str = Field(min_length=1)
 
 

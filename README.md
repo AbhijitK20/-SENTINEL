@@ -52,6 +52,20 @@ sudo -E uv run streamlit run src/trajectory/dashboard/app.py
 Use interface `lo` on Linux. The localhost attack button remains a flow/JSONL
 sensor demo; loopback capture is the separate packet-feature path.
 
+To feed the live engine from an existing log pipeline, select `Syslog log file`
+in the Live Detection tab (or tail a file directly):
+
+```python
+from trajectory.live import LiveEngine, SyslogTailSource
+
+source = SyslogTailSource("/var/log/sensor.log")
+```
+
+Lines follow `<ISO-8601 or epoch timestamp> <host> <app> k=v …` — e.g.
+`2026-01-01T00:00:10+00:00 host-01 authd src=10.0.0.9 dst=auth-service
+failed_auth=yes bytes=300`. Recognized keys become detector features;
+unparseable lines are counted and skipped, never fatal.
+
 Optional extras: `--extra pcap` (Scapy), `--extra dashboard`, or `--group presentation` for the slide generator.
 
 Baseline and temporal runs write JSON results (with model SHA-256 checksums) and Markdown reports. Numbers from synthetic data are pipeline checks, not benchmark claims — the claim status is stated in `RESULTS.md` and in every generated report.

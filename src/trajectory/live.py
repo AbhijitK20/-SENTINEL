@@ -13,6 +13,9 @@ Event sources
   (simulated seconds per real second), using the strict CICFlowMeter loader.
 - :class:`JsonlSensorSource` — tails a JSONL file written by a sensor or the
   scripted attack demo; each line is one event with its features.
+- :class:`SyslogTailSource` — tails a syslog-style log file (one
+  ``<timestamp> <host> <app> k=v ...`` line per event), normalizing known
+  keys into detector features and skipping unparseable noise.
 - :class:`ScapyInterfaceSource` — optional; sniffs a live interface into
   packet events (requires the ``pcap`` extra with scapy installed).
 
@@ -50,6 +53,7 @@ from trajectory.schemas import (
     UnifiedEvent,
 )
 from trajectory.state_builder import build_network_states
+from trajectory.telemetry import parse_syslog_line
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from trajectory.predict import LoadedArtifacts
@@ -225,6 +229,63 @@ class JsonlSensorSource(_SourceBase):
         events.put(_SENTINEL)
 
 
+class SyslogTailSource(_SourceBase):
+    """Tail a syslog-style log file, one normalized event per parseable line.
+
+    Lines follow ``<ISO-8601 or epoch timestamp> <host> <app> k=v ...`` as
+    parsed by :func:`trajectory.telemetry.parse_syslog_line`; recognized keys
+    become detector features (``failed_auth=yes`` feeds the credential
+    detector, ``bytes``/``syn_count``/``rst_count`` feed recon and the
+    forecast). Unparseable lines are counted and skipped, never fatal — a
+    tailing reader must survive unrelated log noise. With ``follow=False``
+    the stream ends at EOF; with ``follow=True`` it keeps tailing until
+    stopped.
+    """
+
+    name = "syslog-tail"
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        scenario_id: str = "syslog-sensor",
+        poll_seconds: float = 0.25,
+        follow: bool = True,
+    ) -> None:
+        super().__init__()
+        self._path = Path(path)
+        self._scenario_id = scenario_id
+        self._poll_seconds = poll_seconds
+        self._follow = follow
+
+    def run(self, events: queue.Queue[UnifiedEvent], stop: threading.Event) -> None:
+        counter = 0
+        skipped = 0
+        with self._path.open("r", encoding="utf-8", errors="replace") as handle:
+            while not stop.is_set():
+                line = handle.readline()
+                if line == "":
+                    if not self._follow:
+                        break
+                    time.sleep(self._poll_seconds)
+                    continue
+                if not line.strip():
+                    continue
+                event = parse_syslog_line(
+                    line,
+                    index=counter,
+                    provenance=f"syslog-tail:{self._scenario_id}",
+                )
+                if event is None:
+                    skipped += 1
+                    continue
+                counter += 1
+                events.put(event)
+        if skipped:
+            events.put(_SourceError(f"syslog-tail: skipped {skipped} unparseable line(s)"))
+        events.put(_SENTINEL)
+
+
 class EventReplaySource(_SourceBase):
     """Replay already-normalized events without a local file or subprocess.
 
@@ -308,7 +369,13 @@ class ScapyInterfaceSource(_SourceBase):
 
 
 class _SourceError:
-    """In-band error marker so source failures reach the UI."""
+    """In-band marker so source errors and end-of-stream reach the UI."""
+
+    def __init__(self, message: str = "") -> None:
+        self.message = message
+
+    def __str__(self) -> str:
+        return self.message or "source error"
 
 
 _SENTINEL = _SourceError()  # reuse the marker type for end-of-stream
@@ -562,5 +629,6 @@ __all__ = [
     "LiveStatus",
     "LiveWindow",
     "ScapyInterfaceSource",
+    "SyslogTailSource",
     "run_all_detectors",
 ]

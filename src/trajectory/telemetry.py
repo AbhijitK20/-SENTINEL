@@ -96,6 +96,105 @@ def parse_auth_log(
     return tuple(events)
 
 
+SYSLOG_SOURCE_FORMAT = "syslog"
+
+# Feature keys the state builder and detectors already consume. Everything
+# else a sensor includes is preserved verbatim, so new signals need no
+# parser change.
+SYSLOG_NUMERIC_FEATURES = (
+    "bytes",
+    "packets",
+    "payload_size",
+    "retransmission",
+    "syn_count",
+    "ack_count",
+    "fin_count",
+    "rst_count",
+    "psh_count",
+    "failed_auth",
+    "destination_port",
+    "source_port",
+    "domain_length",
+    "dns_tunnel_marker",
+)
+
+
+def parse_syslog_line(
+    line: str,
+    *,
+    index: int = 0,
+    provenance: str = "syslog-tail",
+    fallback_timestamp: datetime | None = None,
+) -> UnifiedEvent | None:
+    """Parse one syslog-style line into a :class:`UnifiedEvent` (or None).
+
+    Format: ``<ISO-8601 timestamp> <host> <app> k=v k=v ...``
+
+    Recognized keys (see :data:`SYSLOG_NUMERIC_FEATURES`) become numeric
+    features; ``src``/``dst`` set the event entities. ``failed_auth=yes/true/1``
+    maps to the ``failed_auth`` feature the credential detector consumes.
+    Timestamps may be Unix epoch seconds. Unparseable lines return None so a
+    tailing reader can skip noise without dying.
+    """
+    text = line.strip()
+    if not text:
+        return None
+    parts = text.split()
+    if len(parts) < 3:
+        return None
+    raw_ts, host, app = parts[0], parts[1], parts[2]
+    ts = _parse_ts(raw_ts) or _parse_epoch(raw_ts) or fallback_timestamp
+    if ts is None:
+        return None
+
+    source_entity = host
+    destination_entity = app
+    features: dict[str, float] = {}
+    for token in parts[3:]:
+        if "=" not in token:
+            continue
+        key, _, raw_value = token.partition("=")
+        key = key.strip().lower()
+        value = raw_value.strip().strip('"')
+        if key in ("src", "source"):
+            source_entity = value
+            continue
+        if key in ("dst", "dest", "target"):
+            destination_entity = value
+            continue
+        if key == "failed_auth":
+            lowered = value.lower()
+            if lowered in ("yes", "true", "1"):
+                features["failed_auth"] = 1.0
+            elif lowered in ("no", "false", "0"):
+                features["failed_auth"] = 0.0
+            continue
+        try:
+            features[key] = float(value)
+        except ValueError:
+            continue
+    if not features:
+        features["bytes"] = 0.0
+    return UnifiedEvent(
+        event_id=f"syslog:{index}",
+        timestamp=ts,
+        source_entity=source_entity,
+        destination_entity=destination_entity,
+        event_type="flow",
+        features=features,
+        source_format=SYSLOG_SOURCE_FORMAT,
+        provenance=provenance,
+    )
+
+
+def _parse_epoch(raw: str) -> datetime | None:
+    """Parse a Unix-epoch timestamp string if it is one."""
+    try:
+        return datetime.fromtimestamp(float(raw), tz=UTC)
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
 def _lines(path: Path) -> list[str]:
     if not path.exists():
         return []

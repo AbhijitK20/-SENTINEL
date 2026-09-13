@@ -9,8 +9,8 @@ cross-day temporal benchmark executed end-to-end on real traffic.
 See `reports/generated/real-benchmark/REAL_BENCHMARK.md`.
 
 Sprint 9 (live demo) adds real-time detection: `trajectory/live.py` runs
-rolling event-time windows from three sources (CSV replay, JSONL sensor,
-scapy interface) through the trained artifacts, with a Live Detection
+rolling event-time windows from four sources (CSV replay, JSONL sensor,
+syslog file tail, scapy interface) through the trained artifacts, with a Live Detection
 dashboard tab and a localhost-safe scripted attack demo
 (`scripts/attack_demo.py`). Verified live: benign window P=0.12/Unknown →
 scan burst P=0.97 alert → Lateral Movement TA0008.**

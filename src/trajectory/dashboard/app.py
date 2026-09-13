@@ -32,6 +32,7 @@ from trajectory.live import (
     JsonlSensorSource,
     LiveEngine,
     ScapyInterfaceSource,
+    SyslogTailSource,
 )
 from trajectory.predict import DECISION_THRESHOLD, artifacts_from_runs, forecast
 from trajectory.report import render_report
@@ -1145,6 +1146,15 @@ def _make_source(
         return CsvReplaySource(handle.name, speed=replay_speed)
     if mode == "Local loopback capture":
         return ScapyInterfaceSource(capture_interface.strip() or "lo")
+    if mode == "Syslog log file":
+        if uploaded_file is None:
+            raise ValueError("Upload a syslog-format log file before starting the replay")
+        import tempfile
+
+        handle = tempfile.NamedTemporaryFile(suffix=".log", delete=False, mode="wb")
+        handle.write(uploaded_file.getvalue())
+        handle.close()
+        return SyslogTailSource(handle.name, scenario_id="uploaded-syslog", follow=False)
     if uploaded_file is None:
         raise ValueError("Upload a JSONL sensor file before starting the replay")
     import tempfile
@@ -1217,6 +1227,7 @@ with tab_live:
             "Synthetic attack replay",
             "CSV replay",
             "JSONL sensor file",
+            "Syslog log file",
             "Local loopback capture",
         ],
         horizontal=True,
@@ -1247,6 +1258,14 @@ with tab_live:
             "Upload a JSONL sensor file", type=["jsonl", "txt"], key="live-jsonl-upload"
         )
         st.caption("Each line must contain timestamp, src, dst, and optional features.")
+    elif mode == "Syslog log file":
+        uploaded_file = st.file_uploader(
+            "Upload a syslog-format log file", type=["log", "txt"], key="live-syslog-upload"
+        )
+        st.caption(
+            "Each line: `<ISO or epoch timestamp> <host> <app> k=v …` — known keys become "
+            "detector features (e.g. failed_auth=yes, bytes, syn_count); other lines are skipped."
+        )
     elif mode == "Local loopback capture":
         capture_interface = st.text_input(
             "Capture interface",
