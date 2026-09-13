@@ -1,0 +1,3 @@
+timestamp,source_entity,destination_entity,source_port,destination_port,protocol,bytes,packets,duration,tcp_flags,syn_count,ack_count,iat_mean,bidirectional_ratio
+2026-01-01T00:00:00Z,host-a,server-a,41000,443,TCP,1200,12,1.2,SYN ACK,1,11,0.10,0.80
+2026-01-01T00:00:30Z,host-a,server-b,41001,22,TCP,850,8,0.8,SYN ACK,1,7,0.12,0.60

@@ -19,6 +19,7 @@ reports/generated/
 *.pcap
 *.pcapng
 *.csv
+!data/fixtures/*.csv
 *.parquet
 *.pt
 *.pth
