@@ -130,3 +130,46 @@ def make_split_manifest(
         validation_scenarios=sorted(shuffled[train_end:validation_end]),
         test_scenarios=sorted(shuffled[validation_end:]),
     )
+
+
+def make_stratified_split_manifest(
+    scenario_ids: list[str],
+    stage_by_scenario: dict[str, str],
+    *,
+    seed: int = 42,
+) -> SplitManifest:
+    """Split scenarios to splits, balancing attack classes across splits.
+
+    Scenarios are grouped by ``stage_by_scenario`` and each group is dealt
+    round-robin into train → validation → test, so a split receives at most
+    one more scenario of a class than its neighbours. With at least three
+    scenarios of an attack class, every split gets one of that class; the
+    alternative random split could assign all DDoS scenarios to test and
+    leave training single-class (train_baseline refuses that).
+    """
+    unknown = sorted(set(scenario_ids) - set(stage_by_scenario))
+    if unknown:
+        raise ValueError(f"stage missing for scenarios: {unknown}")
+
+    buckets: dict[str, list[str]] = {}
+    for scenario_id in sorted(set(scenario_ids)):
+        buckets.setdefault(stage_by_scenario[scenario_id], []).append(scenario_id)
+    for stage in buckets:
+        random.Random(f"{seed}:{stage}").shuffle(buckets[stage])
+
+    # Round-robin deal within each class: the Nth scenario of a class goes to
+    # the Nth split position (train, validation, test, train, ...). With at
+    # least three scenarios in a class every split gets one of them; fewer
+    # scenarios still spread across splits rather than stacking.
+    dealt: dict[str, list[str]] = {"train": [], "validation": [], "test": []}
+    order = ("train", "validation", "test")
+    for stage in sorted(buckets):
+        for index, scenario_id in enumerate(buckets[stage]):
+            dealt[order[index % len(order)]].append(scenario_id)
+
+    return SplitManifest(
+        seed=seed,
+        train_scenarios=sorted(dealt["train"]),
+        validation_scenarios=sorted(dealt["validation"]),
+        test_scenarios=sorted(dealt["test"]),
+    )

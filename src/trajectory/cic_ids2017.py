@@ -51,6 +51,7 @@ DATASET_URL = "https://www.unb.ca/cic/datasets/ids-2017.html"
 # to (project stage, infiltration flag). Keep sorted for review.
 STAGE_RULES: dict[str, tuple[str, bool]] = {
     "benign": ("Benign", False),
+    "ddos": ("Denial of Service", True),
     "ftp-patator": ("Credential Access", True),
     "ssh-patator": ("Credential Access", True),
     "dos slowhttptest": ("Denial of Service", True),
@@ -58,6 +59,7 @@ STAGE_RULES: dict[str, tuple[str, bool]] = {
     "dos goldeneye": ("Denial of Service", True),
     "dos hulk": ("Denial of Service", True),
     "heartbeat": ("Command and Control", True),
+    "heartbleed": ("Command and Control", True),
     "infiltration": ("Lateral Movement", True),
     "infiltration - nmap portscan": ("Reconnaissance", False),
     "infiltration - dropping file (mitm)": ("Lateral Movement", True),

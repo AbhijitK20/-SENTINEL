@@ -192,3 +192,89 @@ docker compose --profile obs up -d      # api + prometheus + grafana
 Scraped metrics: `sentinel_requests_total` (by status), request latency
 sum/count, `sentinel_windows_emitted_total`, `sentinel_push_incidents_total`,
 `sentinel_cases_open`, `sentinel_threat_indicators`.
+
+## Real-traffic detection demo (profile: realtime)
+
+The `realtime` compose profile runs a **genuine live attack** against a
+containerized target and detects it from the wire — no synthetic data anywhere
+in the chain:
+
+```text
+demo-attacker (nmap -sS, real SYN scan)
+        |  real packets across the demo network
+        v
+demo-target (nginx victim)  <-  demo-sensor (tcpdump -tttt in the target's
+        |                       network namespace: NET_RAW capture of every
+        |                       probe/response on the wire)
+        v
+scripts/packet_sensor.py  ->  POST /v1/events  ->  SENTINEL live push engine
+        ->  30s event-time windows  ->  trained forecaster + 9 detectors
+        ->  incident correlation (risk-critical recon alerts, live)
+```
+
+Run it (needs an analyst-or-higher API key with `POST /v1/events`):
+
+```bash
+export SENTINEL_API_KEY=sent_<analyst-key>        # see /admin/keys
+docker compose --profile realtime up -d           # api + target + sensor, then attacker
+docker compose logs -f demo-attacker demo-sensor  # watch the scan + ALERT lines
+```
+
+Verified end-to-end (2026-09-13): a 411-second nmap SYN scan of 1027 ports
+streamed 4,835 real packet events; SENTINEL correlated **INC-001
+Reconnaissance, risk critical**, tracking the scan live across 14 windows
+(`172.28.0.2/3/4`, first_seen 14:39:42Z, last_seen 14:46:42Z, with
+recommended actions) — from captured packets only, no replayed data.
+
+### Flow sensor (model-scored realtime path)
+
+`scripts/flow_sensor.py` replaces `packet_sensor.py` in the demo-sensor
+command when you want the **trained forecaster** to score live traffic. It
+aggregates the same tcpdump stream into 5-tuple flows (SYN start, RST/FIN
+teardown, 15s idle / 60s max-age sweeps) and emits one `event_type="flow"`
+event per connection — the exact shape the baseline was fit on
+(CICFlowMeter semantics: bidirectional Fwd+Bwd, per-flag counts,
+`flow_iat_mean_ms`). Verified with the real
+`TrafficLabelling/Friday-PortScan` day: streaming the first 2,000 genuine
+attack-day flows through `POST /v1/events` produced a model alert
+(`peak=0.221 > 0.15 threshold`) with a critical 5-type incident on the real
+2017 attacker/target IPs. The push engine windows in event time — restart
+the `api` container before streaming a historical capture so the window
+grid anchors to the capture's own timeline.
+
+Honest scope notes:
+
+- The trained forecaster stays quiet on the two-container nmap demo's
+  volume: CIC training windows average ~4,600 flows / ~105 MB per 60s, and
+  a single nmap scan against one nginx container is ~3 orders of magnitude
+  below that. The model is volume-sensitive (large positive weights on
+  `packets`/`ack_count`/`bytes`); on real attack-day traffic at real volume
+  (the Friday PortScan replay) it alerts. The **recon detector** (pattern
+  rules) fires at any volume, including the small demo scan.
+- The attacker scans only `demo-target` inside the compose network. Nothing
+  on the host or the internet is scanned; the sensor captures only
+  demo-network traffic.
+- `nmap -T2` keeps the scan slow enough to span stride boundaries; a T4 scan
+  finishes inside one window and can be missed by the 30s window grid.
+
+## Threat-intel feed refresh (free, keyless, out-of-band)
+
+`scripts/fetch_threat_feed.py` pulls the abuse.ch URLhaus dump (free, no API
+key) into `reports/threat_intel/feed.json`. The runtime never fetches URLs
+itself (offline-first contract, `tests/test_offline.py`); the compose
+`feed-refresher` one-shot service refreshes it at `up` (skipping when the file
+is younger than 12h), and the API loads it at boot:
+
+```bash
+uv run python scripts/fetch_threat_feed.py        # manual refresh
+docker compose run --rm feed-refresher            # same, via compose
+```
+
+The API accepts both the saved `.json` snapshot and a raw URLhaus `.csv` body
+(`SENTINEL_THREAT_FEED_FILE`). Verified live: 19,233 indicators loaded at API
+boot; a window touching a listed host raises C2/exfil findings with explicit
+"list evidence, not verdicts" warnings. Cron example for a host deployment:
+
+```cron
+0 */6 * * *  cd /opt/sentinel && uv run python scripts/fetch_threat_feed.py --max-age-hours 5
+```

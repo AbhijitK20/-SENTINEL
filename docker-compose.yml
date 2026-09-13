@@ -10,6 +10,9 @@ services:
       - "8501:8501"
     volumes:
       - ./reports:/app/reports
+      # Read-only dataset mount: CIC-IDS2017 stays on the host (never baked
+      # into the image) while the dashboard's real-data mode can load it.
+      - ./data:/app/data:ro
     restart: unless-stopped
 
   api:
@@ -18,11 +21,27 @@ services:
     command: ["uv", "run", "--no-sync", "uvicorn", "trajectory.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       SENTINEL_ARTIFACTS_DIR: /app/reports/generated/real-benchmark/baseline
+      SENTINEL_THREAT_FEED_FILE: /app/reports/threat_intel/feed.json
     ports:
       - "8000:8000"
     volumes:
       - ./reports:/app/reports
+    networks: [default, demo-net]
+    depends_on:
+      feed-refresher:
+        condition: service_completed_successfully
     restart: unless-stopped
+
+  # One-shot out-of-band refresh of the free URLhaus feed (offline-first: the
+  # runtime itself never fetches; this container does, once, at compose up).
+  # Re-run on a schedule with: docker compose run --rm feed-refresher
+  feed-refresher:
+    image: sentinel:local
+    build: .
+    command: ["uv", "run", "--no-sync", "python", "scripts/fetch_threat_feed.py", "--out", "/app/reports/threat_intel/feed.json", "--max-age-hours", "12"]
+    volumes:
+      - ./reports:/app/reports
+    restart: "no"
 
   prometheus:
     image: prom/prometheus:latest
@@ -45,3 +64,60 @@ services:
       - "3000:3000"
     restart: unless-stopped
     profiles: ["obs"]
+
+  # ── real-traffic demo (profile: realtime) ─────────────────────────────
+  # demo-net carries all demo traffic. demo-sensor sniffs it (NET_RAW) and
+  # streams every packet to the API's /v1/events push engine; demo-attacker
+  # runs a real nmap SYN scan against demo-target. The recon detector fires
+  # on the captured packets. All traffic stays inside the compose network —
+  # nothing on the host or internet is scanned.
+  demo-target:
+    image: nginx:alpine
+    networks: [demo-net]
+    restart: unless-stopped
+    profiles: ["realtime"]
+
+  demo-attacker:
+    image: instrumentisto/nmap:latest
+    networks: [demo-net]
+    cap_add: [NET_RAW]
+    # instrumentisto/nmap ENTRYPOINT is `nmap` — override it to run a shell
+    # script instead. Wait for the sensor's tcpdump to be armed, then run a
+    # full SYN scan at polite timing so probe traffic spans window strides.
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        sleep 40
+        nmap -sS -p 1-1024,3389,5985 -T2 --open demo-target || nmap -sT -p 1-1024,3389,5985 -T2 --open demo-target
+    restart: "no"
+    depends_on: [demo-target]
+    profiles: ["realtime"]
+
+  # Sniffs the TARGET's network namespace (the scan's victim sees every probe
+  # and response; a bridge peer sees nothing unicast between other peers) and
+  # streams FLOW events into SENTINEL. flow_sensor aggregates the 5-tuple
+  # stream (SYN start, RST/FIN teardown, idle/max-age sweep) into one flow
+  # event per connection — the exact event shape the trained forecaster was
+  # fit on (CIC-IDS2017 flow records), so the MODEL scores the realtime path,
+  # not just the rule-based detectors. Switch to scripts/packet_sensor.py to
+  # push raw per-packet events instead. tcpdump installs via apt on first
+  # start; NET_RAW is required to capture.
+  demo-sensor:
+    image: sentinel:local
+    build: .
+    network_mode: "service:demo-target"
+    cap_add: [NET_RAW]
+    command:
+      - sh
+      - -c
+      - |
+        command -v tcpdump >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq tcpdump)
+        exec tcpdump -l -n -tttt -i eth0 ip 2>/dev/null | uv run --no-sync python scripts/flow_sensor.py --api http://api:8000 --api-key "$${SENTINEL_API_KEY:-}"
+    environment:
+      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
+    depends_on: [api]
+    restart: unless-stopped
+    profiles: ["realtime"]
+
+networks:
+  demo-net:

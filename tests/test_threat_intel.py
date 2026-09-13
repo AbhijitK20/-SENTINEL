@@ -18,12 +18,31 @@ URLHAUS_SAMPLE = (
     "2,2026-01-01 00:01:00 UTC,http://bad-host.io:8080/x,offline,malware_download,exe,\n"
 )
 
+# Real https://urlhaus.abuse.ch/downloads/csv/ payload shape (headerless, quoted,
+# ZIP-wrapped csv.txt): banner comment lines, then 8 quoted columns, URL at index 2.
+URLHAUS_REAL_DUMP = (
+    "################################################################\n"
+    "# abuse.ch URLhaus Database Dump (CSV)                         #\n"
+    "# Last updated: 2026-09-13 13:43:27 (UTC)                      #\n"
+    "####\n"
+    '"3915965","2026-09-13 13:43:27","http://fingerprint-veri.info/","offline","","malware_download","ClickFix","https://urlhaus.abuse.ch/url/3915965/","ilmari"\n'
+    '"3915964","2026-09-13 13:43:26","http://42.229.169.27:32848/Mozi.m","online","2026-09-13 13:43:26","malware_download","elf,iot,Mozi","https://urlhaus.abuse.ch/url/3915964/","HoneyLabs"\n'
+)
+
 
 @pytest.fixture()
 def feed() -> ThreatIntelFeed:
     f = ThreatIntelFeed()
     assert f.load_csv(URLHAUS_SAMPLE) == 2
     return f
+
+
+def test_feed_parses_real_headerless_urlhaus_dump() -> None:
+    f = ThreatIntelFeed()
+    assert f.load_csv(URLHAUS_REAL_DUMP) == 2
+    assert f.lookup("fingerprint-veri.info") is not None
+    assert f.lookup("42.229.169.27:32848") is not None
+    assert f.lookup("clean.example.org") is None
 
 
 def test_feed_parses_hosts_case_insensitively(feed: ThreatIntelFeed) -> None:

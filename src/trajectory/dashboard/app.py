@@ -19,6 +19,7 @@ import streamlit as st
 
 from trajectory.assets import default_asset_registry
 from trajectory.baseline import SPLIT_NAMES, train_baseline
+from trajectory.cic_ids2017 import build_labelled_states, load_flow_csv
 from trajectory.config import BaselineConfig
 from trajectory.dashboard.live_artifacts import select_live_artifacts
 from trajectory.evaluation import evaluate_replay
@@ -37,14 +38,25 @@ from trajectory.live import (
 from trajectory.predict import DECISION_THRESHOLD, artifacts_from_runs, forecast
 from trajectory.report import render_report
 from trajectory.synthetic import generate_labelled_states, generate_scenario_events
-from trajectory.targets import build_sequence_samples, make_split_manifest
+from trajectory.targets import (
+    build_sequence_samples,
+    make_split_manifest,
+    make_stratified_split_manifest,
+)
 from trajectory.temporal import TemporalConfig, train_temporal
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 REPORTS_DIR = ROOT / "reports" / "generated"
 LEDGER_PATH = REPORTS_DIR / "ledger" / "alerts.jsonl"
 LOCAL_ATTACK_SPEED = 2.0
-DEFAULT_SCENARIOS = [f"scenario-{index:02d}" for index in range(1, 11)]
+
+
+def _scenario_ids(count: int) -> list[str]:
+    """Scenario ids for a requested count — never silently truncated."""
+    if count < 1:
+        raise ValueError("at least one scenario is required")
+    return [f"scenario-{index:02d}" for index in range(1, count + 1)]
+
 
 # ── Page Config ───────────────────────────────────────────────────────
 st.set_page_config(
@@ -55,15 +67,82 @@ st.set_page_config(
 )
 
 # ── Sidebar ───────────────────────────────────────────────────────────
+CIC_DATA_DIR = ROOT / "data" / "raw" / "cic-ids2017" / "TrafficLabelling"
+
+# Stage precedence used to pick each scenario's dominant attack class.
+_STAGE_RANK = {
+    "Benign": 0,
+    "Reconnaissance": 1,
+    "Initial Access": 2,
+    "Credential Access": 3,
+    "Command and Control": 4,
+    "Denial of Service": 5,
+    "Lateral Movement": 6,
+}
+
+# One entry per real CIC-IDS2017 attack day: file stem, short attack name,
+# and the working-hours window that actually contains that day's traffic.
+# NOTE: the Friday afternoon files' published timestamps run late
+# (e.g. DDoS flows span 15:30-17:02), so their windows are set from the
+# observed data, not the nominal capture schedule.
+CIC_DAYS: list[tuple[str, str, tuple[int, int]]] = [
+    ("Tuesday-WorkingHours", "FTP/SSH brute force", (8, 18)),
+    ("Wednesday-workingHours", "DoS (4 variants + Heartbleed)", (8, 18)),
+    ("Thursday-WorkingHours-Morning-WebAttacks", "Web attacks (XSS/SQLi/Brute)", (8, 14)),
+    ("Thursday-WorkingHours-Afternoon-Infilteration", "Infiltration", (13, 17)),
+    ("Friday-WorkingHours-Morning", "Botnet C2", (8, 13)),
+    ("Friday-WorkingHours-Afternoon-PortScan", "Port scan", (13, 17)),
+    ("Friday-WorkingHours-Afternoon-DDos", "DDoS", (15, 18)),
+]
+
+
+def _cic_csv(stem: str) -> Path | None:
+    matches = sorted(CIC_DATA_DIR.glob(f"{stem}*.csv"))
+    return matches[0] if matches else None
+
+
 with st.sidebar:
     st.title("SENTINEL")
     st.caption("SIH26153 — AI Network Attack Forecasting")
     st.divider()
+    st.subheader("Data Source")
+    available_days = [(stem, label) for stem, label, _ in CIC_DAYS if _cic_csv(stem) is not None]
+    data_mode = st.radio(
+        "Training data",
+        ("Synthetic replay", "Real CIC-IDS2017 attacks"),
+        help="Synthetic: deterministic recon→lateral replays. Real: labeled "
+        "attack-day flows from the CIC-IDS2017 dataset (already downloaded).",
+    )
+    selected_cic_days: list[str] = []
+    if data_mode == "Real CIC-IDS2017 attacks":
+        if not available_days:
+            st.warning("CIC-IDS2017 CSVs not found under data/raw; falling back to synthetic.")
+            data_mode = "Synthetic replay"
+        else:
+            day_labels = {stem: label for stem, label in available_days}
+            selected_cic_days = st.multiselect(
+                "Attack days to train on",
+                list(day_labels),
+                default=list(day_labels),
+                format_func=lambda s: f"{s.replace('-WorkingHours', '')} · {day_labels[s]}",
+                help="Different days carry different attack techniques — "
+                "retraining on a different subset yields a genuinely different model. "
+                "Pick at least 3 days so every split can hold an attack class.",
+            )
+            if not selected_cic_days:
+                st.warning("Select at least one attack day (or switch back to synthetic).")
+    st.divider()
     st.subheader("Settings")
     scenario_count = st.slider("Scenarios", min_value=3, max_value=15, value=6)
     seed = st.number_input("Seed", min_value=0, max_value=9999, value=42)
-    window_seconds = st.number_input("Window (s)", min_value=10, max_value=300, value=60)
-    stride_seconds = st.number_input("Stride (s)", min_value=5, max_value=300, value=30)
+    if data_mode == "Synthetic replay":
+        window_seconds = st.number_input("Window (s)", min_value=10, max_value=300, value=60)
+        stride_seconds = st.number_input("Stride (s)", min_value=5, max_value=300, value=30)
+    else:
+        # Real capture days: 5-minute CICFlowMeter-style windows match the
+        # benchmark protocol (run_real_benchmark.py uses 300/150).
+        window_seconds = st.number_input("Window (s)", min_value=60, max_value=600, value=300)
+        stride_seconds = st.number_input("Stride (s)", min_value=30, max_value=600, value=150)
     sequence_length = st.number_input("Sequence length", min_value=2, max_value=16, value=8)
     forecast_horizon = st.number_input("Forecast horizon", min_value=1, max_value=10, value=5)
     st.divider()
@@ -88,7 +167,7 @@ def generate_data(
     sequence_length: int,
     forecast_horizon: int,
 ) -> tuple:
-    scenario_ids = DEFAULT_SCENARIOS[:scenario_count]
+    scenario_ids = _scenario_ids(scenario_count)
     labelled = generate_labelled_states(
         scenario_ids,
         seed=seed,
@@ -101,6 +180,95 @@ def generate_data(
         horizon=forecast_horizon,
     )
     manifest = make_split_manifest(scenario_ids, seed=seed)
+    return labelled, samples, manifest
+
+
+@st.cache_data(show_spinner="Loading real CIC-IDS2017 attack days...")
+def load_real_data(
+    day_stems: tuple[str, ...],
+    seed: int,
+    window_seconds: int,
+    stride_seconds: int,
+    sequence_length: int,
+    forecast_horizon: int,
+) -> tuple:
+    """Real attack-day flows, sliced into per-half-day sub-scenarios.
+
+    Each selected day is split into two consecutive time slices, each its own
+    scenario id ``<day>-am`` / ``<day>-pm``. Scenario-level split assignment
+    then guarantees no window of a training scenario ever leaks into
+    validation or test — same discipline as the synthetic path. Different
+    day subsets + seeds produce genuinely different datasets and models.
+    """
+    from datetime import UTC, datetime
+
+    # CIC days run Jul 4 (Tue) .. Jul 7 (Fri, 2017); map each file to its date.
+    day_of_month = {
+        "Tuesday-WorkingHours": 4,
+        "Wednesday-workingHours": 5,
+        "Thursday-WorkingHours-Morning-WebAttacks": 6,
+        "Thursday-WorkingHours-Afternoon-Infilteration": 6,
+        "Friday-WorkingHours-Morning": 7,
+        "Friday-WorkingHours-Afternoon-PortScan": 7,
+        "Friday-WorkingHours-Afternoon-DDos": 7,
+    }
+
+    labelled: list = []
+    for stem in day_stems:
+        csv_path = _cic_csv(stem)
+        if csv_path is None:
+            continue
+        hours = next(h for s, _, h in CIC_DAYS if s == stem)
+        span = hours[1] - hours[0]
+        mid = hours[0] + span // 2
+        date = day_of_month.get(stem, 4)
+        for part, (start_h, end_h) in (("am", (hours[0], mid)), ("pm", (mid, hours[1]))):
+            start = datetime(2017, 7, date, start_h, tzinfo=UTC)
+            end = datetime(2017, 7, date, end_h, tzinfo=UTC)
+            events = load_flow_csv(
+                csv_path,
+                scenario_id=f"{stem}-{part}",
+                time_window=(start, end),
+            )
+            if not events:
+                continue
+            flow_labels = [(e.timestamp, e.provenance.rsplit(":", 1)[1]) for e in events]
+            slice_states = build_labelled_states(
+                events,
+                flow_labels,
+                window_seconds=window_seconds,
+                stride_seconds=stride_seconds,
+                scenario_id=f"{stem}-{part}",
+            )
+            # Keep only slices that carry attack traffic (any non-benign stage
+            # or infiltration flag): an all-benign half-day would poison the
+            # split (train_baseline refuses single-class training splits).
+            if not any(
+                item.label.infiltration or item.label.attack_stage != "Benign"
+                for item in slice_states
+            ):
+                continue
+            labelled.extend(slice_states)
+    if not labelled:
+        raise ValueError("no real flows loaded; check the CIC data directory")
+    scenario_ids = sorted({item.scenario_id for item in labelled})
+    samples = build_sequence_samples(
+        labelled,
+        sequence_length=sequence_length,
+        horizon=forecast_horizon,
+    )
+    # Stratify the split by attack class so training never lands single-class
+    # (e.g. all PortScan scenarios in train with zero infiltration targets).
+    stage_by_scenario: dict[str, str] = {}
+    for item in labelled:
+        stage_by_scenario.setdefault(item.scenario_id, "Benign")
+        if item.label.infiltration or (
+            item.label.attack_stage != "Benign"
+            and _STAGE_RANK.get(item.label.attack_stage, 0)
+            > _STAGE_RANK.get(stage_by_scenario[item.scenario_id], 0)
+        ):
+            stage_by_scenario[item.scenario_id] = item.label.attack_stage
+    manifest = make_stratified_split_manifest(scenario_ids, stage_by_scenario, seed=seed)
     return labelled, samples, manifest
 
 
@@ -143,15 +311,38 @@ def train_models(
 # ── Main ──────────────────────────────────────────────────────────────
 st.title("🛡️ SENTINEL — Network Attack Forecasting Dashboard")
 
-# Generate data
-labelled, samples, manifest = generate_data(
-    scenario_count,
-    int(seed),
-    int(window_seconds),
-    int(stride_seconds),
-    int(sequence_length),
-    int(forecast_horizon),
+# Generate data (mode-dependent; different day subsets/seeds => different data)
+if data_mode == "Real CIC-IDS2017 attacks" and selected_cic_days:
+    labelled, samples, manifest = load_real_data(
+        tuple(sorted(selected_cic_days)),
+        int(seed),
+        int(window_seconds),
+        int(stride_seconds),
+        int(sequence_length),
+        int(forecast_horizon),
+    )
+    dataset_id = "CIC-IDS2017 (TrafficLabelling, attack days)"
+else:
+    labelled, samples, manifest = generate_data(
+        scenario_count,
+        int(seed),
+        int(window_seconds),
+        int(stride_seconds),
+        int(sequence_length),
+        int(forecast_horizon),
+    )
+    dataset_id = "synthetic-recon-lateral-v1"
+
+# Invalidate stale trained models when the underlying dataset changes:
+# the hash covers the mode, day subset, seed, and windowing, so switching
+# any of them forces a retrain rather than scoring new data with an old model.
+dataset_fingerprint = (
+    f"{dataset_id}|{sorted(selected_cic_days)}|{seed}|{window_seconds}|{stride_seconds}"
 )
+if st.session_state.get("dataset_fingerprint") != dataset_fingerprint:
+    for stale in ("baseline_run", "temporal_run", "schema"):
+        st.session_state.pop(stale, None)
+    st.session_state["dataset_fingerprint"] = dataset_fingerprint
 
 # Train on button click
 if train_btn:
@@ -289,8 +480,29 @@ with tab_forecast:
         st.warning("No states found for this scenario.")
         st.stop()
 
+    # Walk-forward position: the forecast is made FROM this window, using
+    # only the history up to it (honest simulation of "what would we have
+    # known at this moment"). Moving the slider changes the model input,
+    # the timeline, stage, evidence, and lead time — every value below is
+    # derived from the selected cut, never a static render.
+    max_cut = len(scenario_states)
+    cut = st.slider(
+        "Forecast from window",
+        min_value=1,
+        max_value=max_cut,
+        value=max_cut,
+        help="History length the forecaster sees. Drag left to replay earlier "
+        "moments of the attack progression; the forecast updates for each.",
+    )
+    observed_window = scenario_states[cut - 1]
+    st.caption(
+        f"Observed window: **{observed_window.window_start:%H:%M:%S} → "
+        f"{observed_window.window_end:%H:%M:%S}** · {cut} of {max_cut} windows "
+        "of history visible to the model."
+    )
+
     result = forecast(
-        scenario_states,
+        scenario_states[:cut],
         loaded,
         max_horizon=forecast_horizon,
     )
@@ -362,6 +574,53 @@ with tab_forecast:
         yaxis_range=[0, 1.05],
     )
     st.plotly_chart(fig3, use_container_width=True)
+
+    # Walk-forward history: score every prior position of this scenario with
+    # the same model so the slider position maps onto a visible trajectory —
+    # the "what the model would have said here" curve.
+    st.subheader("Model Score Across This Scenario (walk-forward)")
+    with st.spinner("Scoring prior windows..."):
+        history_scores = []
+        schema_ref = baseline_run.result.feature_schema
+        from trajectory.features import vectorize_states as _vec  # local import: UI-only
+
+        for pos in range(1, len(scenario_states) + 1):
+            window_state = scenario_states[pos - 1]
+            vector = _vec([window_state], schema_ref)
+            proba = float(baseline_run.model.predict_proba(vector)[:, 1][0])
+            history_scores.append((pos, proba))
+    fig_hist = go.Figure()
+    fig_hist.add_trace(
+        go.Scatter(
+            x=[pos for pos, _ in history_scores],
+            y=[p for _, p in history_scores],
+            mode="lines+markers",
+            name="P(infiltration) per window",
+            line=dict(color="#6ea8ff", width=2),
+        )
+    )
+    fig_hist.add_vline(
+        x=cut,
+        line_dash="dot",
+        line_color="#ef6f6f",
+        annotation_text="current cut",
+    )
+    fig_hist.add_hline(
+        y=DECISION_THRESHOLD,
+        line_dash="dash",
+        line_color="#f0c674",
+        annotation_text=f"Threshold = {DECISION_THRESHOLD}",
+    )
+    fig_hist.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0b0d12",
+        plot_bgcolor="#0b0d12",
+        height=280,
+        xaxis_title="Window position in scenario",
+        yaxis_title="Probability",
+        yaxis_range=[0, 1.05],
+    )
+    st.plotly_chart(fig_hist, use_container_width=True)
 
     # Driving features
     st.subheader("Driving Features")
@@ -477,7 +736,13 @@ with tab_states:
     st.write(f"Total states: {len(scenario_states)}")
 
     selected_idx = st.slider(
-        "State index", min_value=0, max_value=len(scenario_states) - 1, value=0
+        "State index",
+        min_value=0,
+        max_value=len(scenario_states) - 1,
+        value=min(cut - 1, len(scenario_states) - 1) if scenario_states else 0,
+        help="Inspect any window: features, entities, edges, and the model's "
+        "score for exactly this state. Every index change re-renders all "
+        "charts below from that window's data.",
     )
     state = scenario_states[selected_idx]
 
@@ -489,74 +754,115 @@ with tab_states:
                 "window_end": state.window_end.isoformat(),
                 "entities": state.entities,
                 "source_ids_count": len(state.source_ids),
+                "edge_count": len(state.edge_summary),
             }
         )
     with col2:
-        st.json(state.coverage)
+        st.json(
+            {
+                "coverage": state.coverage,
+                "label": next(
+                    (
+                        item.label.attack_stage
+                        for item in labelled
+                        if item.scenario_id == scenario_choice
+                        and item.state.window_start == state.window_start
+                    ),
+                    None,
+                ),
+            }
+        )
 
-    st.subheader("Feature Values")
+    # Model score for THIS state, so the window inspection connects to the
+    # forecast story (same model, same feature schema).
+    from trajectory.features import vectorize_states as _vec_states  # UI-only
+
+    state_vector = _vec_states([state], baseline_run.result.feature_schema)
+    state_proba = float(baseline_run.model.predict_proba(state_vector)[:, 1][0])
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Events in window", f"{state.features.get('event_count', 0):.0f}")
+    m2.metric("Bytes in window", f"{state.features.get('bytes', 0):,.0f}")
+    m3.metric("Model P(infiltration)", f"{state_proba:.1%}")
+
+    st.subheader("Feature Values (log scale)")
     feat_names = list(state.features.keys())
     feat_vals = list(state.features.values())
     fig5 = go.Figure(
         data=[
             go.Bar(
                 x=feat_names,
-                y=feat_vals,
+                y=[max(v, 0.0) for v in feat_vals],
                 marker_color="#6ea8ff",
+                text=[f"{v:,.3g}" for v in feat_vals],
+                textposition="outside",
             )
         ]
     )
+    # Log scale: real windows mix bytes (~1e5) with flag counts (~1e1) — a
+    # linear axis flattened every feature but bytes into identical zero-bars.
+    fig5.update_yaxes(type="log")
     fig5.update_layout(
         template="plotly_dark",
         paper_bgcolor="#0b0d12",
         plot_bgcolor="#0b0d12",
-        height=300,
+        height=340,
         xaxis_tickangle=-45,
     )
     st.plotly_chart(fig5, use_container_width=True)
 
-    # Entity timeline across all states
-    st.subheader("Entity Activity Over Time")
-    entity_counts = []
-    for s in scenario_states:
-        entity_counts.append(
-            {
-                "time": s.window_start.isoformat(),
-                "entities": len(s.entities),
-                "events": s.features.get("event_count", 0),
-                "bytes": s.features.get("bytes", 0),
-            }
+    # Per-window feature evolution for the features that change most across
+    # the scenario — moving the slider above visibly moves the marker.
+    st.subheader("Selected Window in Scenario Evolution")
+    evolution_names = [
+        name
+        for name in ("event_count", "bytes", "syn_count", "rst_count", "flow_event_count")
+        if any(name in s.features for s in scenario_states)
+    ]
+    fig_evo = go.Figure()
+    for name in evolution_names:
+        fig_evo.add_trace(
+            go.Scatter(
+                x=[s.window_start.isoformat() for s in scenario_states],
+                y=[s.features.get(name, 0.0) for s in scenario_states],
+                mode="lines",
+                name=name,
+            )
         )
-
-    fig6 = go.Figure()
-    times = [e["time"] for e in entity_counts]
-    fig6.add_trace(
-        go.Scatter(
-            x=times,
-            y=[e["entities"] for e in entity_counts],
-            mode="lines+markers",
-            name="Entities",
-            line=dict(color="#6dd3a8", width=2),
+    if evolution_names:
+        fig_evo.add_vline(
+            x=state.window_start.isoformat(),
+            line_dash="dot",
+            line_color="#ef6f6f",
+            annotation_text="selected window",
         )
-    )
-    fig6.add_trace(
-        go.Scatter(
-            x=times,
-            y=[e["events"] for e in entity_counts],
-            mode="lines",
-            name="Events",
-            line=dict(color="#6ea8ff", width=2),
-        )
-    )
-    fig6.update_layout(
+    fig_evo.update_layout(
         template="plotly_dark",
         paper_bgcolor="#0b0d12",
         plot_bgcolor="#0b0d12",
         height=300,
-        xaxis_title="Time",
-        yaxis_title="Count",
+        xaxis_title="Window start",
+        yaxis_title="Value (log)",
     )
-    st.plotly_chart(fig6, use_container_width=True)
+    fig_evo.update_yaxes(type="log")
+    st.plotly_chart(fig_evo, use_container_width=True)
+
+    # Edge table for the selected window — the raw host-to-host activity.
+    with st.expander(f"Edges in selected window ({len(state.edge_summary)})"):
+        if state.edge_summary:
+            st.dataframe(
+                [
+                    {
+                        "source": e["source"],
+                        "destination": e["destination"],
+                        "flows": e["count"],
+                        "bytes": e["bytes"],
+                    }
+                    for e in state.edge_summary[:50]
+                ],
+                use_container_width=True,
+            )
+        else:
+            st.caption("No edges in this window.")
 
 # ── Tab: Comparison ──────────────────────────────────────────────────
 with tab_compare:

@@ -86,6 +86,10 @@ def test_permission_matrix_is_explicit() -> None:
     assert not role_can("analyst", "GET", "/admin/keys")
     assert not role_can("viewer", "POST", "/v1/forecast")
     assert role_can("admin", "DELETE", "/anything")
+    # Sensors push live telemetry via /v1/events (analyst+engineer, not viewer).
+    assert role_can("analyst", "POST", "/v1/events")
+    assert role_can("engineer", "POST", "/v1/events")
+    assert not role_can("viewer", "POST", "/v1/events")
 
 
 def test_audit_log_is_append_only(tmp_path) -> None:

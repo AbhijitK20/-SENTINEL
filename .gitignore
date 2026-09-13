@@ -34,5 +34,8 @@ reports/generated/
 reports/live/
 reports/api/
 
+# Fetched threat-intel feeds refresh out-of-band; never commit
+reports/threat_intel/
+
 # Local trust-ledger records may contain operational alert metadata
 reports/generated/ledger/

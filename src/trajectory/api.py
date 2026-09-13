@@ -143,17 +143,25 @@ class _PushSource:
 
 
 def _load_threat_feed(path: str | None) -> ThreatIntelFeed:
-    """Load the intel feed from a local CSV file; empty feed on any failure.
+    """Load the intel feed from a local file; empty feed on any failure.
 
     Offline-first by contract (tests/test_offline.py): the runtime never
     fetches URLs itself. Operators refresh the feed file out-of-band (cron,
-    compose init) and point SENTINEL_THREAT_FEED_FILE at it. A missing or
-    unreadable file degrades to no enrichment — the API must still boot.
+    ``scripts/fetch_threat_feed.py``, compose init) and point
+    SENTINEL_THREAT_FEED_FILE at it. Both formats produced by the refresh path
+    are accepted: the saved ``.json`` snapshot from the fetch script and a raw
+    URLhaus ``.csv`` body. A missing or unreadable file degrades to no
+    enrichment — the API must still boot.
     """
     if not path:
         return ThreatIntelFeed()
     try:
-        text = Path(path).read_text(encoding="utf-8", errors="replace")
+        target = Path(path)
+        if target.suffix == ".json":
+            feed = ThreatIntelFeed.load(target)
+            print(f"threat-intel: loaded {len(feed)} indicators from {path} (json snapshot)")
+            return feed
+        text = target.read_text(encoding="utf-8", errors="replace")
         feed = ThreatIntelFeed()
         count = feed.load_csv(text)
         print(f"threat-intel: loaded {count} indicators from {path}")

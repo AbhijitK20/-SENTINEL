@@ -71,3 +71,34 @@ def test_split_manifest_has_disjoint_scenario_sets() -> None:
 def test_invalid_target_configuration_is_rejected() -> None:
     with pytest.raises(ValueError, match="horizon must be positive"):
         build_transition_targets([], horizon=0)
+
+
+def test_stratified_split_balances_attack_classes() -> None:
+    from collections import Counter
+
+    from trajectory.targets import make_stratified_split_manifest
+
+    # Two classes, six scenarios: round-robin dealing must put both classes
+    # in every split (the random split could stack all DDoS into one split).
+    scenarios = ["ddos-1", "ddos-2", "ddos-3", "portscan-1", "portscan-2", "portscan-3"]
+    stages = {
+        s: ("Denial of Service" if s.startswith("ddos") else "Reconnaissance") for s in scenarios
+    }
+    manifest = make_stratified_split_manifest(scenarios, stages, seed=5)
+    all_assigned = (
+        manifest.train_scenarios + manifest.validation_scenarios + manifest.test_scenarios
+    )
+    assert sorted(all_assigned) == sorted(scenarios)  # nothing lost, nothing doubled
+    for split in (manifest.train_scenarios, manifest.validation_scenarios, manifest.test_scenarios):
+        classes = Counter(stages[s] for s in split)
+        assert classes["Denial of Service"] >= 1
+        assert classes["Reconnaissance"] >= 1
+
+
+def test_stratified_split_rejects_unknown_stage() -> None:
+    import pytest
+
+    from trajectory.targets import make_stratified_split_manifest
+
+    with pytest.raises(ValueError, match="stage missing"):
+        make_stratified_split_manifest(["a", "b"], {"a": "Benign"}, seed=1)

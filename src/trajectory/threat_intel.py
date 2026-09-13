@@ -54,15 +54,24 @@ class ThreatIntelFeed:
 
     # ── loading ──────────────────────────────────────────────────────
     def load_csv(self, text: str, *, feed: str = "urlhaus") -> int:
-        """Parse a URLhaus-format CSV body; returns the indicator count."""
+        """Parse a URLhaus-format CSV body; returns the indicator count.
+
+        Two accepted layouts (both observed in the wild):
+        - the legacy headered form ``id,dateadded,url,...``
+        - the current headerless dump: a ``#`` banner, then 9 quoted columns
+          with the URL in position 3 (the real https://urlhaus.abuse.ch
+          /downloads/csv/ payload, served as a ZIP containing csv.txt).
+        """
         lines = [line for line in text.splitlines() if line.strip() and not line.startswith("#")]
         if not lines:
             return 0
-        reader = csv.DictReader(io.StringIO("\n".join(lines)))
         count = 0
-        for row in reader:
+        for row in _csv_rows(lines):
             url = (row.get("url") or "").strip()
-            if not url:
+            if "://" not in url:
+                # Real URLhaus rows always carry a scheme; anything else is
+                # noise (banner remnants, malformed rows) and is never an
+                # indicator.
                 continue
             host = _host_of(url)
             if not host:
@@ -153,6 +162,43 @@ def _host_of(url: str) -> str:
     if "://" in text:
         text = text.split("://", 1)[1]
     return text.split("/", 1)[0]
+
+
+# Column layout of the current headerless URLhaus dump (csv.txt inside the ZIP):
+# id, dateadded, url, url_status, threat, tags, urlhaus_reference, reporter —
+# position 2 (0-based) is the URL, same column as the legacy headered form.
+_URLHAUS_COLUMNS = (
+    "id",
+    "dateadded",
+    "url",
+    "url_status",
+    "threat",
+    "tags",
+    "urlhaus_reference",
+    "reporter",
+)
+
+
+def _csv_rows(lines: list[str]) -> list[dict[str, str]]:
+    """Dict rows for both headered and headerless URLhaus CSV layouts.
+
+    Detection rule: a first line that contains ``url``, a comma, and no
+    quotes is treated as a legacy header row (DictReader path). Anything
+    else is the current headerless dump, whose quoted positional columns
+    are mapped onto the known URLhaus layout.
+    """
+    first = lines[0]
+    looks_headered = "url" in first.lower() and "," in first and '"' not in first
+    if looks_headered:
+        return list(csv.DictReader(io.StringIO("\n".join(lines))))
+    # Headerless dump: map positional columns onto the known layout.
+    rows: list[dict[str, str]] = []
+    for line in lines:
+        fields = next(csv.reader([line]))
+        if len(fields) < 3:
+            continue
+        rows.append(dict(zip(_URLHAUS_COLUMNS, fields, strict=False)))
+    return rows
 
 
 @dataclass(frozen=True)
