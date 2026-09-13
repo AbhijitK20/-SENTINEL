@@ -54,6 +54,7 @@ from trajectory.schemas import (
 )
 from trajectory.state_builder import build_network_states
 from trajectory.telemetry import parse_syslog_line
+from trajectory.threat_intel import ThreatIntelFeed
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from trajectory.predict import LoadedArtifacts
@@ -402,6 +403,7 @@ class LiveEngine:
         max_history: int = 120,
         asset_registry: dict[str, AssetRecord] | None = None,
         detector_thresholds: DetectorSet | None = None,
+        threat_feed: ThreatIntelFeed | None = None,
     ) -> None:
         if window_seconds <= 0 or stride_seconds <= 0:
             raise ValueError("window_seconds and stride_seconds must be positive")
@@ -430,6 +432,7 @@ class LiveEngine:
         self._findings: deque[AttackFinding] = deque(maxlen=600)
         self._detector_thresholds = detector_thresholds or DetectorSet()
         self._asset_registry = asset_registry or default_asset_registry()
+        self._threat_feed = threat_feed
         self._last_error: str | None = None
         self._worker: threading.Thread | None = None
 
@@ -544,6 +547,7 @@ class LiveEngine:
             tuple(self._states[:-1]),
             thresholds=self._detector_thresholds,
             asset_registry=self._asset_registry,
+            threat_feed=self._threat_feed,
         )
         self._findings.extend(findings)
         self._history.append(

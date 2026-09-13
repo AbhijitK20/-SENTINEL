@@ -1,4 +1,5 @@
-# Local pilot compose: dashboard + REST API from one image.
+# Local pilot compose: dashboard + REST API from one image, plus an optional
+# observability stack (Prometheus + Grafana) under the `obs` profile.
 # This is NOT the production architecture (Kubernetes, Kafka, Postgres) —
 # those need real infrastructure decisions and stay in ROADMAP.md.
 services:
@@ -15,8 +16,32 @@ services:
     image: sentinel:local
     build: .
     command: ["uv", "run", "--no-sync", "uvicorn", "trajectory.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      SENTINEL_ARTIFACTS_DIR: /app/reports/generated/real-benchmark/baseline
     ports:
       - "8000:8000"
     volumes:
       - ./reports:/app/reports
     restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    profiles: ["obs"]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    profiles: ["obs"]

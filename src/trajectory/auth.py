@@ -152,6 +152,34 @@ class ApiKeyStore:
         self._append(record)
         return raw, record
 
+    def register_raw(
+        self,
+        raw_key: str,
+        role: str,
+        *,
+        label: str = "",
+        org_id: str = "default",
+    ) -> ApiKeyRecord:
+        """Register a deployer-chosen raw key (bootstrap/admin provisioning).
+
+        Unlike :meth:`create`, the raw value is supplied by the operator (e.g.
+        via the SENTINEL_BOOTSTRAP_KEY env var) so the very first admin key
+        can be provisioned without an existing key. Same storage rules apply:
+        only the SHA-256 hash is persisted.
+        """
+        if role not in ROLES:
+            raise ValueError(f"unknown role: {role} (valid: {', '.join(ROLES)})")
+        record = ApiKeyRecord(
+            key_id=raw_key[:14],
+            key_hash=hash_key(raw_key),
+            role=role,
+            org_id=org_id,
+            label=label,
+            created_at=_now(),
+        )
+        self._append(record)
+        return record
+
     def revoke(self, key_id: str) -> bool:
         """Mark a key revoked; returns False if the id is unknown/already revoked."""
         latest: dict[str, ApiKeyRecord] = {}

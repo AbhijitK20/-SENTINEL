@@ -10,6 +10,7 @@ Run: ``uv run uvicorn trajectory.api:create_app --factory --port 8000``
 
 from __future__ import annotations
 
+import os
 import time
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -33,6 +34,7 @@ from trajectory.predict import DECISION_THRESHOLD, load_artifacts
 from trajectory.registry import ModelRegistry
 from trajectory.schemas import Forecast, UnifiedEvent
 from trajectory.state_builder import build_network_states
+from trajectory.threat_intel import ThreatIntelFeed
 
 DEFAULT_ASSETS_DIR = Path("reports/generated/real-benchmark/baseline")
 DEFAULT_AUTH_DIR = Path("reports/api")
@@ -140,40 +142,78 @@ class _PushSource:
         raise RuntimeError("_PushSource is never started")
 
 
+def _load_threat_feed(path: str | None) -> ThreatIntelFeed:
+    """Load the intel feed from a local CSV file; empty feed on any failure.
+
+    Offline-first by contract (tests/test_offline.py): the runtime never
+    fetches URLs itself. Operators refresh the feed file out-of-band (cron,
+    compose init) and point SENTINEL_THREAT_FEED_FILE at it. A missing or
+    unreadable file degrades to no enrichment — the API must still boot.
+    """
+    if not path:
+        return ThreatIntelFeed()
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+        feed = ThreatIntelFeed()
+        count = feed.load_csv(text)
+        print(f"threat-intel: loaded {count} indicators from {path}")
+        return feed
+    except OSError as error:
+        print(f"threat-intel: feed unavailable ({error}); continuing without enrichment")
+        return ThreatIntelFeed()
+
+
 def create_app(
     artifacts_dir: str | Path | None = None,
     *,
     threshold: float | None = None,
     auth_enabled: bool = True,
     auth_dir: str | Path | None = None,
+    threat_feed_file: str | Path | None = None,
 ) -> FastAPI:
     """Build the API app against one artifacts directory.
 
     ``threshold=None`` uses the artifact-calibrated threshold, then 0.5 —
     the same resolution chain as every other inference path.
     """
-    resolved_dir = Path(artifacts_dir) if artifacts_dir else DEFAULT_ASSETS_DIR
+    # Env-var fallbacks keep the factory signature deployment-friendly
+    # (HF Spaces / Fly.io configure via environment, not code).
+    resolved_dir = Path(
+        artifacts_dir or os.environ.get("SENTINEL_ARTIFACTS_DIR") or DEFAULT_ASSETS_DIR
+    )
     try:
         artifacts = load_artifacts(resolved_dir)
     except Exception as error:  # noqa: BLE001 - surface at startup, not per request
         raise RuntimeError(f"cannot load artifacts from {resolved_dir}: {error}") from error
+    env_threshold = os.environ.get("SENTINEL_THRESHOLD")
     effective_threshold = (
         threshold
         if threshold is not None
+        else float(env_threshold)
+        if env_threshold
         else (artifacts.calibrated_threshold or DECISION_THRESHOLD)
     )
-    resolved_auth_dir = Path(auth_dir) if auth_dir else DEFAULT_AUTH_DIR
+    resolved_auth_dir = Path(auth_dir or os.environ.get("SENTINEL_AUTH_DIR") or DEFAULT_AUTH_DIR)
     keys = ApiKeyStore(resolved_auth_dir / "keys.jsonl") if auth_enabled else None
+    bootstrap_key = os.environ.get("SENTINEL_BOOTSTRAP_KEY")
+    if keys is not None and bootstrap_key:
+        # Operator-provisioned first admin key (deployment bootstrap).
+        # Idempotent: re-registration is harmless because authenticate() folds
+        # to the latest record per key id.
+        keys.register_raw(bootstrap_key, "admin", label="bootstrap")
     audit = AuditLog(resolved_auth_dir / "audit.jsonl") if auth_enabled else None
     ledger = AlertLedger(resolved_auth_dir / "alerts.jsonl")
     cases = CaseStore(resolved_auth_dir / "cases.jsonl")
     registry = ModelRegistry(resolved_auth_dir / "registry.jsonl")
+    feed_path = threat_feed_file or os.environ.get("SENTINEL_THREAT_FEED_FILE")
+    threat_feed = _load_threat_feed(feed_path)
     push_engine = LiveEngine(
         artifacts,
         source=_PushSource(),
         window_seconds=60,
         stride_seconds=30,
         history=3,
+        threat_feed=threat_feed,
     )
     # Lightweight in-process metrics (Phase 8): per-status counters and a
     # latency summary, rendered in Prometheus text format at /metrics.
@@ -300,7 +340,9 @@ def create_app(
         findings = []
         for index, state in enumerate(states):
             history = tuple(states[max(0, index - 6) : index])
-            findings.extend(run_all_detectors(state, history, thresholds=thresholds))
+            findings.extend(
+                run_all_detectors(state, history, thresholds=thresholds, threat_feed=threat_feed)
+            )
         incidents = correlate(tuple(findings))
         return {
             "windows": len(states),
@@ -474,6 +516,15 @@ def create_app(
             "# HELP sentinel_windows_emitted_total Live push-engine windows emitted.",
             "# TYPE sentinel_windows_emitted_total counter",
             f"sentinel_windows_emitted_total {push_engine.poll().windows_emitted}",
+            "# HELP sentinel_push_incidents_total Incidents correlated by the push engine.",
+            "# TYPE sentinel_push_incidents_total counter",
+            f"sentinel_push_incidents_total {len(push_engine.poll().incidents)}",
+            "# HELP sentinel_cases_open Currently open (unresolved) analyst cases.",
+            "# TYPE sentinel_cases_open gauge",
+            f"sentinel_cases_open {sum(1 for c in cases.list_cases() if c.status != 'RESOLVED')}",
+            "# HELP sentinel_threat_indicators Loaded threat-intel indicators.",
+            "# TYPE sentinel_threat_indicators gauge",
+            f"sentinel_threat_indicators {len(threat_feed)}",
         ]
         return Response(content="\n".join(lines) + "\n", media_type="text/plain")
 

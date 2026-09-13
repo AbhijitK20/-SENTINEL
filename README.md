@@ -84,7 +84,8 @@ Trajectory asks: "Given the current network trajectory, what is likely to happen
 - Quality: `EVALUATION_PLAN.md`, `EXPLAINABILITY_PLAN.md`, `TEST_STRATEGY.md`, `QUALITY_GATES.md`, `KNOWN_LIMITATIONS.md`
 - Detectors: `DETECTORS.md` (attack-type detectors, incident correlation, asset risk fusion)
 - Platform: `ROADMAP.md` (enterprise roadmap, scale levels, phase status) + `trajectory/api.py` (FastAPI service: forecast/detect/alerts plus `/v1/cases` case lifecycle, `/v1/registry` model promotion, `/v1/drift` PSI checks, `/v1/compliance` control report, `/v1/events` live push, `/metrics` Prometheus endpoint, key-based auth with RBAC and audit — see `trajectory/auth.py`)
-- Operations: model promotion in `trajectory/registry.py`, PSI drift monitoring in `trajectory/drift.py`, case lifecycle + SLA in `trajectory/cases.py`, compliance mapping in `trajectory/compliance.py`, FedAvg simulation in `trajectory/federated.py`, HMAC-signed feedback in `trajectory/feedback.py`
+- Operations: model promotion in `trajectory/registry.py`, PSI drift monitoring in `trajectory/drift.py`, case lifecycle + SLA in `trajectory/cases.py`, compliance mapping in `trajectory/compliance.py`, FedAvg simulation in `trajectory/federated.py`, HMAC-signed feedback in `trajectory/feedback.py`, keyless threat-intel feeds in `trajectory/threat_intel.py`
+- Deployment: API container (`Dockerfile.api`) with env-var config and artifact bootstrap for Hugging Face Spaces; observability stack (`docker compose --profile obs up`) — see `DEPLOYMENT.md`
 - Delivery: `SPRINT_PLAN.md`, `DEMO_PLAN.md`, `DEMO_SCENARIO.md`, `SUBMISSION_PLAN.md`
 - Presentation: `PRESENTATION_OUTLINE.md` (content), `scripts/build_deck.py` (generates `deliverables/Trajectory_SIH26153_Idea_Deck.pptx` and `.pdf`)
 

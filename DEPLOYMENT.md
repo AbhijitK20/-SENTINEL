@@ -143,3 +143,52 @@ Select `Local loopback capture` and interface `lo`. This captures packets on
 the machine hosting Streamlit. It is not available as a browser or hosted-cloud
 capture source. The synthetic/local attack button remains a safe flow/JSONL
 sensor simulation and may still show the packet-features-unavailable warning.
+
+## Deploying the REST API (Hugging Face Space or any container host)
+
+`Dockerfile.api` builds a container that serves the FastAPI service
+(`trajectory/api.py`) on one port (default 7860 for HF Spaces).
+
+```bash
+docker build -f Dockerfile.api -t sentinel-api .
+docker run --rm -p 7860:7860 -e SENTINEL_BOOTSTRAP_KEY='<choose-a-long-random-key>' sentinel-api
+```
+
+On first start the container trains a small deterministic synthetic baseline
+(`scripts/bootstrap_api_artifacts.py`) so the API works with zero external
+state — the `/model` endpoint reports this demo model honestly. Deployers
+with real artifacts set `SENTINEL_ARTIFACTS_DIR` to a volume mount instead.
+
+### Environment variables
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `SENTINEL_PORT` | Port the API listens on (HF Spaces expects 7860) | `7860` |
+| `SENTINEL_ARTIFACTS_DIR` | Baseline artifacts directory (auto-bootstrapped if empty) | `/tmp/sentinel-artifacts` |
+| `SENTINEL_AUTH_DIR` | Keys/audit/cases/registry storage | `reports/api` |
+| `SENTINEL_BOOTSTRAP_KEY` | Operator-chosen first admin API key (provision once, then rotate via `/admin/keys`) | unset |
+| `SENTINEL_THRESHOLD` | Override the decision threshold | artifact-calibrated |
+| `SENTINEL_THREAT_FEED_FILE` | Local URLhaus-format threat-intel CSV path (optional enrichment; refresh out-of-band, e.g. cron — the API never fetches URLs itself) | unset |
+
+### Creating an Hugging Face Space for the API
+
+1. New Space → SDK `Docker` → upload this repo.
+2. Set the Dockerfile to `Dockerfile.api` (Space settings → Dockerfile path,
+   or rename). Add `SENTINEL_BOOTSTRAP_KEY` as a **Secret**.
+3. The Space serves `/health`, `/docs` (interactive OpenAPI), and all `/v1/*`
+   endpoints on port 7860.
+
+## Observability stack (local pilot)
+
+Prometheus scrapes the API's `/metrics` endpoint and Grafana renders the
+provisioned `SENTINEL API Overview` dashboard:
+
+```bash
+docker compose --profile obs up -d      # api + prometheus + grafana
+# Grafana: http://localhost:3000 (anonymous viewer; admin/admin)
+# Prometheus targets: http://localhost:9090/targets
+```
+
+Scraped metrics: `sentinel_requests_total` (by status), request latency
+sum/count, `sentinel_windows_emitted_total`, `sentinel_push_incidents_total`,
+`sentinel_cases_open`, `sentinel_threat_indicators`.

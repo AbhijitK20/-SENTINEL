@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from statistics import mean, pstdev
 
 from trajectory.schemas import AssetRecord, AttackFinding, NetworkState, StageEvidence
+from trajectory.threat_intel import ThreatIntelFeed, evaluate_hosts
 
 DETECTOR_VERSION = "detectors-v1"
 
@@ -133,6 +134,7 @@ class DetectorContext:
     state: NetworkState
     history: tuple[NetworkState, ...] = field(default_factory=tuple)
     asset_registry: dict[str, AssetRecord] | None = None
+    threat_feed: ThreatIntelFeed | None = None
 
 
 @dataclass(frozen=True)
@@ -183,6 +185,15 @@ def _finding(
 
 def _window_seconds(state: NetworkState) -> float:
     return max(1e-9, (state.window_end - state.window_start).total_seconds())
+
+
+def _intel_verdict(ctx: DetectorContext):
+    """Threat-intel check over the window's entities (None when no feed)."""
+    if ctx.threat_feed is None:
+        return None
+    hosts = sorted(set(ctx.state.entities))
+    hosts += [edge["destination"] for edge in ctx.state.edge_summary]
+    return evaluate_hosts(ctx.threat_feed, hosts)
 
 
 def detect_ddos(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
@@ -359,6 +370,18 @@ def detect_exfil(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding
     ]
     if z != 0.0:
         evidence.append(_evidence("bytes_zscore", "bytes vs benign baseline", round(z, 2)))
+    verdict = _intel_verdict(ctx)
+    if verdict is not None and verdict.known_malicious:
+        probability = min(1.0, max(probability, 0.9))
+        evidence.append(
+            _evidence("intel_matches", "destinations on threat-intel lists", len(verdict.matches))
+        )
+        warnings.append(
+            f"transfer involves hosts on feed '{verdict.feed}' — raised to reflect "
+            "known-malicious destination"
+        )
+        if verdict.warning:
+            warnings.append(verdict.warning)
     return _finding("exfiltration", ctx, probability, evidence, warnings, thresholds.exfil)
 
 
@@ -436,15 +459,28 @@ def detect_phishing(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFind
 
 
 def detect_c2_beacon(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
-    """C2 scoring when DNS/proxy telemetry provides a beacon score.
+    """C2 scoring from sensor beacon scores or threat-intel matches.
 
-    Upgrades the always-insufficient C2 stub: sensors that can compute a
-    beaconing score (periodic outbound intervals, rare-domain density) put
-    ``c2_beacon_score`` into event features; the window mean then drives the
-    finding. Without that telemetry the detector stays at 0.0 and says why.
+    Two honest paths to a score: a sensor-supplied ``c2_beacon_score``, or a
+    destination present in a loaded threat-intel feed (known-malicious host).
+    With neither, the detector stays at 0.0 and says why.
     """
     state = ctx.state
     score = state.features.get("c2_beacon_score")
+    verdict = _intel_verdict(ctx)
+    if verdict is not None and verdict.known_malicious:
+        probability = 0.85
+        evidence = [
+            _evidence("intel_matches", "destinations on threat-intel lists", len(verdict.matches))
+        ]
+        warnings = [
+            f"matched threat-intel feed '{verdict.feed}' — list evidence, not proof of beaconing"
+        ]
+        if verdict.warning:
+            warnings.append(verdict.warning)
+        return _finding(
+            "command_and_control", ctx, probability, evidence, warnings, thresholds.exfil
+        )
     if score is None:
         return _finding(
             "command_and_control",
@@ -511,10 +547,13 @@ def run_all_detectors(
     history: tuple[NetworkState, ...],
     thresholds: DetectorSet | None = None,
     asset_registry: dict[str, AssetRecord] | None = None,
+    threat_feed: ThreatIntelFeed | None = None,
 ) -> tuple[AttackFinding, ...]:
     """Run every detector over one window state and return all findings."""
     active = thresholds or DetectorSet()
-    ctx = DetectorContext(state=state, history=history, asset_registry=asset_registry)
+    ctx = DetectorContext(
+        state=state, history=history, asset_registry=asset_registry, threat_feed=threat_feed
+    )
     return (
         detect_ddos(ctx, active),
         detect_recon(ctx, active),

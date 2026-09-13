@@ -1,0 +1,77 @@
+{
+  "title": "SENTINEL API Overview",
+  "uid": "sentinel-api",
+  "tags": ["sentinel"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request rate by status (1m)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (code) (rate(sentinel_requests_total[1m]))",
+          "legendFormat": "HTTP {{code}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 15 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Mean request latency (5m)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [
+        {
+          "expr": "rate(sentinel_request_latency_ms_sum[5m]) / rate(sentinel_request_latency_ms_count[5m])",
+          "legendFormat": "mean ms"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "fillOpacity": 15 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Live push windows emitted",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [{ "expr": "sentinel_windows_emitted_total", "legendFormat": "windows" }]
+    },
+    {
+      "id": 4,
+      "title": "Push incidents",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [{ "expr": "sentinel_push_incidents_total", "legendFormat": "incidents" }]
+    },
+    {
+      "id": 5,
+      "title": "Open analyst cases",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [{ "expr": "sentinel_cases_open", "legendFormat": "open cases" }]
+    },
+    {
+      "id": 6,
+      "title": "Loaded threat-intel indicators",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [{ "expr": "sentinel_threat_indicators", "legendFormat": "indicators" }]
+    }
+  ]
+}
