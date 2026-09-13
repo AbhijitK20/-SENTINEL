@@ -553,7 +553,10 @@ def slide_3(prs: Presentation) -> None:
     # Layered architecture (left)
     lx, lw = MARGIN, Inches(6.2)
     layers = [
-        ("INPUT", "Flow CSV  |  PCAP captures  ->  normalization + packet feature extraction"),
+        (
+            "INPUT",
+            "Flow CSV  |  PCAP captures  |  JSONL/syslog tail  |  Scapy live capture",
+        ),
         (
             "DATA",
             "Unified events -> timestamped windows -> state store  |  labels, transition targets, split manifests",
@@ -566,17 +569,21 @@ def slide_3(prs: Presentation) -> None:
             "OUTPUT",
             "Risk timeline  |  attack stage  |  assets  |  evidence  |  confidence + warnings",
         ),
-        ("UI", "Offline analyst dashboard (Streamlit/Flask + Plotly)"),
+        (
+            "API",
+            "FastAPI REST: /v1/forecast, /v1/detect, /v1/alerts — same checksummed artifacts as the UI",
+        ),
+        ("UI", "Offline analyst dashboard (Streamlit + Plotly)"),
     ]
     yy = Inches(1.2)
     for name, desc in layers:
-        add_rect(s, lx, yy, lw, Inches(0.72), fill=PANEL_ALT, line=ACCENT)
+        add_rect(s, lx, yy, lw, Inches(0.6), fill=PANEL_ALT, line=ACCENT)
         add_text(
             s,
             lx + Inches(0.1),
             yy + Inches(0.05),
             Inches(1.1),
-            Inches(0.6),
+            Inches(0.5),
             name,
             size=11,
             bold=True,
@@ -586,46 +593,74 @@ def slide_3(prs: Presentation) -> None:
         add_text(
             s,
             lx + Inches(1.2),
-            yy + Inches(0.05),
+            yy + Inches(0.02),
             lw - Inches(1.3),
-            Inches(0.62),
+            Inches(0.56),
             desc,
-            size=10,
+            size=9.5,
             anchor=MSO_ANCHOR.MIDDLE,
         )
-        yy += Inches(0.8)
+        yy += Inches(0.66)
 
-    # Security + fallback under architecture
+    # Security, auth flow, and role matrix under architecture
     card(
         s,
         lx,
         Inches(5.3),
-        Inches(3.0),
+        Inches(2.0),
         Inches(1.75),
         "Security & Privacy",
         [
             "Local-first; no external AI service",
+            "API keys hashed (SHA-256) + RBAC",
             "Anonymized identifiers in demos",
             "No secrets/captures committed",
-            "Provenance, versions, checksums",
-            "Human-in-the-loop; no auto-blocking",
+            "Missing input -> error, never a fabricated forecast",
         ],
-        size=9.5,
+        size=8.5,
     )
     card(
         s,
-        lx + Inches(3.15),
+        lx + Inches(2.15),
         Inches(5.3),
-        Inches(3.05),
+        Inches(2.05),
         Inches(1.75),
-        "Input Fallback Logic",
+        "Authentication Flow",
         [
-            "PCAP -> flow + packet features",
-            "CSV only -> flow features + packet-coverage warning",
-            "Data missing -> validation error, no fabricated forecast",
-            "All paths run offline",
+            "POST /admin/keys -> sent_… key shown once",
+            "Only SHA-256 hashes stored",
+            "X-API-Key header on every request",
+            "401 unauthenticated · 403 wrong role",
+            "Revocation wins; every request audit-logged",
         ],
-        size=9.5,
+        size=8.5,
+    )
+    add_text(
+        s,
+        lx + Inches(4.35),
+        Inches(5.3),
+        Inches(1.85),
+        Inches(0.3),
+        "ROLE MATRIX (API)",
+        size=10,
+        bold=True,
+        color=ACCENT,
+    )
+    table(
+        s,
+        lx + Inches(4.35),
+        Inches(5.62),
+        Inches(1.85),
+        Inches(1.3),
+        [
+            ["Role", "API access"],
+            ["viewer", "read-only"],
+            ["analyst", "forecast · detect"],
+            ["engineer", "+ list keys"],
+            ["admin", "full control"],
+        ],
+        col_widths=[0.55, 1.3],
+        size=8.5,
     )
 
     # Right: process flow + AI table
@@ -707,7 +742,7 @@ def slide_3(prs: Presentation) -> None:
 
     footer(
         s,
-        "No Kafka/cloud gateway/microservices are claimed: the prototype runs on local files and model artifacts. Docker only if packaged before submission.",
+        "Implemented: FastAPI REST + hashed API keys with a 4-role matrix + audit log. No Kafka/cloud gateway/microservices claimed; prototype runs on local files and artifacts.",
     )
 
 

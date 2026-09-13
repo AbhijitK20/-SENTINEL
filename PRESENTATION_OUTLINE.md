@@ -182,7 +182,7 @@ The example must be labelled **Illustrative Output** until produced by the teste
 
 ```text
 ┌──────────────────── INPUT LAYER ────────────────────┐
-│ Flow CSV                     PCAP / packet captures │
+│ Flow CSV        PCAP captures      JSONL/syslog tail│
 └───────────────┬──────────────────────┬──────────────┘
                 ↓                      ↓
        Flow normalization      Packet feature extraction
@@ -204,14 +204,46 @@ The example must be labelled **Illustrative Output** until produced by the teste
 │ Confidence    │ Warnings     │ Replay comparison   │
 └──────────────────────────────┬──────────────────────┘
                                ↓
+┌──────────────────── API LAYER ──────────────────────┐
+│ FastAPI REST: /v1/forecast /v1/detect /v1/alerts   │
+│ Hashed API keys (SHA-256) · 4-role matrix · audit  │
+└──────────────────────────────┬──────────────────────┘
+                               ↓
                     Offline Analyst Dashboard
 ```
 
+### Authentication Flow (implemented)
+
+```text
+POST /admin/keys (admin)
+        ↓
+"sent_…" key shown ONCE at creation → only SHA-256 hash stored
+        ↓
+Client sends X-API-Key header on every request
+        ↓
+Permission check against the role matrix
+   ├─ no/unknown key        → 401 unauthorized
+   ├─ key lacks permission  → 403 forbidden
+   └─ permitted             → action + role + status audit-logged
+        ↓
+POST /admin/keys/{id}/revoke — revocation always wins over creation
+```
+
+### Role Matrix (API)
+
+| Role    | API access                                  |
+|---------|---------------------------------------------|
+| viewer  | read-only endpoints                         |
+| analyst | + forecast, detect, alerts                  |
+| engineer| + list keys                                 |
+| admin   | + issue/revoke keys (full control)          |
+
+Scope honesty: API-key auth with RBAC is implemented; SSO/OIDC and MFA are not — they require a real identity provider and remain documented future work.
+
 Architecture accuracy notes:
 
-- Do not add Kafka, a cloud API gateway, distributed databases, or Docker services unless they are actually implemented.
-- The prototype can use local files and model artifacts; production integration is a future deployment path.
-- If containerization is completed before submission, show Docker as a packaging boundary around the application rather than inventing microservices.
+- The FastAPI API layer, hashed API keys, the 4-role permission matrix, and the audit log ARE implemented — show them as built.
+- SSO/OIDC, MFA, tenant isolation, Kafka, a cloud API gateway, distributed databases, and Docker services are NOT implemented; do not show them as built.
 
 ### Technical Approach Flow
 
