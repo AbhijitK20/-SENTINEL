@@ -93,7 +93,7 @@ def test_report_contains_contract_sections(tmp_path: Path) -> None:
 
     result = forecast(states, loaded, max_horizon=3)
     report = render_report(
-        result, scenario_id=scenario, evaluation=evaluation, dataset_id="synthetic-recon-lateral-v1"
+        result, scenario_id=scenario, evaluation=evaluation, dataset_id="synthetic-recon-lateral-v2"
     )
 
     assert "# Trajectory Forecast Report" in report

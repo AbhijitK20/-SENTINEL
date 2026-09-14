@@ -521,8 +521,7 @@ def create_app(
             "alert_status": status.alert_status,
             "incidents": [incident.model_dump(mode="json") for incident in status.incidents],
             "findings": [
-                finding.model_dump(mode="json")
-                for finding in list(push_engine._findings)[-50:]
+                finding.model_dump(mode="json") for finding in list(push_engine._findings)[-50:]
             ],
             "history": [
                 {
@@ -532,13 +531,21 @@ def create_app(
                     "probability": w.probability,
                     "threshold": w.threshold,
                     "stage": w.stage,
-                    "attack_findings": [
-                        f.model_dump(mode="json") for f in w.attack_findings
-                    ],
+                    "attack_findings": [f.model_dump(mode="json") for f in w.attack_findings],
                 }
                 for w in list(push_engine._history)[-10:]
             ],
         }
+
+    @app.post("/v1/live/reset")
+    def live_reset() -> dict[str, Any]:
+        """Reset the push engine state (clear findings, incidents, history).
+
+        Call this before a new attack demo so the dashboard shows fresh data
+        instead of stale cumulative results.
+        """
+        push_engine.reset()
+        return {"status": "reset", "time": datetime.now(UTC).isoformat()}
 
     @app.get("/metrics")
     def metrics() -> Response:

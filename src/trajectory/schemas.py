@@ -181,8 +181,8 @@ class AttackFinding(BaseModel):
     severity: Literal["info", "low", "medium", "high", "critical"]
     confidence: Literal["low", "medium", "high"]
     is_alert: bool = False
-    window_start: datetime
-    window_end: datetime
+    window_start: datetime | None = None
+    window_end: datetime | None = None
     mitre_technique: str | None = None
     affected_assets: list[str] = Field(default_factory=list)
     evidence: list[StageEvidence] = Field(default_factory=list)

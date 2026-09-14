@@ -166,7 +166,9 @@ services:
       - "5001:5001"
     volumes:
       - demo-logs:/logs
-    depends_on: [api]
+    environment:
+      ATTACK_TARGET: http://vulnerable-app:5000
+    depends_on: [api, vulnerable-app]
     restart: unless-stopped
     profiles: ["demo"]
 

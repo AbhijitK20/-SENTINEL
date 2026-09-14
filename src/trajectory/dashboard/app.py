@@ -1603,6 +1603,84 @@ with tab_live:
     attack_requested = col2.button("🚨 Initiate Attack", type="primary", key="live-attack")
     stop_requested = col3.button("■ Stop", key="live-stop")
 
+    # ── Attack trigger buttons ─────────────────────────────────────────
+    st.divider()
+    st.subheader("Force Attack — Trigger Real Attack Scripts")
+    st.caption(
+        "Launch attack scripts against the vulnerable demo app "
+        "(http://localhost:5000). The scanner picks up the traffic and pushes "
+        "it into the SENTINEL API so detectors fire on real HTTP requests."
+    )
+    st.caption(
+        "These buttons run the actual attack modules (brute_force, sqli, scan) "
+        "against the vulnerable Flask app. They require the demo stack to be "
+        "running (docker compose --profile demo up or the vulnerable app locally)."
+    )
+    attack_col1, attack_col2, attack_col3 = st.columns(3)
+    with attack_col1:
+        if st.button("🔑 Brute Force Attack", key="attack-brute-force"):
+            st.session_state["pending_attack"] = "brute_force"
+    with attack_col2:
+        if st.button("💉 SQL Injection Attack", key="attack-sqli"):
+            st.session_state["pending_attack"] = "sqli"
+    with attack_col3:
+        if st.button("🔍 Port Scan Attack", key="attack-scan"):
+            st.session_state["pending_attack"] = "scan"
+
+    # Execute pending attack
+    pending_attack = st.session_state.pop("pending_attack", None)
+    if pending_attack:
+        import subprocess as _sp
+
+        target_url = "http://127.0.0.1:5000"
+        cmd_map = {
+            "brute_force": [
+                sys.executable, "-m", "apps.vulnerable.attacks.brute_force",
+                "--target", target_url, "--delay", "0.1", "--attempts", "5",
+            ],
+            "sqli": [
+                sys.executable, "-m", "apps.vulnerable.attacks.sqli",
+                "--target", target_url, "--delay", "0.1", "--rounds", "1",
+            ],
+            "scan": [
+                sys.executable, "-m", "apps.vulnerable.attacks.scan",
+                "--target", target_url, "--delay", "0.05", "--rounds", "1",
+            ],
+        }
+        attack_labels = {
+            "brute_force": "Brute Force",
+            "sqli": "SQL Injection",
+            "scan": "Port Scan",
+        }
+        cmd = cmd_map[pending_attack]
+        label = attack_labels[pending_attack]
+
+        # Reset the live engine before starting a new attack
+        with st.spinner(f"Resetting live engine and running {label} attack..."):
+            live_eng = st.session_state.get("live_engine")
+            if live_eng is not None:
+                live_eng.reset()
+
+            try:
+                result = _sp.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    cwd=str(ROOT),
+                )
+                output = result.stdout + result.stderr
+                if result.returncode == 0:
+                    st.success(f"{label} attack completed successfully.")
+                else:
+                    st.warning(f"{label} attack finished with code {result.returncode}.")
+                with st.expander(f"{label} output"):
+                    st.code(output[:3000])
+            except _sp.TimeoutExpired:
+                st.error(f"{label} attack timed out after 60s.")
+            except Exception as exc:
+                st.error(f"Failed to run {label} attack: {exc}")
+
     if start_requested or attack_requested:
         try:
             if attack_requested:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from trajectory.assets import fuse_risk
 from trajectory.schemas import AttackFinding, Incident, RiskAssessment
 
@@ -93,7 +95,7 @@ def correlate(
     """
     alerts = sorted(
         (f for f in findings if f.is_alert),
-        key=lambda f: (f.window_start, -f.probability),
+        key=lambda f: (f.window_start or datetime.min.replace(tzinfo=UTC), -f.probability),
     )
     if not alerts:
         return ()
@@ -111,7 +113,10 @@ def correlate(
         # Progression reads chronologically, one step per attack type — the
         # per-window detail lives in findings, not in the analyst-facing chain.
         seen_types: list[str] = []
-        for finding in sorted(chain, key=lambda f: f.window_start):
+        for finding in sorted(
+            chain,
+            key=lambda f: (f.window_start or datetime.min.replace(tzinfo=UTC)),
+        ):
             if finding.attack_type not in seen_types:
                 seen_types.append(finding.attack_type)
         incidents.append(
@@ -121,8 +126,14 @@ def correlate(
                 progression=[STAGE_NAMES.get(t, t) for t in seen_types],
                 finding_attack_types=sorted(set(f.attack_type for f in ordered)),
                 affected_assets=sorted({a for f in ordered for a in f.affected_assets}),
-                first_seen=min(f.window_start for f in ordered),
-                last_seen=max(f.window_end for f in ordered),
+                first_seen=min(
+                    (f.window_start for f in ordered if f.window_start),
+                    default=datetime.min.replace(tzinfo=UTC),
+                ),
+                last_seen=max(
+                    (f.window_end for f in ordered if f.window_end),
+                    default=datetime.min.replace(tzinfo=UTC),
+                ),
                 recommended_actions=recommend(ordered),
             )
         )
@@ -130,6 +141,8 @@ def correlate(
 
 
 def _gap(previous: AttackFinding, following: AttackFinding) -> float:
+    if not following.window_start or not previous.window_end:
+        return 0.0
     if following.window_start <= previous.window_end:
         return 0.0
     return (following.window_start - previous.window_end).total_seconds()

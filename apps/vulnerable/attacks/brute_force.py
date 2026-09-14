@@ -10,8 +10,6 @@ Usage: python apps/vulnerable/attacks/brute_force.py [--target http://demo-app:5
 from __future__ import annotations
 
 import argparse
-import itertools
-import sys
 import time
 from urllib import error, request
 

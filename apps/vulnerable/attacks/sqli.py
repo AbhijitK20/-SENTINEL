@@ -9,7 +9,6 @@ Usage: python apps/vulnerable/attacks/sqli.py [--target http://demo-app:5000]
 from __future__ import annotations
 
 import argparse
-import sys
 import time
 from urllib import error, request
 
@@ -28,7 +27,10 @@ SQL_PAYLOADS = [
 
 def run(target: str, delay: float = 0.2, max_rounds: int = 3) -> int:
     target = target.rstrip("/")
-    print(f"[sqli] attacking {target}/search with {len(SQL_PAYLOADS)} payloads x{max_rounds} rounds")
+    print(
+        f"[sqli] attacking {target}/search with {len(SQL_PAYLOADS)} "
+        f"payloads x{max_rounds} rounds"
+    )
     for round_idx in range(max_rounds):
         for payload in SQL_PAYLOADS:
             encoded = payload.replace(" ", "+")
@@ -45,7 +47,10 @@ def run(target: str, delay: float = 0.2, max_rounds: int = 3) -> int:
                 code = 0
                 body = ""
             leaked = "admin" in body or "password" in body or "SECRET" in body
-            print(f"  round {round_idx+1}  payload={payload[:35]:35s}  status={code}  leaked={leaked}")
+            print(
+                f"  round {round_idx+1}  payload={payload[:35]:35s}  "
+                f"status={code}  leaked={leaked}"
+            )
             time.sleep(delay)
     print(f"[sqli] done: {len(SQL_PAYLOADS) * max_rounds} probes sent")
     return 0

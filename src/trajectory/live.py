@@ -448,6 +448,23 @@ class LiveEngine:
     def stop(self) -> None:
         self._stop.set()
 
+    def reset(self) -> None:
+        """Clear all accumulated state (findings, incidents, history).
+
+        Call this between attack demos so the dashboard shows fresh data
+        instead of stale cumulative results.
+        """
+        with self._lock:
+            self._buffer.clear()
+            self._states.clear()
+            self._history.clear()
+            self._findings.clear()
+            self._events_seen = 0
+            self._anchor = None
+            self._next_boundary = None
+            self._last_forecast = None
+            self._last_error = None
+
     @property
     def source_name(self) -> str:
         return self._source.name

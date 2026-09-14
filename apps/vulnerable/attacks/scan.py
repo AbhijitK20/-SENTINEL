@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import random
-import sys
 import time
 from urllib import error, request
 
@@ -51,7 +50,10 @@ TRAVERSAL_PAYLOADS = [
 def run(target: str, delay: float = 0.1, rounds: int = 2) -> int:
     target = target.rstrip("/")
     total = (len(SCAN_PATHS) + len(TRAVERSAL_PAYLOADS)) * rounds
-    print(f"[scan] probing {target} — {len(SCAN_PATHS)} paths + {len(TRAVERSAL_PAYLOADS)} traversals x{rounds} rounds ({total} requests)")
+    print(
+        f"[scan] probing {target} — {len(SCAN_PATHS)} paths + "
+        f"{len(TRAVERSAL_PAYLOADS)} traversals x{rounds} rounds ({total} requests)"
+    )
 
     for round_idx in range(rounds):
         # Path enumeration

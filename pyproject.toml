@@ -76,6 +76,9 @@ select = ["E", "F", "I", "B", "UP"]
 # HTML template is one long f-string; line wrapping breaks the embedded CSS.
 "scripts/render_snapshot.py" = ["E501"]
 "scripts/render_burndown.py" = ["E501"]
+# HTML template string; line wrapping breaks the embedded CSS.
+"apps/vulnerable/admin.py" = ["E501"]
+"apps/vulnerable/app.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

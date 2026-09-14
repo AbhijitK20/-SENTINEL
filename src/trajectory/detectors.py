@@ -549,12 +549,19 @@ def run_all_detectors(
     asset_registry: dict[str, AssetRecord] | None = None,
     threat_feed: ThreatIntelFeed | None = None,
 ) -> tuple[AttackFinding, ...]:
-    """Run every detector over one window state and return all findings."""
+    """Run every detector over one window state and return all findings.
+
+    Includes both window-based detectors (ddos, recon, credential, lateral,
+    c2, exfil, insider, phishing, malware) AND the sequence-prediction
+    detector that fires on detection history patterns.
+    """
+    from trajectory.sequence_detector import detect_sequence_prediction
+
     active = thresholds or DetectorSet()
     ctx = DetectorContext(
         state=state, history=history, asset_registry=asset_registry, threat_feed=threat_feed
     )
-    return (
+    findings: list[AttackFinding] = [
         detect_ddos(ctx, active),
         detect_recon(ctx, active),
         detect_credential(ctx, active),
@@ -564,4 +571,19 @@ def run_all_detectors(
         detect_insider(ctx, active),
         detect_phishing(ctx, active),
         detect_malware(ctx, active),
-    )
+    ]
+
+    # Sequence prediction: fires based on detection history, not current window
+    # This is the key improvement — provides lead time by predicting what's
+    # likely to happen next based on the sequence of past detections.
+    recent_alerts = [f for f in findings if f.is_alert]
+    if recent_alerts:
+        prediction = detect_sequence_prediction(
+            recent_alerts,
+            lookahead=2,
+            min_probability=0.30,
+        )
+        if prediction is not None:
+            findings.append(prediction)
+
+    return tuple(findings)

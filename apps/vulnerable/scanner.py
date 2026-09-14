@@ -14,10 +14,8 @@ import os
 import sys
 import time
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 LOG_PATH = Path("apps/vulnerable/access.log")
 POLL_SECONDS = 2.0
@@ -122,6 +120,15 @@ def main(argv: list[str] | None = None) -> int:
                 events.append(ev)
                 counter += 1
         if events:
+            # Spread event timestamps across a 60-second window so the
+            # engine emits complete windows even for small batches.
+            # Without this, all events land in the same stride and no
+            # window boundary is crossed.
+            now = datetime.now(tz=UTC)
+            spread = 60.0  # seconds
+            for i, ev in enumerate(events):
+                offset_sec = (i / max(len(events), 1)) * spread
+                ev["timestamp"] = (now - timedelta(seconds=spread - offset_sec)).isoformat()
             try:
                 result = push(args.api, args.api_key, events)
                 if result.get("alert_status") == "alert":

@@ -7,7 +7,7 @@ ban/unban action is auditable.
 
 from __future__ import annotations
 
-import hashlib
+import hashlib  # noqa: F401 — imported for future HMAC signing of entries
 import json
 import time
 from pathlib import Path
