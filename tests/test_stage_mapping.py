@@ -42,6 +42,23 @@ def test_lateral_movement_rule_fires_on_large_transfers() -> None:
     assert mapping.stage == "Lateral Movement"
 
 
+def test_advanced_stage_wins_equal_confidence_tie() -> None:
+    mapping = map_stage(
+        [
+            _state(
+                {
+                    "failed_auth": 20.0,
+                    "bytes": 625_920.0,
+                    "event_count": 33.0,
+                    "external_destination_count": 1.0,
+                }
+            )
+        ],
+        infiltration_probability=1.0,
+    )
+    assert mapping.stage == "Exfiltration"
+
+
 def test_no_evidence_yields_explicit_unknown() -> None:
     mapping = map_stage(
         [_state({"bytes": 100.0, "event_count": 5.0})],

@@ -16,6 +16,9 @@ SUM_FEATURES = {
     "ack_count",
     "fin_count",
     "rst_count",
+    "flow_event_count",
+    "failed_auth",
+    "auth_attempt",
 }
 
 
@@ -85,6 +88,9 @@ def _build_state(
         "event_count": float(len(events)),
         "flow_event_count": float(flow_count),
         "packet_event_count": float(packet_count),
+        "external_destination_count": float(
+            sum(1 for entity in entities if entity.startswith(("external", "1.2.3.4")))
+        ),
     }
     for name, values in feature_values.items():
         features[name] = sum(values) if name in SUM_FEATURES else sum(values) / len(values)

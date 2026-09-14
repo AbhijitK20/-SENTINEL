@@ -321,9 +321,12 @@ auto-retrain path (`trajectory/feedback.py`), and DNS/auth-log telemetry
 stubs normalizing into `UnifiedEvent` (`trajectory/telemetry.py`). The live
 engine attaches all six findings to every window and correlates alerts into
 incidents surfaced on the dashboard Live tab (risk grid, incident panel,
-verdict buttons). See `DETECTORS.md`. Validated on synthetic replay: zero
-detector false positives on benign-stage windows; the rehearsed demo story
-is unchanged (alert ~31 s, Lateral Movement ~61 s).
+verdict buttons). See `DETECTORS.md`. The synthetic generator includes
+low-rate precursor signals inside windows labelled `Benign`, so early-warning
+detector alerts are expected and must not be reported as conventional false
+positives. Conventional benign-only windows remain the appropriate quiet-on-
+benign evaluation set; the rehearsed demo story is unchanged (alert ~31 s,
+Lateral Movement ~61 s).
 
 ## Enterprise Sprint (Phases 2-11 scope, in-process)
 

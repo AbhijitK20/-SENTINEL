@@ -72,6 +72,40 @@
       "gridPos": { "h": 4, "w": 8, "x": 0, "y": 12 },
       "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
       "targets": [{ "expr": "sentinel_threat_indicators", "legendFormat": "indicators" }]
+    },
+    {
+      "id": 7,
+      "title": "Live events seen",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [{ "expr": "last_over_time(sentinel_live_events_seen[5m])", "legendFormat": "events", "instant": true }]
+    },
+    {
+      "id": 8,
+      "title": "Live peak probability",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [{ "expr": "last_over_time(sentinel_live_peak_probability[5m])", "legendFormat": "probability", "instant": true }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }
+    },
+    {
+      "id": 9,
+      "title": "Live alert active",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [{ "expr": "last_over_time(sentinel_live_alert_active[5m])", "legendFormat": "alert", "instant": true }],
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 1 }, "overrides": [] }
+    },
+    {
+      "id": 10,
+      "title": "Live findings retained",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [{ "expr": "last_over_time(sentinel_live_findings[5m])", "legendFormat": "findings", "instant": true }]
     }
   ]
 }

@@ -48,10 +48,19 @@ def _parse_syslog_line(line: str, counter: int) -> dict | None:
         path_val = next(p.split("=", 1)[1] for p in parts if p.startswith("path="))
         status_str = next(p.split("=", 1)[1] for p in parts if p.startswith("status="))
         status = int(status_str) if status_str.isdigit() else 0
+        auth_outcome = next(
+            (p.split("=", 1)[1] for p in parts if p.startswith("auth=")),
+            "",
+        )
     except (StopIteration, ValueError):
         return None
 
+    is_login_attempt = method == "POST" and path_val == "/login"
     is_failed = status in (401, 403, 500)
+    # Keep HTTP endpoint diversity visible to the flow detectors. The demo
+    # target has one host/port, so using the path as a synthetic destination
+    # entity preserves application-level fan-out without inventing hosts.
+    destination = f"127.0.0.1:{path_val}"
 
     features = {
         "bytes": float(100 + len(path_val) + len(method)),
@@ -66,7 +75,8 @@ def _parse_syslog_line(line: str, counter: int) -> dict | None:
         "retransmission": 0.0,
         # Flow-level features the detectors key on:
         "flow_event_count": 1.0,
-        "failed_auth": 1.0 if is_failed else 0.0,
+        "auth_attempt": 1.0 if is_login_attempt else 0.0,
+        "failed_auth": 1.0 if is_failed or auth_outcome == "failure" else 0.0,
         "duration": 0.05,
         "flow_iat_mean_ms": 50.0,
     }
@@ -75,7 +85,7 @@ def _parse_syslog_line(line: str, counter: int) -> dict | None:
         "event_id": f"http-scan:{counter}",
         "timestamp": ts,
         "source_entity": src,
-        "destination_entity": "127.0.0.1",
+        "destination_entity": destination,
         "event_type": "flow",
         "features": features,
         "source_format": "syslog",

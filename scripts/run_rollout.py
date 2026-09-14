@@ -24,7 +24,6 @@ from trajectory.rollout import (
     save_transition_model,
 )
 from trajectory.synthetic import DATASET_ID, generate_labelled_states
-from trajectory.targets import make_split_manifest
 
 
 def _rollout_forecast_fn(transition_model, baseline_model, schema):
@@ -65,19 +64,28 @@ def main() -> None:
 
     loaded = load_artifacts(args.baseline)
 
-    scenario_ids = [f"scenario-{index:02d}" for index in range(1, args.scenarios + 1)]
+    artifact_manifest = loaded.baseline_result.split_manifest
+    scenario_ids = sorted(
+        set(
+            artifact_manifest.train_scenarios
+            + artifact_manifest.validation_scenarios
+            + artifact_manifest.test_scenarios
+        )
+    )
+    if args.scenarios < len(scenario_ids):
+        scenario_ids = scenario_ids[: args.scenarios]
     labelled = generate_labelled_states(
         scenario_ids,
         seed=args.seed,
         window_seconds=args.window_seconds,
         stride_seconds=args.stride_seconds,
     )
-    manifest = make_split_manifest(scenario_ids, seed=args.seed)
+    train_scenarios = set(artifact_manifest.train_scenarios)
 
     transition = fit_transition_model(
         labelled,
         history_length=args.history,
-        scenario_ids=manifest.train_scenarios,
+        scenario_ids=train_scenarios,
     )
     model_path = save_transition_model(transition, str(Path(args.output) / "transition_model.json"))
 

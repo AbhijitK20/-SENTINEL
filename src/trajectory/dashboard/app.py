@@ -19,9 +19,15 @@ import streamlit as st
 
 from trajectory.assets import default_asset_registry
 from trajectory.baseline import SPLIT_NAMES, train_baseline
+from trajectory.case_studies import (
+    dubsmash_inspired_case,
+    packet_flow_steps,
+    replay_topology,
+)
 from trajectory.cic_ids2017 import build_labelled_states, load_flow_csv
 from trajectory.config import BaselineConfig
 from trajectory.dashboard.live_artifacts import select_live_artifacts
+from trajectory.dashboard.network_graphs import kill_chain_figure, topology_figure
 from trajectory.evaluation import evaluate_replay
 from trajectory.features import fit_feature_schema
 from trajectory.feedback import VERDICTS as FEEDBACK_VERDICTS
@@ -337,10 +343,11 @@ else:
 # the hash covers the mode, day subset, seed, and windowing, so switching
 # any of them forces a retrain rather than scoring new data with an old model.
 dataset_fingerprint = (
-    f"{dataset_id}|{sorted(selected_cic_days)}|{seed}|{window_seconds}|{stride_seconds}"
+    f"{dataset_id}|{sorted(selected_cic_days)}|{seed}|{window_seconds}|{stride_seconds}|"
+    f"{sequence_length}|{forecast_horizon}|{scenario_count}|{full_training}"
 )
 if st.session_state.get("dataset_fingerprint") != dataset_fingerprint:
-    for stale in ("baseline_run", "temporal_run", "schema"):
+    for stale in ("baseline_run", "temporal_run", "schema", "replay_eval"):
         st.session_state.pop(stale, None)
     st.session_state["dataset_fingerprint"] = dataset_fingerprint
 
@@ -377,7 +384,17 @@ schema = st.session_state.get("schema")
 loaded = artifacts_from_runs(baseline_run, temporal_run=temporal_run)
 
 # ── Tabs ──────────────────────────────────────────────────────────────
-tab_overview, tab_forecast, tab_states, tab_compare, tab_replay, tab_demo, tab_live, tab_metrics = (
+(
+    tab_overview,
+    tab_forecast,
+    tab_states,
+    tab_compare,
+    tab_replay,
+    tab_demo,
+    tab_live,
+    tab_metrics,
+    tab_story,
+) = (
     st.tabs(
         [
             "Overview",
@@ -388,6 +405,7 @@ tab_overview, tab_forecast, tab_states, tab_compare, tab_replay, tab_demo, tab_l
             "Demo",
             "Live Detection",
             "Metrics",
+            "Attack Story",
         ]
     )
 )
@@ -984,15 +1002,41 @@ with tab_replay:
         "the horizon."
     )
 
-    if st.button("Run replay evaluation"):
+    replay_signature = (
+        dataset_fingerprint,
+        int(forecast_horizon),
+        "test",
+        8,
+    )
+    if st.session_state.get("replay_signature") != replay_signature:
+        st.session_state.pop("replay_eval", None)
+        st.session_state["replay_signature"] = replay_signature
+
+    replay_control_col, replay_clear_col = st.columns([3, 1])
+    run_replay = replay_control_col.button(
+        "Run replay evaluation",
+        key="run-replay-evaluation",
+        type="primary",
+    )
+    clear_replay = replay_clear_col.button("Clear result", key="clear-replay-evaluation")
+    if clear_replay:
+        st.session_state.pop("replay_eval", None)
+        st.info(
+            "Replay result cleared. Run the evaluation again for the current model and dataset."
+        )
+    if run_replay:
         with st.spinner("Walking forward through scenarios..."):
-            st.session_state["replay_eval"] = evaluate_replay(
-                labelled,
-                loaded,
-                horizon=forecast_horizon,
-                split_filter="test",
-                max_history=8,
-            )
+            try:
+                st.session_state["replay_eval"] = evaluate_replay(
+                    labelled,
+                    loaded,
+                    horizon=forecast_horizon,
+                    split_filter="test",
+                    max_history=8,
+                )
+            except ValueError as error:
+                st.session_state.pop("replay_eval", None)
+                st.error(f"Replay could not run: {error}")
 
     replay_eval = st.session_state.get("replay_eval")
     if replay_eval is None:
@@ -1063,9 +1107,15 @@ with tab_demo:
     )
 
     demo_scenarios = manifest.test_scenarios or manifest.validation_scenarios
+    if not demo_scenarios:
+        st.warning("No validation or test scenarios are available for the guided demo.")
+        st.stop()
     demo_scenario = st.selectbox("Replay scenario", demo_scenarios, key="demo_scenario")
     demo_labelled = [item for item in labelled if item.scenario_id == demo_scenario]
     demo_states = [item.state for item in demo_labelled]
+    if not demo_states:
+        st.warning("The selected scenario has no network states.")
+        st.stop()
 
     demo_steps = [
         "1. Normal baseline traffic (observed)",
@@ -1078,8 +1128,10 @@ with tab_demo:
     st.markdown(f"**{demo_steps[demo_step - 1]}**")
 
     # Deterministic replay position: fixed fractions of the scenario length.
-    baseline_cut = max(1, len(demo_states) // 3)
-    recon_cut = max(baseline_cut + 1, len(demo_states) // 2)
+    state_count = len(demo_states)
+    baseline_cut = min(max(1, state_count // 3), state_count)
+    recon_cut = min(max(baseline_cut, state_count // 2), state_count)
+    reality_index = min(baseline_cut, state_count - 1)
     if demo_step == 1:
         history_len = baseline_cut
     elif demo_step in (2, 3, 4):
@@ -1129,7 +1181,7 @@ with tab_demo:
         realized_stages = [item.label.attack_stage for item in demo_labelled]
         st.markdown(
             f"**Reality:** the scenario realized stages "
-            f"{realized_stages[baseline_cut]} → {realized_stages[-1]} over the "
+            f"{realized_stages[reality_index]} → {realized_stages[-1]} over the "
             "remaining windows (observed labels)."
         )
         if demo_forecast is not None:
@@ -1197,6 +1249,152 @@ with tab_metrics:
 
     st.subheader("Model Config")
     st.json(baseline_run.result.config.model_dump())
+
+
+# ── Tab: Attack Story ────────────────────────────────────────────────
+with tab_story:
+    st.subheader("Dubsmash-Inspired Credential Reuse Breach")
+    st.caption(
+        "Educational workflow based on publicly reported breach impact. "
+        "The technical path below is synthetic and bounded; it does not claim "
+        "to reproduce undocumented Dubsmash internals or use real personal data."
+    )
+
+    story_col1, story_col2, story_col3 = st.columns(3)
+    story_col1.metric("Reported impact", "~161–162M accounts")
+    story_col2.metric("Demo records", "Synthetic sample")
+    story_col3.metric("Primary pattern", "Credential reuse")
+
+    phases = dubsmash_inspired_case()
+    if "story_phase" not in st.session_state:
+        st.session_state["story_phase"] = 1
+    if "story_contained" not in st.session_state:
+        st.session_state["story_contained"] = False
+
+    st.subheader("Replay Controls")
+    control_a, control_b, control_c, control_d = st.columns(4)
+    if control_a.button("◀ Previous", key="story-previous"):
+        st.session_state["story_phase"] = max(1, st.session_state["story_phase"] - 1)
+    if control_b.button("Next ▶", key="story-next"):
+        st.session_state["story_phase"] = min(len(phases), st.session_state["story_phase"] + 1)
+    if control_c.button("↺ Reset Story", key="story-reset"):
+        st.session_state["story_phase"] = 1
+        st.session_state["story_contained"] = False
+    if control_d.button("⛊ Contain at Firewall", key="story-contain"):
+        st.session_state["story_contained"] = True
+
+    current_phase = st.session_state["story_phase"]
+    phase = phases[current_phase - 1]
+    st.progress(
+        current_phase / len(phases),
+        text=f"Phase {current_phase}/{len(phases)} · {phase.name}",
+    )
+    if st.session_state["story_contained"]:
+        st.success("Containment simulated: the attacker branch is blocked at the edge firewall.")
+    else:
+        st.warning("Demo mode: no defensive control is active yet.")
+
+    st.subheader("1. Network Topology")
+    nodes, edges = replay_topology(current_phase, contained=st.session_state["story_contained"])
+    st.plotly_chart(
+        topology_figure(nodes, edges, active_labels={phase.name}),
+        use_container_width=True,
+    )
+    st.caption(
+        "Nodes are hosts/services. Links represent observed communication, "
+        "not proof of compromise. "
+        "Blue is infrastructure, amber is suspicious, and red is malicious or contained demo "
+        "traffic."
+    )
+
+    st.subheader("2. Attack Workflow")
+    phase_cols = st.columns(len(phases))
+    for column, phase in zip(phase_cols, phases, strict=True):
+        with column:
+            st.markdown(f"**{phase.number}. {phase.name}**")
+            st.caption(phase.summary)
+            st.markdown(f"`{phase.source}` → `{phase.destination}`")
+            st.markdown(f"`{phase.protocol}:{phase.port}` · {phase.status}")
+            for evidence in phase.evidence:
+                st.markdown(f"- {evidence}")
+
+    st.subheader("3. Packet and Application Flow")
+    st.dataframe(
+        [
+            {
+                "layer": step.layer,
+                "source": step.source,
+                "destination": step.destination,
+                "action": step.action,
+                "status": step.status,
+            }
+            for step in packet_flow_steps()
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.info(
+        "Computer Networks distinction: TCP carries packets between hosts; HTTP describes the "
+        "application request; database queries happen on a private service link. SENTINEL combines "
+        "flow, web, authentication, and database-adjacent telemetry to form an incident."
+    )
+
+    st.subheader("4. Attack Kill Chain")
+    active_types = {phase.attack_type for phase in phases[:current_phase]}
+    from trajectory.sequence_detector import ATTACK_TRANSITIONS
+
+    st.plotly_chart(
+        kill_chain_figure(ATTACK_TRANSITIONS, active=active_types),
+        use_container_width=True,
+    )
+    st.caption(
+        "Transition weights are educational priors used for next-technique prediction; they are "
+        "not claims about the historical Dubsmash incident."
+    )
+
+    st.subheader("5. Admin Response Workflow")
+    response_steps = [
+        ("Detect", "Detector finding and alert timeline", "Live Detection"),
+        ("Triage", "Review source, asset, confidence, and evidence", "Incident panel"),
+        ("Investigate", "Inspect topology, packet flow, and application logs", "Network States"),
+        ("Contain", "Block the observed attacker or rate-limit the endpoint", "Admin blocklist"),
+        ("Recover", "Revoke sessions, rotate credentials, preserve evidence", "Analyst-approved"),
+        ("Review", "Document the case and monitor for recurrence", "Case record"),
+    ]
+    for index, (name, action, control) in enumerate(response_steps, start=1):
+        left, middle, right = st.columns([1, 3, 2])
+        left.markdown(f"**{index}. {name}**")
+        middle.write(action)
+        right.caption(control)
+
+    st.warning(
+        "Reset Demo Session clears in-memory findings for this demonstration. It does not repair "
+        "a real system, erase forensic evidence, or replace credential rotation and session "
+        "revocation."
+    )
+
+    st.subheader("6. Defense Comparison")
+    before_col, after_col = st.columns(2)
+    with before_col:
+        st.markdown("**Without controls**")
+        st.metric("Attack phases reached", current_phase)
+        st.metric("Sensitive data path", "Available" if current_phase >= 4 else "Not reached")
+        st.caption("The synthetic attacker can continue along the visible path.")
+    with after_col:
+        st.markdown("**With firewall containment**")
+        contained_phase = (
+            min(current_phase, 2)
+            if st.session_state["story_contained"]
+            else current_phase
+        )
+        st.metric("Attack phases reached", contained_phase)
+        st.metric(
+            "Sensitive data path",
+            "Blocked" if st.session_state["story_contained"] else "Available",
+        )
+        st.caption(
+            "Containment is simulated and analyst-approved; it does not alter host firewalls."
+        )
 
 
 # ── Tab: Live Detection ──────────────────────────────────────────────

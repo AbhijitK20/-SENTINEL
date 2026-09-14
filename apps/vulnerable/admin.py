@@ -440,17 +440,42 @@ function unbanIp(ip) {
   }).then(()=>location.reload());
 }
 function blockAll() {
-  if(confirm('Block ALL attacker IPs?')) {
-    fetch('/admin/api/block_all', {method:'POST'}).then(()=>location.reload());
-  }
+  if(!confirm('Block ALL attacker IPs?')) return;
+  setActionState('Blocking observed attackers...');
+  fetch('/admin/api/block_all', {method:'POST'})
+    .then(requireOk).then(data=>{
+      setActionState('Blocked ' + data.blocked_count + ' observed IP(s).');
+      setTimeout(()=>location.reload(), 700);
+    }).catch(showActionError);
 }
 function unbanAll() {
-  fetch('/admin/api/unban_all', {method:'POST'}).then(()=>location.reload());
+  setActionState('Clearing the blocklist...');
+  fetch('/admin/api/unban_all', {method:'POST'})
+    .then(requireOk).then(data=>{
+      setActionState('Unblocked ' + data.unblocked_count + ' IP(s).');
+      setTimeout(()=>location.reload(), 700);
+    }).catch(showActionError);
 }
 function resetSystem() {
-  if(confirm('Reset the detection engine? This clears all incidents and findings.')) {
-    fetch('/admin/api/reset', {method:'POST'}).then(()=>location.reload());
-  }
+  if(!confirm('Reset the detection engine? This clears all incidents and findings.')) return;
+  setActionState('Resetting the demo session...');
+  fetch('/admin/api/reset', {method:'POST'})
+    .then(requireOk).then(()=>{
+      setActionState('Demo session reset.');
+      setTimeout(()=>location.reload(), 700);
+    }).catch(showActionError);
+}
+function requireOk(response) {
+  if(!response.ok) throw new Error('HTTP ' + response.status);
+  return response.json();
+}
+function setActionState(message) {
+  var out = document.getElementById('attack-output');
+  out.style.display = 'block';
+  out.textContent = message;
+}
+function showActionError(error) {
+  setActionState('Action failed: ' + error.message);
 }
 function triggerAttack(attackType) {
   var out = document.getElementById('attack-output');
@@ -570,9 +595,10 @@ def api_reset():
     """Reset the SENTINEL detection engine."""
     result = _api_post("/v1/live/reset")
     # Also clear the blocklist
+    unblocked_count = len(_read_blocklist())
     if BLOCKLIST_PATH.exists():
         BLOCKLIST_PATH.unlink()
-    return jsonify({"ok": True, "result": result})
+    return jsonify({"ok": True, "result": result, "unblocked_count": unblocked_count})
 
 
 @app.route("/admin/api/block", methods=["POST"])
@@ -602,6 +628,7 @@ def api_unblock():
 def api_block_all():
     """Block every IP that has appeared in the access log."""
     log_path = Path("apps/vulnerable/access.log")
+    blocked: set[str] = set()
     if log_path.exists():
         ips: set[str] = set()
         for line in log_path.read_text().splitlines():
@@ -609,6 +636,7 @@ def api_block_all():
                 if part.startswith("src="):
                     ips.add(part.split("=", 1)[1])
         for ip in ips:
+            blocked.add(ip)
             rec = {
                 "ip": ip,
                 "action": "ban",
@@ -618,15 +646,16 @@ def api_block_all():
             }
             with open(BLOCKLIST_PATH, "a") as f:
                 f.write(json.dumps(rec) + "\n")
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "blocked_count": len(blocked)})
 
 
 @app.route("/admin/api/unban_all", methods=["POST"])
 def api_unban_all():
     """Clear the blocklist."""
+    unblocked_count = len(_read_blocklist())
     if BLOCKLIST_PATH.exists():
         BLOCKLIST_PATH.unlink()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "unblocked_count": unblocked_count})
 
 
 @app.route("/admin/api/attack", methods=["POST"])

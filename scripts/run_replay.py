@@ -20,7 +20,6 @@ from trajectory.evaluation import evaluate_replay
 from trajectory.predict import forecast, load_artifacts
 from trajectory.report import render_report, save_report
 from trajectory.synthetic import DATASET_ID, generate_labelled_states
-from trajectory.targets import make_split_manifest
 
 
 def main() -> None:
@@ -50,15 +49,24 @@ def main() -> None:
 
     loaded = load_artifacts(args.baseline, temporal_dir=args.temporal)
 
-    scenario_ids = [f"scenario-{index:02d}" for index in range(1, args.scenarios + 1)]
+    artifact_manifest = loaded.baseline_result.split_manifest
+    scenario_ids = sorted(
+        set(
+            artifact_manifest.train_scenarios
+            + artifact_manifest.validation_scenarios
+            + artifact_manifest.test_scenarios
+        )
+    )
+    if args.scenarios < len(scenario_ids):
+        scenario_ids = scenario_ids[: args.scenarios]
     labelled = generate_labelled_states(
         scenario_ids,
         seed=args.seed,
         window_seconds=args.window_seconds,
         stride_seconds=args.stride_seconds,
     )
-    # The manifest check keeps split filtering consistent with training.
-    make_split_manifest(scenario_ids, seed=args.seed)
+    # The artifact manifest is authoritative: evaluation scenario IDs must
+    # match the IDs used when the model was trained.
 
     # threshold=None lets evaluate_replay() resolve: explicit flag →
     # calibrated threshold stored with the artifacts → shipped 0.5 default.

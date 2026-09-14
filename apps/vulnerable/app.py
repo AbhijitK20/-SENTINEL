@@ -32,11 +32,13 @@ def _log(msg: str) -> None:
 def _log_request(status: int = 200) -> None:
     ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
     src = request.remote_addr or "127.0.0.1"
+    auth = getattr(g, "auth_outcome", None)
+    auth_field = f" auth={auth}" if auth else ""
     _log(
         f"{ts} demo-sentinel http src={src} "
         f"dst=127.0.0.1 dport=5000 "
         f"method={request.method} path={request.path} "
-        f"status={status}"
+        f"status={status}{auth_field}"
     )
 
 
@@ -350,18 +352,25 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
+        password_hash = hashlib.md5(password.encode()).hexdigest()
         # Intentionally vulnerable: raw string formatting in SQL
         db = _get_db()
-        query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
+        query = (
+            f"SELECT * FROM users WHERE username='{username}' "
+            f"AND password='{password_hash}'"
+        )
         try:
             user = db.execute(query).fetchone()
             if user:
+                g.auth_outcome = "success"
                 session["user"] = dict(user)
                 session["ip"] = request.remote_addr
                 return redirect(url_for("dashboard"))
             else:
+                g.auth_outcome = "failure"
                 error = "Invalid credentials"
         except Exception as e:
+            g.auth_outcome = "failure"
             # Intentionally verbose error — leaks SQL to attacker
             return f"""<!DOCTYPE html>
 <html><head><title>SQL Error</title>

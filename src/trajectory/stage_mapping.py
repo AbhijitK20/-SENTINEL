@@ -83,7 +83,9 @@ STAGE_RULES: tuple[_StageRule, ...] = (
         condition="very large outbound transfer volume",
         evaluate=lambda state: (
             state.features.get("bytes") if (state.features.get("bytes") or 0) > 100_000 else None
-        ),
+        )
+        if (state.features.get("external_destination_count") or 0) > 0
+        else None,
     ),
     _StageRule(
         stage="Initial Access",
@@ -149,10 +151,22 @@ def map_stage(
             ),
         )
 
-    # Highest-confidence rule decides the stage; ties keep the first rule in
-    # the documented rule order (kill-chain ordering is presentation only, not
-    # a claimed sequence).
-    best_rule, best_evidence = max(fired, key=lambda pair: pair[1].confidence)
+    # Highest-confidence rule decides the stage. When evidence is equally
+    # strong, prefer the most advanced/high-impact stage so a window carrying
+    # failed auth plus substantial internal transfer is not reported only as
+    # reconnaissance. This is a presentation tie-break, not a claimed linear
+    # kill chain.
+    stage_priority = {
+        "Reconnaissance": 0,
+        "Initial Access": 1,
+        "Lateral Movement": 2,
+        "Command and Control": 3,
+        "Exfiltration": 4,
+    }
+    best_rule, best_evidence = max(
+        fired,
+        key=lambda pair: (pair[1].confidence, stage_priority.get(pair[0].stage, -1)),
+    )
     stage = best_rule.stage
     confidence = best_evidence.confidence
     probability = _stage_probability(stage, infiltration_probability, confidence)

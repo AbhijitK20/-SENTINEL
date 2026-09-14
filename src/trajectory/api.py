@@ -550,6 +550,7 @@ def create_app(
     @app.get("/metrics")
     def metrics() -> Response:
         """Prometheus text-format endpoint (Phase 8)."""
+        live = push_engine.poll()
         lines = [
             "# HELP sentinel_requests_total Requests by status code.",
             "# TYPE sentinel_requests_total counter",
@@ -565,10 +566,22 @@ def create_app(
             f"sentinel_request_latency_ms_count {latency_count}",
             "# HELP sentinel_windows_emitted_total Live push-engine windows emitted.",
             "# TYPE sentinel_windows_emitted_total counter",
-            f"sentinel_windows_emitted_total {push_engine.poll().windows_emitted}",
+            f"sentinel_windows_emitted_total {live.windows_emitted}",
             "# HELP sentinel_push_incidents_total Incidents correlated by the push engine.",
             "# TYPE sentinel_push_incidents_total counter",
-            f"sentinel_push_incidents_total {len(push_engine.poll().incidents)}",
+            f"sentinel_push_incidents_total {len(live.incidents)}",
+            "# HELP sentinel_live_events_seen Current live events seen.",
+            "# TYPE sentinel_live_events_seen gauge",
+            f"sentinel_live_events_seen {live.events_seen}",
+            "# HELP sentinel_live_peak_probability Current peak infiltration probability.",
+            "# TYPE sentinel_live_peak_probability gauge",
+            f"sentinel_live_peak_probability {live.peak_probability or 0.0}",
+            "# HELP sentinel_live_alert_active Whether the live engine is currently alerting.",
+            "# TYPE sentinel_live_alert_active gauge",
+            f"sentinel_live_alert_active {1 if live.alert_status == 'alert' else 0}",
+            "# HELP sentinel_live_findings Current live findings retained.",
+            "# TYPE sentinel_live_findings gauge",
+            f"sentinel_live_findings {len(live.attack_findings)}",
             "# HELP sentinel_cases_open Currently open (unresolved) analyst cases.",
             "# TYPE sentinel_cases_open gauge",
             f"sentinel_cases_open {sum(1 for c in cases.list_cases() if c.status != 'RESOLVED')}",
