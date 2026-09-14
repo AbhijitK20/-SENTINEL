@@ -14,7 +14,7 @@ pinned: false
 
 SENTINEL is an offline-first, explainable network attack forecasting and detection platform for **SIH26153: AI based Network Attack Forecasting from Network Traffic Data**.
 
-The system learns how network state changes over time, simulates likely future states, forecasts attacker progression, maps the forecast to recognised MITRE attack stages, detects nine attack types, correlates incidents, and explains the evidence behind each prediction — with an optional trust-ledger hash chain for tamper-evident alert anchoring.
+The system learns how network state changes over time, simulates likely future states, forecasts attacker progression, maps the forecast to recognised MITRE attack stages, detects nine attack types, correlates incidents, and explains the evidence behind each prediction. It also includes a vulnerable local training target, real attack-trigger controls, an Attack Story case study, Grafana observability, and an optional trust-ledger hash chain for tamper-evident alert anchoring.
 
 ## What This Platform Does
 
@@ -46,7 +46,7 @@ Dashboard / REST API / live sensors / trust ledger
 
 ### Enterprise Platform
 
-- **FastAPI REST API** (`trajectory/api.py`): `/health`, `/model`, `/v1/forecast`, `/v1/detect`, `/v1/events`, `/v1/alerts`, `/v1/cases`, `/v1/registry`, `/v1/drift`, `/v1/compliance`, `/metrics`
+- **FastAPI REST API** (`trajectory/api.py`): `/health`, `/model`, `/v1/forecast`, `/v1/detect`, `/v1/events`, `/v1/live`, `/v1/live/reset`, `/v1/alerts`, `/v1/cases`, `/v1/registry`, `/v1/drift`, `/v1/compliance`, `/metrics`
 - **API-key auth + RBAC** (`trajectory/auth.py`): 4 roles (viewer/analyst/engineer/admin), SHA-256-hashed keys, append-only audit trail, org_id tenant field
 - **Model registry** (`trajectory/registry.py`): register → approve → rollback workflow
 - **PSI drift monitoring** (`trajectory/drift.py`): per-feature PSI vs training baseline, `/v1/drift` endpoint
@@ -83,12 +83,17 @@ Dashboard / REST API / live sensors / trust ledger
 - **Model score trajectory chart**: what the model would have said at every window, with current cut marked
 - **Network States**: log-scale feature chart, per-window model score, attack-stage label, feature-evolution chart with selected window marker, raw edge table
 - **Interactive Forecast**: ground-truth strip shows realized attack stages alongside forecast
+- **Replay**: walk-forward Forecast-versus-Reality evaluation, scenario switching, downloadable reports, explicit clear-result control, and stale-result invalidation when settings change
+- **Demo**: five-step guided replay with safe handling for short or empty scenarios
+- **Live Detection**: synthetic, CSV, JSONL, syslog, local capture, attack triggers, detector grid, incident feedback, reset, and stop controls
+- **Attack Story**: synthetic Dubsmash-inspired credential-reuse workflow, topology graph, TCP/HTTP/database flow, kill-chain graph, phase replay, containment simulation, and before/after defense comparison
 
 ### Operations
 
 - **GitHub Actions CI**: lint + tests + wheel build on every push
 - **Docker Compose**: local pilot stack (API + dashboard + Prometheus + Grafana)
 - **Prometheus + Grafana**: `/metrics` endpoint, auto-provisioned dashboard
+- **Live observability metrics**: current events, peak probability, alert-active state, retained findings, emitted windows, incidents, cases, threat-intel indicators, request rate, and latency
 - **Hugging Face Spaces**: deploy API or dashboard for free
 
 ### Detection
@@ -114,7 +119,7 @@ Nine detectors with measured thresholds and honest confidence:
 uv sync --all-extras          # everything
 uv sync                       # core only (no dashboard, no PyTorch)
 
-# Tests + lint (221 tests)
+# Tests + lint
 uv run pytest
 uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
@@ -127,6 +132,9 @@ uv run streamlit run src/trajectory/dashboard/app.py
 
 # REST API
 uv run uvicorn trajectory.api:create_app --factory --port 8000
+
+# Local vulnerable target, scanner, and admin response dashboard
+docker compose --profile demo up -d
 ```
 
 ## Docker Compose (Local Pilot)
@@ -140,6 +148,22 @@ docker compose up -d
 # Grafana:   http://localhost:3000  (admin/admin)
 # Prometheus: http://localhost:9090/targets
 ```
+
+The demo admin dashboard is available at `http://localhost:5001`; the
+intentionally vulnerable training target is at `http://localhost:5000`.
+The admin surface exposes attack triggers, `Reset System`, `Block All
+Attackers`, and `Unblock All`. Reset clears the in-memory live detection demo
+session and demo blocklist; it does not repair a real system or erase forensic
+evidence.
+
+Grafana's `SENTINEL API Overview` dashboard includes current live-state panels.
+The live panels use `last_over_time(...[5m])`, so reset values appear as
+explicit zeroes rather than an ambiguous `No data` state:
+
+- `sentinel_live_events_seen`
+- `sentinel_live_peak_probability`
+- `sentinel_live_alert_active`
+- `sentinel_live_findings`
 
 ## Real-Time Threat Intel
 
@@ -184,6 +208,33 @@ Traditional intrusion detection asks: "Is this flow malicious?"
 SENTINEL asks: "Given the current network trajectory, what is likely to happen next, which assets may be affected, and why?"
 
 Every forecast carries driving-feature attribution, every detection carries measured thresholds and explicit confidence, and every honest limitation is documented — never hidden.
+
+## Attack Simulation And Case Study
+
+The local demo target on port 5000 is intentionally vulnerable and uses only
+synthetic seeded data. The port-5001 admin dashboard can launch brute force,
+SQL injection, port scan, XSS, directory traversal, API enumeration,
+credential stuffing, and a combined attack chain.
+
+The `Attack Story` tab is an educational, synthetic Dubsmash-inspired case
+study. Public reporting confirms the historical breach impact and exposed data
+categories, but not every technical step represented by this demo. The story
+is therefore labelled illustrative rather than a reconstruction of
+undocumented historical internals.
+
+```text
+synthetic attack -> vulnerable app logs -> scanner -> /v1/events
+    -> event-time windows -> detectors + forecast -> incident correlation
+    -> admin investigation -> simulated containment -> report/metrics
+```
+
+## Claims And Limitations
+
+- Synthetic replay validates pipeline behavior, not production detection performance.
+- Replay lead time is currently measured at 0.0 windows on the available synthetic and checked-in real-data artifact paths because stage transitions occur within the window granularity.
+- Precursor windows may remain labelled `Benign` while intentionally triggering early-warning detectors; these are not ordinary benign-only false-positive measurements.
+- The vulnerable app, attack scripts, blocklist, and containment buttons are local training components and must not be exposed to untrusted networks.
+- Grafana and the admin dashboard are observability/demo surfaces, not production SOAR controls.
 
 ## Documentation Map
 

@@ -1,8 +1,10 @@
 # SENTINEL Demo Deployment
 
-This deployment packages the existing Streamlit dashboard as a Docker-based
-Hugging Face Space. It is intended for a teacher-friendly demonstration of the
-synthetic replay, forecast explanation, and tamper-evident trust ledger.
+This deployment packages the Streamlit dashboard and local pilot services as a
+Docker-based demonstration. It covers synthetic replay, forecast explanation,
+Replay/Demo evaluation, the Attack Story case study, live detection, local
+attack simulation, admin response, Grafana observability, and the
+tamper-evident trust ledger.
 
 ## What This Deploys
 
@@ -16,7 +18,9 @@ Hugging Face Space
    +-- deterministic synthetic traffic
    +-- baseline + GRU training in memory
    +-- forecast and evidence display
-   +-- local hash-chained alert ledger
+    +-- local hash-chained alert ledger
+    +-- optional vulnerable target + scanner + admin response dashboard
+    +-- optional Prometheus + Grafana observability
 ```
 
 The deployment is a prototype demo, not a production network sensor. It does
@@ -72,20 +76,31 @@ port `8501`.
 
 Use this sequence during the presentation:
 
-1. Open the Space URL.
+1. Open the dashboard.
 2. Click `Train / Retrain` once in the sidebar.
 3. Open `Overview` and explain scenario-level train/validation/test splits.
-4. Open `Network States` and show the time-windowed traffic features.
-5. Open `Forecast` and select a test scenario.
-6. Explain the probability timeline, predicted stage, affected entities, and evidence.
-7. In `Trust Ledger`, click `Record Alert`.
-8. Click `Verify Ledger` and show the verified hash chain.
-9. Explain that raw traffic stays off-ledger while the forecast and evidence fingerprints are auditable.
+4. Open `Network States` and show time-windowed traffic features and edges.
+5. Open `Forecast` and move the walk-forward slider.
+6. Open `Replay`, run the evaluation, switch scenarios, and download the report.
+7. Open `Demo`, move through all five steps, and distinguish observed values from forecast values.
+8. Open `Attack Story`, advance the phase replay, then simulate firewall containment.
+9. In `Trust Ledger`, click `Record Alert` followed by `Verify Ledger`.
+10. Explain that raw traffic stays off-ledger while forecast and evidence fingerprints are auditable.
 
 For the shortest guided story, use the `Demo` tab after training:
 
 ```text
 Normal traffic -> reconnaissance -> forecast -> evidence -> reality check
+
+For the local operational demo:
+
+```bash
+docker compose --profile demo up -d
+```
+
+Open `http://localhost:5001`, use `Reset System` before a new attack, launch
+an attack from `Force Attack`, then exercise `Block All Attackers` and
+`Unblock All` while watching the scanner and API state update.
 ```
 
 ## Deployment Limitations
@@ -94,6 +109,8 @@ Normal traffic -> reconnaissance -> forecast -> evidence -> reality check
 - The local ledger uses the container filesystem and is not durable across a Space restart.
 - The live packet-capture path is not suitable for Hugging Face hosting.
 - The synthetic data validates the pipeline, not real-world network performance.
+- The port-5000 vulnerable app is intentionally unsafe and must remain local to the training environment.
+- Attack-trigger buttons exercise the local demo target; they are not production attack simulation.
 - Public deployment should not receive sensitive traffic or confidential reports.
 
 For a production-like deployment, move model artifacts to an immutable artifact
@@ -191,7 +208,9 @@ docker compose --profile obs up -d      # api + prometheus + grafana
 
 Scraped metrics: `sentinel_requests_total` (by status), request latency
 sum/count, `sentinel_windows_emitted_total`, `sentinel_push_incidents_total`,
-`sentinel_cases_open`, `sentinel_threat_indicators`.
+`sentinel_cases_open`, `sentinel_threat_indicators`,
+`sentinel_live_events_seen`, `sentinel_live_peak_probability`,
+`sentinel_live_alert_active`, and `sentinel_live_findings`.
 
 ## Real-traffic detection demo (profile: realtime)
 

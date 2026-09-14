@@ -15,6 +15,13 @@ dashboard tab and a localhost-safe scripted attack demo
 (`scripts/attack_demo.py`). Verified live: benign window P=0.12/Unknown →
 scan burst P=0.97 alert → Lateral Movement TA0008.**
 
+Current verification also covers the Attack Story tab, Replay/Demo interaction
+paths, local vulnerable-app attack controls, API reset semantics, and the
+Prometheus/Grafana live-state panels. The local code-review plugin's
+deep/sweep/verify scans have been run against both `apps/vulnerable` and
+`src/trajectory`; its findings include intentional demo vulnerabilities and
+static-analysis heuristics, not automatic proof of runtime defects.
+
 ## Completed
 
 ### Sprint 0-2: foundation, ingestion, temporal data
@@ -137,7 +144,7 @@ scan burst P=0.97 alert → Lateral Movement TA0008.**
 - Tests for rule firing, the Unknown state, empty and missing-feature
   rejection, window ordering, and forecast integration.
 
-### Sprint 7 (in progress): replay evaluation and report export
+### Sprint 7: replay evaluation and report export
 
 - `trajectory.evaluation`: walk-forward replay evaluation. Every window of a
   scenario receives the forecast available at that moment, scored against the
@@ -158,7 +165,8 @@ scan burst P=0.97 alert → Lateral Movement TA0008.**
 - Dashboard: session-state fix retained; new Replay tab with measured lead,
   crossing rate, false-early rate, forecast-vs-reality row table, and a
   downloadable Markdown report; forecast timeline uses in-memory temporal
-  weights when present.
+  weights when present. Replay results are invalidated when dataset/model
+  settings change, and the UI exposes a clear-result control.
 - First measured replay result (saved artifacts, 2 test scenarios, horizon 5,
   baseline-decay timeline): measured median lead 0.0 windows (same-window
   detection), crossing rate 0.23, false-early rate 0.03. Pipeline-validated
@@ -239,7 +247,16 @@ scan burst P=0.97 alert → Lateral Movement TA0008.**
   the invalid/malformed-file fallbacks.
 - Dashboard Demo tab: five-step guided two-minute replay with OBSERVED/
   FORECAST labels on every metric, deterministic for a fixed seed, with a
-  downloadable report.
+  downloadable report; short/empty scenarios are handled explicitly.
+- Attack Story tab: synthetic Dubsmash-inspired credential-reuse workflow,
+  network topology, packet/application flow, attack transition graph, phase
+  replay, simulated containment, and before/after defense comparison.
+- Local demo stack: modern vulnerable target UI on port 5000, admin response
+  dashboard on port 5001, attack triggers, reset/block/unblock actions, and
+  explicit success/error feedback.
+- Observability: Grafana dashboard on port 3000 includes current live events,
+  peak probability, alert-active state, retained findings, windows, incidents,
+  cases, threat indicators, request rate, and latency.
 - `RESULTS.md` filled per `RESULTS_TEMPLATE.md`; `QUALITY_GATES.md` annotated
   with per-gate status and evidence; Sprint 7/8 plans marked complete with
   DoD mapping; sprint 9/10 plan files folded into Sprint 8 scope.
@@ -254,10 +271,14 @@ scan burst P=0.97 alert → Lateral Movement TA0008.**
 ## Verification
 
 ```text
-uv run pytest                                92 passed
+uv run pytest                                current suite passes
 uv run ruff check src tests scripts          passed
 uv run ruff format --check src tests scripts passed
 uv lock --check                              passed
+docker compose config --quiet                passed
+Streamlit AppTest                             all tabs and primary controls passed
+Demo rehearsal                               alert ~31 s; lateral movement ~61 s; pass
+Grafana/Prometheus smoke                      healthy scrape and live gauges
 ```
 
 Re-running `scripts/run_comparison.py` reproduces the saved metrics on
@@ -286,10 +307,9 @@ must not appear in submission material as real-traffic results.**
 
 ## Current Limitations
 
-- Real-data evaluation is complete on CIC-IDS2017 (two capture days, cross-day
-  temporal splits, Infiltration as the held-out test attack family); CTU-13 /
-  UNSW-NB15 adapters are not started and no multi-week or multi-dataset claim
-  is made.
+- Real-data evaluation is available through the CIC-IDS2017 adapter and the
+  checked-in benchmark artifacts; CTU-13 / UNSW-NB15 adapters are not started
+  and no multi-week or multi-dataset claim is made.
 - The CSV adapter reports `packet_features_available=false` for flow-only input.
 - Stage mapping is rule-based over the documented stage vocabulary;
   dataset-derived stage ground truth and technique-level MITRE mapping are
@@ -312,14 +332,14 @@ must not appear in submission material as real-traffic results.**
 
 ## Attack-Type Detector Layer (Phase 1 + Phase 2 stubs)
 
-Implemented beyond the original backlog: six attack-type detectors
+Implemented beyond the original backlog: nine attack-type detectors
 (`trajectory/detectors.py`) with measured thresholds and explicit
 insufficient-telemetry behaviour (C2, DDoS), asset criticality + risk fusion
 (`trajectory/assets.py`), incident correlation into analyst-facing cases
 (`trajectory/correlation.py`), an append-only analyst feedback store with no
 auto-retrain path (`trajectory/feedback.py`), and DNS/auth-log telemetry
 stubs normalizing into `UnifiedEvent` (`trajectory/telemetry.py`). The live
-engine attaches all six findings to every window and correlates alerts into
+engine attaches all nine findings to every window and correlates alerts into
 incidents surfaced on the dashboard Live tab (risk grid, incident panel,
 verdict buttons). See `DETECTORS.md`. The synthetic generator includes
 low-rate precursor signals inside windows labelled `Benign`, so early-warning
@@ -341,13 +361,13 @@ docker-compose pilot. What stays NOT built: SSO/OIDC, Kafka, React UI,
 Kubernetes, distributed ledgers, and real federated infrastructure — each
 requires infrastructure decisions this prototype deliberately does not fake.
 
-## Next Milestone
+## Current Next Milestone
 
-**Real-data evaluation (the only open backlog item, PB-001/PB-011)**
-
-1. Download CIC-IDS2017 (a single CSV day suffices), review the licence
-   terms, run the adapter end-to-end, and retrain baseline + temporal +
-   rollout on real traffic. Long attack dwell time is the identified path to
-   lead > 0.
-2. Record the two-minute demo video from the Demo tab.
-3. Extend the claim audit to real-traffic numbers once they exist.
+1. Extend evaluation to additional datasets and longer attack dwell times;
+   positive lead time requires stage-relevant features to drift before the
+   observed onset.
+2. Replace local demo containment with integrations to real firewall,
+   identity, session, and case-management systems only after explicit
+   infrastructure and authorization decisions.
+3. Keep the vulnerable target and attack controls isolated to training/demo
+   environments and continue the claim audit for every new benchmark result.
