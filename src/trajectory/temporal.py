@@ -78,25 +78,39 @@ class TemporalResult(BaseModel):
 
 @dataclass(frozen=True)
 class TemporalRun:
-    models: dict[int, nn.Module]
+    models: dict[int, object]
     result: TemporalResult
 
 
-class _GRUClassifier(nn.Module):  # type: ignore[misc]
-    def __init__(self, input_dim: int, hidden_size: int, num_layers: int, dropout: float):
-        super().__init__()
-        self.gru = nn.GRU(
-            input_dim,
-            hidden_size,
-            num_layers=num_layers,
-            batch_first=True,
-            dropout=dropout if num_layers > 1 else 0.0,
-        )
-        self.head = nn.Linear(hidden_size, 1)
+def _build_gru_classifier(
+    input_dim: int, hidden_size: int, num_layers: int, dropout: float
+) -> object:
+    """Construct the GRU classifier. Imported lazily so torch stays optional."""
+    _require_torch()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        _, h = self.gru(x)
-        return self.head(h[-1]).squeeze(-1)
+    class _GRUClassifier(nn.Module):  # type: ignore[misc]
+        def __init__(
+            self,
+            input_dim: int = input_dim,
+            hidden_size: int = hidden_size,
+            num_layers: int = num_layers,
+            dropout: float = dropout,
+        ):
+            super().__init__()
+            self.gru = nn.GRU(
+                input_dim,
+                hidden_size,
+                num_layers=num_layers,
+                batch_first=True,
+                dropout=dropout if num_layers > 1 else 0.0,
+            )
+            self.head = nn.Linear(hidden_size, 1)
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            _, h = self.gru(x)
+            return self.head(h[-1]).squeeze(-1)
+
+    return _GRUClassifier()
 
 
 def train_temporal(
@@ -120,7 +134,7 @@ def train_temporal(
     seq_len = len(samples[0].input_state_keys)
 
     horizon_results: list[HorizonResult] = []
-    models: dict[int, _GRUClassifier] = {}
+    models: dict[int, object] = {}
 
     for horizon in range(1, max_horizon + 1):
         from trajectory.targets import build_sequence_samples as _build
@@ -199,9 +213,11 @@ def _train_one(
     feature_dim: int,
     config: TemporalConfig,
     seed: int,
-) -> tuple[_GRUClassifier, int, float]:
+) -> tuple[object, int, float]:
     torch.manual_seed(seed)
-    model = _GRUClassifier(feature_dim, config.hidden_size, config.num_layers, config.dropout)
+    model = _build_gru_classifier(
+        feature_dim, config.hidden_size, config.num_layers, config.dropout
+    )
     pos = int(train_y.sum())
     neg = len(train_y) - pos
     pos_weight = torch.tensor([neg / max(pos, 1)], dtype=torch.float32)
@@ -243,7 +259,7 @@ def _train_one(
     return model, max(best_epoch, 1), time.perf_counter() - started
 
 
-def predict_horizon(model: _GRUClassifier, sequence: np.ndarray) -> float:
+def predict_horizon(model: object, sequence: np.ndarray) -> float:
     model.eval()
     with torch.no_grad():
         return float(torch.sigmoid(model(torch.tensor(sequence))).item())
@@ -264,7 +280,7 @@ def save_temporal_artifacts(run: TemporalRun, output_dir: str | Path) -> dict[st
     return {"result": result_path, "report": report_path, "weights": weights_dir}
 
 
-def load_temporal_models(result: TemporalResult, model_dir: str | Path) -> dict[int, nn.Module]:
+def load_temporal_models(result: TemporalResult, model_dir: str | Path) -> dict[int, object]:
     """Load per-horizon GRU weights previously written by save_temporal_artifacts.
 
     Horizons whose weight file is missing are simply absent from the returned
@@ -272,12 +288,12 @@ def load_temporal_models(result: TemporalResult, model_dir: str | Path) -> dict[
     """
     _require_torch()
     weights_dir = Path(model_dir) / "weights"
-    models: dict[int, nn.Module] = {}
+    models: dict[int, object] = {}
     for horizon_result in result.horizons:
         path = weights_dir / f"model_h{horizon_result.horizon}.pt"
         if not path.is_file():
             continue
-        model = _GRUClassifier(
+        model = _build_gru_classifier(
             len(result.feature_names),
             result.config.hidden_size,
             result.config.num_layers,
