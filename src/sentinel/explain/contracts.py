@@ -91,4 +91,6 @@ class Counterfactual:
         for fa in self.features[:3]:
             changes.append(f"{fa.name} from {fa.value:.2f} to {fa.baseline_value:.2f}")
 
-        return f"If {' and '.join(changes)}, probability would drop from {self.original:.2f} to {self.predicted_impact:.2f}"
+        drop_from = self.original
+        drop_to = self.predicted_impact
+        return f"If {' and '.join(changes)}, probability would drop from {drop_from:.2f} to {drop_to:.2f}"
