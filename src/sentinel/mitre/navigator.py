@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sentinel.mitre.tactics import TACTICS
@@ -43,7 +43,7 @@ def export_layer(
         },
         "domain": "enterprise-attack",
         "description": description,
-        "created": datetime.now(timezone.utc).isoformat(),
+        "created": datetime.now(UTC).isoformat(),
         "techniques": [],
         "gradient": {
             "colors": [
