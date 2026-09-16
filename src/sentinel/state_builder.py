@@ -293,23 +293,28 @@ def _build_state(
     if src_ports:
         high_count = sum(1 for p in src_ports if p > 1024)
         features["high_port_ratio"] = high_count / len(src_ports)
+    else:
+        features["high_port_ratio"] = 0.0
     if dst_ports:
         int_ports = [int(p) for p in dst_ports]
         features["dst_port_nunique"] = float(dst_port_nunique(int_ports))
         ent = dst_port_entropy(int_ports)
-        if ent is not None:
-            features["dst_port_entropy"] = ent
+        features["dst_port_entropy"] = ent if ent is not None else 0.0
         wellknown = dst_port_wellknown_share(int_ports)
-        if wellknown is not None:
-            features["dst_port_wellknown_share"] = wellknown
+        features["dst_port_wellknown_share"] = wellknown if wellknown is not None else 0.0
         low = dst_port_low_share(int_ports)
-        if low is not None:
-            features["dst_port_low_share"] = low
+        features["dst_port_low_share"] = low if low is not None else 0.0
+    else:
+        features["dst_port_nunique"] = 0.0
+        features["dst_port_entropy"] = 0.0
+        features["dst_port_wellknown_share"] = 0.0
+        features["dst_port_low_share"] = 0.0
     if src_ports:
         int_src = [int(p) for p in src_ports]
         ephemeral = src_port_ephemeral_share(int_src)
-        if ephemeral is not None:
-            features["src_port_ephemeral_share"] = ephemeral
+        features["src_port_ephemeral_share"] = ephemeral if ephemeral is not None else 0.0
+    else:
+        features["src_port_ephemeral_share"] = 0.0
 
     # Port sequential score needs time-ordered ports per source host.
     # We approximate from event order (events are time-ordered).
@@ -325,17 +330,23 @@ def _build_state(
     if sequential_scores:
         features["dst_port_sequential_score"] = sum(sequential_scores) / len(sequential_scores)
         features["dst_port_randomness"] = 1.0 - features["dst_port_sequential_score"]
+    else:
+        features["dst_port_sequential_score"] = 0.0
+        features["dst_port_randomness"] = 0.0
 
     # Ports per host max
     if dst_ports:
         pairs = [(events[i].source_entity, int(dst_ports[i])) for i in range(len(events))]
         features["ports_per_host_max"] = ports_per_host_max(pairs)
+    else:
+        features["ports_per_host_max"] = 0.0
 
     # Flag ratio features (P1-T2): computed from tcp_flags bitmask
     if tcp_vals:
         int_flags = [int(v) for v in tcp_vals]
         def _flag_if(name: str, fn):
-            _set_feature_if(features, name, fn(int_flags))
+            result = fn(int_flags)
+            features[name] = result if result is not None else 0.0
         _flag_if("flag_syn_ratio", flag_syn_ratio)
         _flag_if("flag_ack_ratio", flag_ack_ratio)
         _flag_if("flag_fin_ratio", flag_fin_ratio)
@@ -345,38 +356,60 @@ def _build_state(
         _flag_if("flag_syn_ack_ratio", flag_syn_ack_ratio)
         _flag_if("flag_no_ack_share", flag_no_ack_share)
         _flag_if("flag_xmas_share", flag_xmas_share)
+    else:
+        for name in ["flag_syn_ratio", "flag_ack_ratio", "flag_fin_ratio", "flag_rst_ratio",
+                      "flag_psh_ratio", "flag_urg_ratio", "flag_syn_ack_ratio",
+                      "flag_no_ack_share", "flag_xmas_share"]:
+            features[name] = 0.0
 
     # Protocol share features (P1-T2)
     protos = feature_values.get("protocol", [])
     if protos:
         int_protos = [int(p) for p in protos]
         def _proto_if(name: str, fn):
-            _set_feature_if(features, name, fn(int_protos))
+            result = fn(int_protos)
+            features[name] = result if result is not None else 0.0
         _proto_if("proto_tcp_share", proto_tcp_share)
         _proto_if("proto_udp_share", proto_udp_share)
         _proto_if("proto_icmp_share", proto_icmp_share)
+    else:
+        for name in ["proto_tcp_share", "proto_udp_share", "proto_icmp_share"]:
+            features[name] = 0.0
 
     # Packet-level features (P1-T3) — fragment flags, retransmissions, IAT, TTL
     # Fragment features from IP flags (if available)
     ip_flags = feature_values.get("ip_flags", [])
     if ip_flags:
         int_ip_flags = [int(f) for f in ip_flags]
-        _set_if("frag_df_share", frag_df_share, int_ip_flags)
-        _set_if("frag_mf_share", frag_mf_share, int_ip_flags)
+        def _frag_if(name: str, fn):
+            result = fn(int_ip_flags)
+            features[name] = result if result is not None else 0.0
+        _frag_if("frag_df_share", frag_df_share)
+        _frag_if("frag_mf_share", frag_mf_share)
+    else:
+        features["frag_df_share"] = 0.0
+        features["frag_mf_share"] = 0.0
 
     # IAT statistics from iat_mean values already collected
     iat_vals = feature_values.get("iat_mean", [])
     if iat_vals:
         iat = iat_stats(iat_vals)
         for k, v in iat.items():
-            if v is not None:
-                features[k] = v
+            features[k] = v if v is not None else 0.0
+    else:
+        for k in ["iat_mean", "iat_var", "iat_max", "iat_min", "iat_p90", "iat_cv"]:
+            features[k] = 0.0
 
     # TTL uniqueness per source
     if "ttl" in feature_values:
         src_ttl = [(e.source_entity, int(e.features.get("ttl", 0))) for e in events if "ttl" in e.features]
         if src_ttl:
-            _set_if("ttl_nunique_per_src", ttl_nunique_per_src, src_ttl)
+            result = ttl_nunique_per_src(src_ttl)
+            features["ttl_nunique_per_src"] = result if result is not None else 0.0
+        else:
+            features["ttl_nunique_per_src"] = 0.0
+    else:
+        features["ttl_nunique_per_src"] = 0.0
 
     edge_summary = [
         {
