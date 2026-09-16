@@ -202,6 +202,26 @@ def _build_state(
             elif agg == Agg.RATIO:
                 pass  # computed by the caller if needed
 
+        # Legacy flat alias: emit the original name pointing to the first
+        # aggregation (sum for count-like, mean for continuous). This keeps
+        # stage_mapping.py, detectors.py, and existing tests working until S7
+        # migrates them to the enriched names.
+        if name in LEGACY_ALIASES:
+            flat_name = name
+            if Agg.SUM in aggs:
+                features[flat_name] = sum(values)
+            elif Agg.MEAN in aggs:
+                features[flat_name] = sum(values) / n
+            elif aggs:
+                # Fallback: compute the first aggregation
+                first = aggs[0]
+                if first == Agg.SUM:
+                    features[flat_name] = sum(values)
+                elif first == Agg.MEAN:
+                    features[flat_name] = sum(values) / n
+                elif first == Agg.NUNIQUE:
+                    features[flat_name] = float(len(set(values)))
+
     edge_summary = [
         {
             "source": source,

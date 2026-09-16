@@ -109,7 +109,7 @@ def test_state_builder_correctness_identical_output() -> None:
     # Windows: [0,60) has events 0s,40s. [30,90) has 40s,75s. [60,120) has 75s.
     assert len(states) == 3
     assert states[0].source_ids == ["f1", "f2"]
-    assert states[0].features["bytes"] == 300.0
+    assert states[0].features["bytes_sum"] == 300.0
     assert states[1].source_ids == ["f2", "f3"]
     assert states[2].source_ids == ["f3"]
-    assert states[2].features["bytes"] == 50.0
+    assert states[2].features["bytes_sum"] == 50.0
