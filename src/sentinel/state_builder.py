@@ -398,7 +398,11 @@ def _build_state(
 
     # TTL uniqueness per source
     if "ttl" in feature_values:
-        src_ttl = [(e.source_entity, int(e.features.get("ttl", 0))) for e in events if "ttl" in e.features]
+        src_ttl = [
+            (e.source_entity, int(e.features.get("ttl", 0)))
+            for e in events
+            if "ttl" in e.features
+        ]
         if src_ttl:
             result = ttl_nunique_per_src(src_ttl)
             features["ttl_nunique_per_src"] = result if result is not None else 0.0
