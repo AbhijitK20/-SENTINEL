@@ -23,10 +23,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from trajectory.features import FeatureSchema, vectorize_states
 from trajectory.metrics import BinaryMetrics, compute_binary_metrics
-from trajectory.schemas import SequenceSample, SplitManifest
+from trajectory.schemas import SPLIT_NAMES, SequenceSample, SplitManifest, split_assignment
 
 MODEL_VERSION = "gru-temporal-v1"
-SPLIT_NAMES = ("train", "validation", "test")
 
 try:
     import torch
@@ -356,18 +355,6 @@ def _render_report(result: TemporalResult) -> str:
 
 def _fmt(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.4f}"
-
-
-def _assignment(manifest: SplitManifest) -> dict[str, str]:
-    assignment: dict[str, str] = {}
-    for name, scenarios in (
-        ("train", manifest.train_scenarios),
-        ("validation", manifest.validation_scenarios),
-        ("test", manifest.test_scenarios),
-    ):
-        for scenario in scenarios:
-            assignment[scenario] = name
-    return assignment
 
 
 def _group_by_split(

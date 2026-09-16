@@ -31,11 +31,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from trajectory.config import BaselineConfig
 from trajectory.features import FeatureSchema, fit_feature_schema, vectorize_states
 from trajectory.metrics import BinaryMetrics, compute_binary_metrics
-from trajectory.schemas import SequenceSample, SplitManifest
+from trajectory.schemas import SPLIT_NAMES, SequenceSample, SplitManifest, split_assignment
 from trajectory.targets import LabelledState
 
 MODEL_VERSION = "logistic-regression-baseline-v1"
-SPLIT_NAMES = ("train", "validation", "test")
 
 
 class SplitAudit(BaseModel):
@@ -164,23 +163,7 @@ def train_baseline(
     states_by_key = {item.state_key: item for item in labelled_states}
     audit = audit_split(samples, manifest)
 
-    # Reject a manifest that places a scenario in more than one split. The
-    # audit already flags duplicates, but we also need to refuse to train on
-    # such a manifest.
-    manifest_scenarios_per_split = {
-        "train": set(manifest.train_scenarios),
-        "validation": set(manifest.validation_scenarios),
-        "test": set(manifest.test_scenarios),
-    }
-    for first, scenarios_a in manifest_scenarios_per_split.items():
-        for second, scenarios_b in manifest_scenarios_per_split.items():
-            if first == second:
-                continue
-            overlap = scenarios_a & scenarios_b
-            if overlap:
-                raise ValueError(f"scenarios {sorted(overlap)} appear in multiple splits")
-
-    train_samples = [s for s in samples if s.scenario_id in manifest_scenarios_per_split["train"]]
+    train_samples = [s for s in samples if s.scenario_id in manifest.train_scenarios]
     if not train_samples:
         raise ValueError("training split contains no samples")
     train_y = np.asarray([float(s.target.target_infiltration) for s in train_samples], dtype=float)
@@ -245,10 +228,7 @@ def _evaluate(
     manifest: SplitManifest,
     config: BaselineConfig,
 ) -> tuple[dict[str, BinaryMetrics], float]:
-    assignment: dict[str, str] = {}
-    for name in SPLIT_NAMES:
-        for scenario in getattr(manifest, f"{name}_scenarios"):
-            assignment[scenario] = name
+    assignment = split_assignment(manifest)
 
     by_split: dict[str, list[SequenceSample]] = {name: [] for name in SPLIT_NAMES}
     for sample in samples:
