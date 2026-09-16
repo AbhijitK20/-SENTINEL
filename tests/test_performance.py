@@ -51,7 +51,10 @@ def test_build_network_states_200k_under_5s() -> None:
 def test_read_flow_csv_200k_under_10s(tmp_path: Path) -> None:
     """AC3: 200,000-row CSV → read_flow_csv < 10s."""
     csv_path = tmp_path / "perf.csv"
-    header = "timestamp,source_entity,destination_entity,source_port,destination_port,protocol,bytes,packets,duration"
+    header = (
+        "timestamp,source_entity,destination_entity,source_port,"
+        "destination_port,protocol,bytes,packets,duration"
+    )
     lines = [header]
     span = timedelta(hours=9)
     step = span / 200_000
