@@ -23,12 +23,13 @@ on data with trustworthy labels (currently the synthetic replay).
 
 from __future__ import annotations
 
+import statistics
 from collections.abc import Callable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from trajectory.predict import DECISION_THRESHOLD, LoadedArtifacts, forecast
-from trajectory.schemas import Forecast, NetworkState, SPLIT_NAMES
+from trajectory.schemas import SPLIT_NAMES, Forecast, NetworkState
 from trajectory.targets import LabelledState
 
 REPLAY_EVALUATION_VERSION = "replay-evaluation-v1"
@@ -239,11 +240,7 @@ def _summarize(scenario_id: str, rows: list[ReplayRow]) -> ReplayScenarioSummary
 def _median(values: list[int]) -> float | None:
     if not values:
         return None
-    ordered = sorted(values)
-    mid = len(ordered) // 2
-    if len(ordered) % 2:
-        return float(ordered[mid])
-    return (ordered[mid - 1] + ordered[mid]) / 2.0
+    return float(statistics.median(values))
 
 
 def _allowed_scenarios(artifacts: LoadedArtifacts, split_filter: str | None) -> set[str] | None:

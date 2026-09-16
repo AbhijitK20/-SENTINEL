@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from trajectory.assets import default_asset_registry
-from trajectory.baseline import SPLIT_NAMES, train_baseline
+from trajectory.baseline import train_baseline
 from trajectory.case_studies import (
     dubsmash_inspired_case,
     packet_flow_steps,
@@ -43,6 +43,7 @@ from trajectory.live import (
 )
 from trajectory.predict import DECISION_THRESHOLD, artifacts_from_runs, forecast
 from trajectory.report import render_report
+from trajectory.schemas import SPLIT_NAMES
 from trajectory.synthetic import generate_labelled_states, generate_scenario_events
 from trajectory.targets import (
     build_sequence_samples,

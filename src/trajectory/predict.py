@@ -29,7 +29,7 @@ import joblib
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from trajectory.baseline import BaselineResult, FeatureWeight, SplitAudit
+from trajectory.baseline import BaselineResult, FeatureWeight
 from trajectory.features import FeatureSchema, vectorize_states
 from trajectory.schemas import (
     DrivingFeature,
@@ -362,7 +362,6 @@ def _stage_from_probability(probability: float) -> tuple[str, float]:
 
 
 def lead_time_from_timeline(timeline: list[ProbabilityPoint], threshold: float) -> LeadTimeEstimate:
-    """Public lead-time helper: first window crossing ``threshold``, or None."""
     """First window crossing the decision threshold, or an explicit None."""
     crossing = next(
         (point.window for point in timeline if point.infiltration_probability >= threshold),
@@ -409,21 +408,11 @@ def _direction(contribution: float) -> Literal["increasing", "decreasing", "mixe
 
 
 def _supporting_events(states: list[NetworkState]) -> list[str]:
-    seen: list[str] = []
-    for state in states[-3:]:
-        for source_id in state.source_ids:
-            if source_id not in seen:
-                seen.append(source_id)
-    return seen[:10]
+    return list(dict.fromkeys(sid for s in states[-3:] for sid in s.source_ids))[:10]
 
 
 def _affected_entities(states: list[NetworkState]) -> list[str]:
-    entities: list[str] = []
-    for state in states[-3:]:
-        for entity in state.entities:
-            if entity not in entities:
-                entities.append(entity)
-    return entities[:10]
+    return list(dict.fromkeys(e for s in states[-3:] for e in s.entities))[:10]
 
 
 def _coverage_summary(states: list[NetworkState]) -> dict[str, bool]:
@@ -467,10 +456,6 @@ def save_forecast(forecast: Forecast, output_path: str | Path) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(forecast.model_dump_json(indent=2), encoding="utf-8")
     return out
-
-
-def _split_audit_from_loaded(artifacts: LoadedArtifacts) -> SplitAudit:
-    return artifacts.baseline_result.split_audit
 
 
 def describe_manifest(artifacts: LoadedArtifacts) -> SplitManifest:
