@@ -26,7 +26,7 @@ Not lazy about: understanding the problem, input validation at trust boundaries,
 ## Project map
 
 ```
-src/trajectory/          core library (offline, no network imports)
+src/sentinel/          core library (offline, no network imports)
   schemas.py             Pydantic contracts — READ FIRST
   ingestion.py           flow CSV → UnifiedEvent
   pcap_ingestion.py      PCAP → UnifiedEvent (scapy, optional extra)
