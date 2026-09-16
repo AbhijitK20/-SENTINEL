@@ -12,6 +12,8 @@ pinned: false
 
 **AI-Based Network Attack Forecasting from Network Traffic Data**
 
+Licensed under the [Apache License, Version 2.0](LICENSE). See [THIRD_PARTY.md](THIRD_PARTY.md) for dependency licences.
+
 SENTINEL is an offline-first, explainable network attack forecasting and detection platform for **SIH26153: AI based Network Attack Forecasting from Network Traffic Data**.
 
 The system learns how network state changes over time, simulates likely future states, forecasts attacker progression, maps the forecast to recognised MITRE attack stages, detects nine attack types, correlates incidents, and explains the evidence behind each prediction. It also includes a vulnerable local training target, real attack-trigger controls, an Attack Story case study, Grafana observability, and an optional trust-ledger hash chain for tamper-evident alert anchoring.
