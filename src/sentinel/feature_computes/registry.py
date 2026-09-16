@@ -156,12 +156,8 @@ class FeatureRegistry:
         # Flag ratio features (v3, P1-T2)
         for flag in ["syn", "ack", "fin", "rst", "psh", "urg"]:
             self._register(f"flag_{flag}_ratio", "tcp_flags", description=f"{flag.upper()} ratio")
-        self._register(
-            "flag_syn_ack_ratio", "tcp_flags", description="SYN/ACK ratio"
-        )
-        self._register(
-            "flag_no_ack_share", "tcp_flags", description="SYN-no-ACK share"
-        )
+        self._register("flag_syn_ack_ratio", "tcp_flags", description="SYN/ACK ratio")
+        self._register("flag_no_ack_share", "tcp_flags", description="SYN-no-ACK share")
         self._register("flag_xmas_share", "tcp_flags", description="XMAS scan share")
 
         # Protocol share features (v3, P1-T2)
@@ -178,9 +174,7 @@ class FeatureRegistry:
         self._register("iat_min", "iat_mean", description="Min IAT")
         self._register("iat_p90", "iat_mean", description="90th percentile IAT")
         self._register("iat_cv", "iat_mean", description="IAT coefficient of variation")
-        self._register(
-            "ttl_nunique_per_src", "ttl", description="TTL uniqueness per source"
-        )
+        self._register("ttl_nunique_per_src", "ttl", description="TTL uniqueness per source")
 
     def _register(
         self,

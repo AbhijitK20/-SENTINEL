@@ -145,9 +145,7 @@ class GATEncoder(nn.Module):
         graph_embedding = torch.cat([mean_pool, max_pool, attn_sum])
         return graph_embedding, alpha
 
-    def get_attention_weights(
-        self, x: torch.Tensor, edge_index: torch.Tensor
-    ) -> torch.Tensor:
+    def get_attention_weights(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """Get attention weights for visualization."""
         _, alpha = self.forward(x, edge_index)
         return alpha

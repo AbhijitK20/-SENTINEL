@@ -83,10 +83,10 @@ STAGE_RULES: tuple[_StageRule, ...] = (
         stage="Exfiltration",
         condition="very large outbound transfer volume",
         evaluate=lambda state: (
-            state.features.get("bytes") if (state.features.get("bytes") or 0) > 100_000 else None
-        )
-        if (state.features.get("external_destination_count") or 0) > 0
-        else None,
+            (state.features.get("bytes") if (state.features.get("bytes") or 0) > 100_000 else None)
+            if (state.features.get("external_destination_count") or 0) > 0
+            else None
+        ),
     ),
     _StageRule(
         stage="Initial Access",

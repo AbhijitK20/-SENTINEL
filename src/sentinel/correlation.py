@@ -116,7 +116,7 @@ def correlate(
         seen_types: list[str] = []
         for finding in sorted(
             chain,
-            key=lambda f: (f.window_start or datetime.min.replace(tzinfo=UTC)),
+            key=lambda f: f.window_start or datetime.min.replace(tzinfo=UTC),
         ):
             if finding.attack_type not in seen_types:
                 seen_types.append(finding.attack_type)

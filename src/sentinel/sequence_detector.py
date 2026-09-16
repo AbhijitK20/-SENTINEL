@@ -150,9 +150,7 @@ def detect_sequence_prediction(
         return None
 
     # Evidence: what recent techniques led to this prediction
-    recent_alerts = [
-        f.attack_type for f in recent_findings[-5:] if f.is_alert
-    ]
+    recent_alerts = [f.attack_type for f in recent_findings[-5:] if f.is_alert]
     recent_stage = recent_findings[-1].attack_type if recent_findings else "unknown"
 
     evidence = [

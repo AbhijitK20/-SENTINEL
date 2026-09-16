@@ -167,9 +167,7 @@ def replay_topology(
     nodes, edges = case_study_topology()
     phases = dubsmash_inspired_case()
     visible = tuple(
-        edge
-        for edge, phase in zip(edges, phases, strict=True)
-        if phase.number <= phase_number
+        edge for edge, phase in zip(edges, phases, strict=True) if phase.number <= phase_number
     )
     if contained:
         visible = tuple(

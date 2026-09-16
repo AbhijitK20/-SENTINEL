@@ -261,9 +261,11 @@ def rssm_loss(
     # KL divergence: KL(q(z|h,e) || p(z|h))
     kl_loss = 0.0
     for state in states:
-        kl = torch.log(state.sigma_p / state.sigma_q) + (
-            (state.sigma_q**2 + (state.mu_q - state.mu_p) ** 2) / (2 * state.sigma_p**2)
-        ) - 0.5
+        kl = (
+            torch.log(state.sigma_p / state.sigma_q)
+            + ((state.sigma_q**2 + (state.mu_q - state.mu_p) ** 2) / (2 * state.sigma_p**2))
+            - 0.5
+        )
         kl_loss += kl.sum(dim=-1).mean()
     kl_loss /= len(states)
 

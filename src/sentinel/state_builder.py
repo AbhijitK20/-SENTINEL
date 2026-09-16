@@ -340,9 +340,11 @@ def _build_state(
     # Flag ratio features (P1-T2): computed from tcp_flags bitmask
     if tcp_vals:
         int_flags = [int(v) for v in tcp_vals]
+
         def _flag_if(name: str, fn):
             result = fn(int_flags)
             features[name] = result if result is not None else 0.0
+
         _flag_if("flag_syn_ratio", flag_syn_ratio)
         _flag_if("flag_ack_ratio", flag_ack_ratio)
         _flag_if("flag_fin_ratio", flag_fin_ratio)
@@ -353,18 +355,28 @@ def _build_state(
         _flag_if("flag_no_ack_share", flag_no_ack_share)
         _flag_if("flag_xmas_share", flag_xmas_share)
     else:
-        for name in ["flag_syn_ratio", "flag_ack_ratio", "flag_fin_ratio", "flag_rst_ratio",
-                      "flag_psh_ratio", "flag_urg_ratio", "flag_syn_ack_ratio",
-                      "flag_no_ack_share", "flag_xmas_share"]:
+        for name in [
+            "flag_syn_ratio",
+            "flag_ack_ratio",
+            "flag_fin_ratio",
+            "flag_rst_ratio",
+            "flag_psh_ratio",
+            "flag_urg_ratio",
+            "flag_syn_ack_ratio",
+            "flag_no_ack_share",
+            "flag_xmas_share",
+        ]:
             features[name] = 0.0
 
     # Protocol share features (P1-T2)
     protos = feature_values.get("protocol", [])
     if protos:
         int_protos = [int(p) for p in protos]
+
         def _proto_if(name: str, fn):
             result = fn(int_protos)
             features[name] = result if result is not None else 0.0
+
         _proto_if("proto_tcp_share", proto_tcp_share)
         _proto_if("proto_udp_share", proto_udp_share)
         _proto_if("proto_icmp_share", proto_icmp_share)
@@ -377,9 +389,11 @@ def _build_state(
     ip_flags = feature_values.get("ip_flags", [])
     if ip_flags:
         int_ip_flags = [int(f) for f in ip_flags]
+
         def _frag_if(name: str, fn):
             result = fn(int_ip_flags)
             features[name] = result if result is not None else 0.0
+
         _frag_if("frag_df_share", frag_df_share)
         _frag_if("frag_mf_share", frag_mf_share)
     else:
@@ -399,9 +413,7 @@ def _build_state(
     # TTL uniqueness per source
     if "ttl" in feature_values:
         src_ttl = [
-            (e.source_entity, int(e.features.get("ttl", 0)))
-            for e in events
-            if "ttl" in e.features
+            (e.source_entity, int(e.features.get("ttl", 0))) for e in events if "ttl" in e.features
         ]
         if src_ttl:
             result = ttl_nunique_per_src(src_ttl)

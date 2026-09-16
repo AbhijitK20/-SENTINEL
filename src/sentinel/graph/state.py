@@ -129,9 +129,7 @@ def build_network_graph(
     )
 
 
-def _compute_node_features(
-    host: str, state: NetworkState, known_hosts: set[str]
-) -> list[float]:
+def _compute_node_features(host: str, state: NetworkState, known_hosts: set[str]) -> list[float]:
     """Compute node features for a single host."""
     features = state.features
 

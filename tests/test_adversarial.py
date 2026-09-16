@@ -184,17 +184,19 @@ def test_detectors_handle_zero_features():
 
 def test_detectors_handle_extreme_values():
     """Detectors must not crash with extreme feature values."""
-    state = _make_state(features={
-        "flow_event_count": 1e6,
-        "bytes": 1e9,
-        "packets": 1e6,
-        "syn_count": 500000.0,
-        "rst_count": 500000.0,
-        "ack_count": 500000.0,
-        "failed_auth": 100000.0,
-        "duration": 0.001,
-        "iat_mean": 0.0,
-    })
+    state = _make_state(
+        features={
+            "flow_event_count": 1e6,
+            "bytes": 1e9,
+            "packets": 1e6,
+            "syn_count": 500000.0,
+            "rst_count": 500000.0,
+            "ack_count": 500000.0,
+            "failed_auth": 100000.0,
+            "duration": 0.001,
+            "iat_mean": 0.0,
+        }
+    )
     findings = run_all_detectors(state, ())
     assert all(isinstance(f.probability, float) for f in findings)
     assert all(0.0 <= f.probability <= 1.0 for f in findings)
