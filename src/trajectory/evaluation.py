@@ -27,9 +27,8 @@ from collections.abc import Callable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from trajectory.baseline import SPLIT_NAMES
 from trajectory.predict import DECISION_THRESHOLD, LoadedArtifacts, forecast
-from trajectory.schemas import Forecast, NetworkState
+from trajectory.schemas import Forecast, NetworkState, SPLIT_NAMES
 from trajectory.targets import LabelledState
 
 REPLAY_EVALUATION_VERSION = "replay-evaluation-v1"
