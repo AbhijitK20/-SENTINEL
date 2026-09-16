@@ -113,7 +113,9 @@ class FeatureRegistry:
         for flag in ["syn", "ack", "fin", "rst", "urg"]:
             for suffix in ["sum", "mean"]:
                 self._register(
-                    f"{flag}_count_{suffix}", "tcp_flags", description=f"{flag.upper()} count {suffix}"
+                    f"{flag}_count_{suffix}",
+                    "tcp_flags",
+                    description=f"{flag.upper()} count {suffix}",
                 )
 
         # Failed auth / auth attempt
