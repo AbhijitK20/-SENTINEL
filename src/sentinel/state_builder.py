@@ -334,24 +334,27 @@ def _build_state(
     # Flag ratio features (P1-T2): computed from tcp_flags bitmask
     if tcp_vals:
         int_flags = [int(v) for v in tcp_vals]
-        _set_if = lambda name, fn: _set_feature_if(features, name, fn(int_flags))
-        _set_if("flag_syn_ratio", flag_syn_ratio)
-        _set_if("flag_ack_ratio", flag_ack_ratio)
-        _set_if("flag_fin_ratio", flag_fin_ratio)
-        _set_if("flag_rst_ratio", flag_rst_ratio)
-        _set_if("flag_psh_ratio", flag_psh_ratio)
-        _set_if("flag_urg_ratio", flag_urg_ratio)
-        _set_if("flag_syn_ack_ratio", flag_syn_ack_ratio)
-        _set_if("flag_no_ack_share", flag_no_ack_share)
-        _set_if("flag_xmas_share", flag_xmas_share)
+        def _flag_if(name: str, fn):
+            _set_feature_if(features, name, fn(int_flags))
+        _flag_if("flag_syn_ratio", flag_syn_ratio)
+        _flag_if("flag_ack_ratio", flag_ack_ratio)
+        _flag_if("flag_fin_ratio", flag_fin_ratio)
+        _flag_if("flag_rst_ratio", flag_rst_ratio)
+        _flag_if("flag_psh_ratio", flag_psh_ratio)
+        _flag_if("flag_urg_ratio", flag_urg_ratio)
+        _flag_if("flag_syn_ack_ratio", flag_syn_ack_ratio)
+        _flag_if("flag_no_ack_share", flag_no_ack_share)
+        _flag_if("flag_xmas_share", flag_xmas_share)
 
     # Protocol share features (P1-T2)
     protos = feature_values.get("protocol", [])
     if protos:
         int_protos = [int(p) for p in protos]
-        _set_if("proto_tcp_share", proto_tcp_share, int_protos)
-        _set_if("proto_udp_share", proto_udp_share, int_protos)
-        _set_if("proto_icmp_share", proto_icmp_share, int_protos)
+        def _proto_if(name: str, fn):
+            _set_feature_if(features, name, fn(int_protos))
+        _proto_if("proto_tcp_share", proto_tcp_share)
+        _proto_if("proto_udp_share", proto_udp_share)
+        _proto_if("proto_icmp_share", proto_icmp_share)
 
     # Packet-level features (P1-T3) — fragment flags, retransmissions, IAT, TTL
     # Fragment features from IP flags (if available)
