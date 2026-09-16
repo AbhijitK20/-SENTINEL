@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sentinel.schemas import Forecast
 
-LEDGER_VERSION = "trajectory-ledger-v1"
+LEDGER_VERSION = "sentinel-ledger-v1"
 GENESIS_HASH = "0" * 64
 
 

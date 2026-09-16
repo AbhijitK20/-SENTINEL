@@ -48,16 +48,16 @@ Dashboard / REST API / live sensors / trust ledger
 
 ### Enterprise Platform
 
-- **FastAPI REST API** (`trajectory/api.py`): `/health`, `/model`, `/v1/forecast`, `/v1/detect`, `/v1/events`, `/v1/live`, `/v1/live/reset`, `/v1/alerts`, `/v1/cases`, `/v1/registry`, `/v1/drift`, `/v1/compliance`, `/metrics`
-- **API-key auth + RBAC** (`trajectory/auth.py`): 4 roles (viewer/analyst/engineer/admin), SHA-256-hashed keys, append-only audit trail, org_id tenant field
-- **Model registry** (`trajectory/registry.py`): register → approve → rollback workflow
-- **PSI drift monitoring** (`trajectory/drift.py`): per-feature PSI vs training baseline, `/v1/drift` endpoint
-- **Case lifecycle** (`trajectory/cases.py`): OPEN → ACKNOWLEDGED → INVESTIGATING → RESOLVED with SLA
-- **Compliance reporting** (`trajectory/compliance.py`): NIST CSF / ISO 27001 / SOC 2 control mapping
-- **Federated learning simulation** (`trajectory/federated.py`): FedAvg weights-only sharing
-- **HMAC-signed analyst feedback** (`trajectory/feedback.py`): append-only, no auto-retrain
-- **Threat-intel enrichment** (`trajectory/threat_intel.py`): URLhaus feed, TTL-bound, list evidence
-- **Live push engine** (`trajectory/live.py`): `/v1/events` streams through windowed detection
+- **FastAPI REST API** (`sentinel/api.py`): `/health`, `/model`, `/v1/forecast`, `/v1/detect`, `/v1/events`, `/v1/live`, `/v1/live/reset`, `/v1/alerts`, `/v1/cases`, `/v1/registry`, `/v1/drift`, `/v1/compliance`, `/metrics`
+- **API-key auth + RBAC** (`sentinel/auth.py`): 4 roles (viewer/analyst/engineer/admin), SHA-256-hashed keys, append-only audit trail, org_id tenant field
+- **Model registry** (`sentinel/registry.py`): register → approve → rollback workflow
+- **PSI drift monitoring** (`sentinel/drift.py`): per-feature PSI vs training baseline, `/v1/drift` endpoint
+- **Case lifecycle** (`sentinel/cases.py`): OPEN → ACKNOWLEDGED → INVESTIGATING → RESOLVED with SLA
+- **Compliance reporting** (`sentinel/compliance.py`): NIST CSF / ISO 27001 / SOC 2 control mapping
+- **Federated learning simulation** (`sentinel/federated.py`): FedAvg weights-only sharing
+- **HMAC-signed analyst feedback** (`sentinel/feedback.py`): append-only, no auto-retrain
+- **Threat-intel enrichment** (`sentinel/threat_intel.py`): URLhaus feed, TTL-bound, list evidence
+- **Live push engine** (`sentinel/live.py`): `/v1/events` streams through windowed detection
 
 ### Real-Time Detection (Sensors)
 
@@ -130,10 +130,10 @@ uv run ruff format --check src tests scripts
 ./run_all.sh                  # lint + tests + benchmark + charts
 
 # Dashboard
-uv run streamlit run src/trajectory/dashboard/app.py
+uv run streamlit run src/sentinel/dashboard/app.py
 
 # REST API
-uv run uvicorn trajectory.api:create_app --factory --port 8000
+uv run uvicorn sentinel.api:create_app --factory --port 8000
 
 # Local vulnerable target, scanner, and admin response dashboard
 docker compose --profile demo up -d
@@ -247,18 +247,18 @@ synthetic attack -> vulnerable app logs -> scanner -> /v1/events
 - **Detectors**: `DETECTORS.md` (attack-type detectors, incident correlation, asset risk fusion)
 - **Enterprise**: `ROADMAP.md` (scale levels, phase status) + `DEPLOYMENT.md` (compose stack, Hugging Face Spaces, observability, real-data mode, sensors)
 - **Platform modules**:
-  - `trajectory/api.py` — REST API (forecast, detect, events, alerts, cases, registry, drift, compliance, metrics, auth)
-  - `trajectory/auth.py` — API-key auth, RBAC, audit trail
-  - `trajectory/live.py` — live detection engine (5 sources: CSV, JSONL, syslog, Scapy, flow sensor)
-  - `trajectory/detectors.py` — 9 attack-type detectors with measured thresholds
-  - `trajectory/correlation.py` — incident correlation with risk fusion
-  - `trajectory/cases.py` — case lifecycle + SLA
-  - `trajectory/drift.py` — PSI monitoring
-  - `trajectory/registry.py` — model promotion workflow
-  - `trajectory/compliance.py` — NIST / ISO / SOC 2 control mapping
-  - `trajectory/federated.py` — FedAvg simulation
-  - `trajectory/feedback.py` — HMAC-signed analyst feedback
-  - `trajectory/threat_intel.py` — keyless threat-intel feed enrichment
+  - `sentinel/api.py` — REST API (forecast, detect, events, alerts, cases, registry, drift, compliance, metrics, auth)
+  - `sentinel/auth.py` — API-key auth, RBAC, audit trail
+  - `sentinel/live.py` — live detection engine (5 sources: CSV, JSONL, syslog, Scapy, flow sensor)
+  - `sentinel/detectors.py` — 9 attack-type detectors with measured thresholds
+  - `sentinel/correlation.py` — incident correlation with risk fusion
+  - `sentinel/cases.py` — case lifecycle + SLA
+  - `sentinel/drift.py` — PSI monitoring
+  - `sentinel/registry.py` — model promotion workflow
+  - `sentinel/compliance.py` — NIST / ISO / SOC 2 control mapping
+  - `sentinel/federated.py` — FedAvg simulation
+  - `sentinel/feedback.py` — HMAC-signed analyst feedback
+  - `sentinel/threat_intel.py` — keyless threat-intel feed enrichment
   - `scripts/fetch_threat_feed.py` — internet-fetched feed refresh
   - `scripts/flow_sensor.py` — 5-tuple flow aggregation from tcpdump
   - `scripts/packet_sensor.py` — per-packet event stream from tcpdump

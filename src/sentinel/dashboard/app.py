@@ -1,7 +1,7 @@
 """SENTINEL Dashboard — offline interactive demo for SIH26153.
 
 Run with:
-    uv run streamlit run src/trajectory/dashboard/app.py
+    uv run streamlit run src/sentinel/dashboard/app.py
 
 No cloud APIs required. All inference runs from saved local artifacts.
 """
