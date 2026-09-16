@@ -10,6 +10,39 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from sentinel.features.ports import (
+    dst_port_entropy,
+    dst_port_nunique,
+    dst_port_randomness,
+    dst_port_sequential_score,
+    dst_port_wellknown_share,
+    dst_port_low_share,
+    ports_per_host_max,
+    src_port_ephemeral_share,
+)
+from sentinel.features.flags import (
+    flag_ack_ratio,
+    flag_fin_ratio,
+    flag_no_ack_share,
+    flag_psh_ratio,
+    flag_rst_ratio,
+    flag_syn_ack_ratio,
+    flag_syn_ratio,
+    flag_urg_ratio,
+    flag_xmas_share,
+    proto_icmp_share,
+    proto_tcp_share,
+    proto_udp_share,
+)
+from sentinel.features.packets import (
+    frag_df_share,
+    frag_mf_share,
+    frag_offset_nunique,
+    iat_stats,
+    retransmission_count,
+    retransmission_rate,
+    ttl_nunique_per_src,
+)
 from sentinel.schemas import NetworkState, UnifiedEvent
 
 FEATURE_VERSION = "state-features-v3"
