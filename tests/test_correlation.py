@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from trajectory.assets import default_asset_registry, fuse_risk, risk_level
-from trajectory.correlation import correlate, recommend
-from trajectory.feedback import FeedbackStore
-from trajectory.schemas import AttackFinding
+from sentinel.assets import default_asset_registry, fuse_risk, risk_level
+from sentinel.correlation import correlate, recommend
+from sentinel.feedback import FeedbackStore
+from sentinel.schemas import AttackFinding
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
 REGISTRY = default_asset_registry()

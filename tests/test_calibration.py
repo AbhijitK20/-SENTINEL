@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from trajectory.calibration import (
+from sentinel.calibration import (
     CALIBRATION_VERSION,
     DEFAULT_THRESHOLD,
     calibrate_threshold,

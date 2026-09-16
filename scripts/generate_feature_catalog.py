@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pathlib
 
-from trajectory.state_builder import (
+from sentinel.state_builder import (
     _UNDEFINED_FOR_SINGLE,
     AGGREGATION_POLICY,
     FEATURE_VERSION,

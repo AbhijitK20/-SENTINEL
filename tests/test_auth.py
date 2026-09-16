@@ -7,24 +7,24 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
-from trajectory.api import create_app
-from trajectory.auth import (
+from sentinel.api import create_app
+from sentinel.auth import (
     PERMISSIONS,
     ROLES,
     ApiKeyStore,
     AuditLog,
     role_can,
 )
-from trajectory.baseline import save_baseline_artifacts, train_baseline
-from trajectory.config import BaselineConfig
-from trajectory.predict import DECISION_THRESHOLD
-from trajectory.schemas import (
+from sentinel.baseline import save_baseline_artifacts, train_baseline
+from sentinel.config import BaselineConfig
+from sentinel.predict import DECISION_THRESHOLD
+from sentinel.schemas import (
     Forecast,
     PredictedStage,
     ProbabilityPoint,
 )
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
 
 # ── store unit tests ─────────────────────────────────────────────────
 

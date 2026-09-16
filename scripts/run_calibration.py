@@ -16,11 +16,11 @@ import argparse
 import json
 from pathlib import Path
 
-from trajectory.baseline import train_baseline
-from trajectory.calibration import calibrate_threshold
-from trajectory.config import load_settings
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
+from sentinel.baseline import train_baseline
+from sentinel.calibration import calibrate_threshold
+from sentinel.config import load_settings
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
 
 
 def main() -> None:
@@ -59,7 +59,7 @@ def main() -> None:
     # Validation-split probabilities for the horizon target, from the fitted
     # baseline on the standardized current window. Test scenarios are excluded.
     schema = run.result.feature_schema
-    from trajectory.features import vectorize_states
+    from sentinel.features import vectorize_states
 
     validation_items = [
         item for item in labelled if item.scenario_id in manifest.validation_scenarios

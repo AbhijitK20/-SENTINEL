@@ -3,16 +3,16 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.baseline import (
+from sentinel.baseline import (
     SPLIT_NAMES,
     audit_split,
     save_baseline_artifacts,
     train_baseline,
 )
-from trajectory.config import BaselineConfig
-from trajectory.schemas import SplitManifest
-from trajectory.synthetic import generate_labelled_states, generate_scenario_events
-from trajectory.targets import build_sequence_samples, make_split_manifest
+from sentinel.config import BaselineConfig
+from sentinel.schemas import SplitManifest
+from sentinel.synthetic import generate_labelled_states, generate_scenario_events
+from sentinel.targets import build_sequence_samples, make_split_manifest
 
 SCENARIOS = [f"s{index}" for index in range(5)]
 

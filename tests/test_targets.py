@@ -2,8 +2,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from trajectory.schemas import NetworkState, StateLabel
-from trajectory.targets import (
+from sentinel.schemas import NetworkState, StateLabel
+from sentinel.targets import (
     LabelledState,
     build_sequence_samples,
     build_transition_targets,
@@ -76,7 +76,7 @@ def test_invalid_target_configuration_is_rejected() -> None:
 def test_stratified_split_balances_attack_classes() -> None:
     from collections import Counter
 
-    from trajectory.targets import make_stratified_split_manifest
+    from sentinel.targets import make_stratified_split_manifest
 
     # Two classes, six scenarios: round-robin dealing must put both classes
     # in every split (the random split could stack all DDoS into one split).
@@ -98,7 +98,7 @@ def test_stratified_split_balances_attack_classes() -> None:
 def test_stratified_split_rejects_unknown_stage() -> None:
     import pytest
 
-    from trajectory.targets import make_stratified_split_manifest
+    from sentinel.targets import make_stratified_split_manifest
 
     with pytest.raises(ValueError, match="stage missing"):
         make_stratified_split_manifest(["a", "b"], {"a": "Benign"}, seed=1)

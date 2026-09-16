@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from trajectory.config import load_settings
+from sentinel.config import load_settings
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "trajectory"
 

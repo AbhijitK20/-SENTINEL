@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.detectors import DetectorSet, run_all_detectors
-from trajectory.schemas import NetworkState
-from trajectory.threat_intel import ThreatIntelFeed, evaluate_hosts
+from sentinel.detectors import DetectorSet, run_all_detectors
+from sentinel.schemas import NetworkState
+from sentinel.threat_intel import ThreatIntelFeed, evaluate_hosts
 
 URLHAUS_SAMPLE = (
     "# urlhaus CSV sample\n"
@@ -108,7 +108,7 @@ def test_no_feed_leaves_findings_unchanged() -> None:
 
 
 def test_bootstrap_key_registers_admin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from trajectory.auth import ApiKeyStore
+    from sentinel.auth import ApiKeyStore
 
     store = ApiKeyStore(tmp_path / "keys.jsonl")
     monkeypatch.setenv("SENTINEL_BOOTSTRAP_KEY", "sent_test_bootstrap_key_000")
@@ -126,12 +126,12 @@ def test_create_app_bootstrap_env_grants_admin(
     """Full deployment path: env bootstrap key -> authorized API access."""
     from fastapi.testclient import TestClient
 
-    from trajectory.api import create_app
-    from trajectory.baseline import save_baseline_artifacts, train_baseline
-    from trajectory.config import BaselineConfig
-    from trajectory.predict import DECISION_THRESHOLD
-    from trajectory.synthetic import generate_labelled_states
-    from trajectory.targets import build_sequence_samples, make_split_manifest
+    from sentinel.api import create_app
+    from sentinel.baseline import save_baseline_artifacts, train_baseline
+    from sentinel.config import BaselineConfig
+    from sentinel.predict import DECISION_THRESHOLD
+    from sentinel.synthetic import generate_labelled_states
+    from sentinel.targets import build_sequence_samples, make_split_manifest
 
     scenarios = [f"boot{i}" for i in range(5)]
     labelled = generate_labelled_states(scenarios, seed=61, window_seconds=60, stride_seconds=60)

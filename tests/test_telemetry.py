@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from trajectory.live import EventReplaySource, LiveEngine
-from trajectory.schemas import UnifiedEvent
-from trajectory.telemetry import parse_auth_log, parse_dns_log
+from sentinel.live import EventReplaySource, LiveEngine
+from sentinel.schemas import UnifiedEvent
+from sentinel.telemetry import parse_auth_log, parse_dns_log
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -69,11 +69,11 @@ def _event(
 
 
 def _trained_engine(tmp_path: Path, events: list[UnifiedEvent]) -> LiveEngine:
-    from trajectory.baseline import save_baseline_artifacts, train_baseline
-    from trajectory.config import BaselineConfig
-    from trajectory.predict import DECISION_THRESHOLD, load_artifacts
-    from trajectory.synthetic import generate_labelled_states
-    from trajectory.targets import build_sequence_samples, make_split_manifest
+    from sentinel.baseline import save_baseline_artifacts, train_baseline
+    from sentinel.config import BaselineConfig
+    from sentinel.predict import DECISION_THRESHOLD, load_artifacts
+    from sentinel.synthetic import generate_labelled_states
+    from sentinel.targets import build_sequence_samples, make_split_manifest
 
     labelled = generate_labelled_states(
         [f"lv{i}" for i in range(5)], seed=11, window_seconds=60, stride_seconds=60

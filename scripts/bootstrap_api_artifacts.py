@@ -12,11 +12,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from trajectory.baseline import save_baseline_artifacts, train_baseline
-from trajectory.config import BaselineConfig
-from trajectory.predict import DECISION_THRESHOLD
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
+from sentinel.baseline import save_baseline_artifacts, train_baseline
+from sentinel.config import BaselineConfig
+from sentinel.predict import DECISION_THRESHOLD
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
 
 
 def bootstrap(out_dir: Path, *, scenarios: int = 6, seed: int = 17) -> Path:

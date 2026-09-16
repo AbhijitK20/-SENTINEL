@@ -16,10 +16,10 @@ import argparse
 import json
 from pathlib import Path
 
-from trajectory.evaluation import evaluate_replay
-from trajectory.predict import forecast, load_artifacts
-from trajectory.report import render_report, save_report
-from trajectory.synthetic import DATASET_ID, generate_labelled_states
+from sentinel.evaluation import evaluate_replay
+from sentinel.predict import forecast, load_artifacts
+from sentinel.report import render_report, save_report
+from sentinel.synthetic import DATASET_ID, generate_labelled_states
 
 
 def main() -> None:

@@ -6,14 +6,14 @@ import queue
 import threading
 from pathlib import Path
 
-from trajectory.baseline import save_baseline_artifacts, train_baseline
-from trajectory.config import BaselineConfig
-from trajectory.live import LiveEngine, SyslogTailSource
-from trajectory.predict import DECISION_THRESHOLD, load_artifacts
-from trajectory.schemas import UnifiedEvent
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
-from trajectory.telemetry import parse_syslog_line
+from sentinel.baseline import save_baseline_artifacts, train_baseline
+from sentinel.config import BaselineConfig
+from sentinel.live import LiveEngine, SyslogTailSource
+from sentinel.predict import DECISION_THRESHOLD, load_artifacts
+from sentinel.schemas import UnifiedEvent
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
+from sentinel.telemetry import parse_syslog_line
 
 SCENARIOS = [f"sl{i}" for i in range(5)]
 

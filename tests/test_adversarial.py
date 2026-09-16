@@ -14,8 +14,8 @@ from __future__ import annotations
 import random
 from datetime import UTC, datetime, timedelta
 
-from trajectory.detectors import run_all_detectors
-from trajectory.schemas import NetworkState
+from sentinel.detectors import run_all_detectors
+from sentinel.schemas import NetworkState
 
 
 def _make_state(

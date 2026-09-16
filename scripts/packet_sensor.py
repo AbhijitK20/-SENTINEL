@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from trajectory.schemas import UnifiedEvent  # noqa: E402
+from sentinel.schemas import UnifiedEvent  # noqa: E402
 
 # tcpdump -n -l line, e.g. (with -tttt omitted, default has epoch-less timestamp)
 #   14:33:08.333570 IP 10.0.0.9.45678 > 10.0.0.5.3389: Flags [S], seq 123, win 64240, length 0

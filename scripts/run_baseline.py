@@ -12,10 +12,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from trajectory.baseline import save_baseline_artifacts, train_baseline
-from trajectory.config import load_settings
-from trajectory.synthetic import DATASET_ID, generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
+from sentinel.baseline import save_baseline_artifacts, train_baseline
+from sentinel.config import load_settings
+from sentinel.synthetic import DATASET_ID, generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
 
 DEFAULT_SCENARIOS = [f"scenario-{index:02d}" for index in range(1, 11)]
 

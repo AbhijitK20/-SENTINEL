@@ -5,16 +5,16 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from trajectory.features import fit_feature_schema
-from trajectory.schemas import NetworkState, StateLabel
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import (
+from sentinel.features import fit_feature_schema
+from sentinel.schemas import NetworkState, StateLabel
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import (
     LabelledState,
     build_sequence_samples,
     make_split_manifest,
     make_state_key,
 )
-from trajectory.temporal import (
+from sentinel.temporal import (
     TemporalConfig,
     save_temporal_artifacts,
     train_temporal,

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.cic_ids2017 import (
+from sentinel.cic_ids2017 import (
     ADAPTER_VERSION,
     DATASET_ID,
     AdapterError,

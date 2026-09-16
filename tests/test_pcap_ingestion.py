@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("scapy")
 
-from trajectory.pcap_ingestion import read_pcap
+from sentinel.pcap_ingestion import read_pcap
 
 
 def test_pcap_extracts_packet_features(tmp_path: Path) -> None:

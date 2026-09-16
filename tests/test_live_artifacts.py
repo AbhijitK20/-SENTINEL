@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from trajectory.dashboard import live_artifacts
-from trajectory.dashboard.live_artifacts import select_live_artifacts
+from sentinel.dashboard import live_artifacts
+from sentinel.dashboard.live_artifacts import select_live_artifacts
 
 SENTINEL_REAL = object()
 SENTINEL_DEFAULT = object()

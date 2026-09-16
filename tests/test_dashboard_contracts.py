@@ -40,7 +40,7 @@ def test_scenario_ids_never_truncate() -> None:
     Regression: DEFAULT_SCENARIOS had 10 entries while the slider allowed 15;
     slicing silently capped every run at 10 scenarios.
     """
-    from trajectory.synthetic import generate_labelled_states
+    from sentinel.synthetic import generate_labelled_states
 
     ids10 = _scenario_ids_from_source(10)
     ids15 = _scenario_ids_from_source(15)
@@ -54,11 +54,11 @@ def test_scenario_ids_never_truncate() -> None:
 
 def test_forecast_respects_history_cut() -> None:
     """forecast() on a truncated history differs from the full history."""
-    from trajectory.baseline import train_baseline
-    from trajectory.config import BaselineConfig
-    from trajectory.predict import artifacts_from_runs, forecast
-    from trajectory.synthetic import generate_labelled_states
-    from trajectory.targets import build_sequence_samples, make_split_manifest
+    from sentinel.baseline import train_baseline
+    from sentinel.config import BaselineConfig
+    from sentinel.predict import artifacts_from_runs, forecast
+    from sentinel.synthetic import generate_labelled_states
+    from sentinel.targets import build_sequence_samples, make_split_manifest
 
     ids = [f"cut{i}" for i in range(4)]
     labelled = generate_labelled_states(ids, seed=11, window_seconds=60, stride_seconds=60)

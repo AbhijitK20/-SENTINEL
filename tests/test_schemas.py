@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from trajectory.schemas import Forecast, NetworkState, UnifiedEvent
+from sentinel.schemas import Forecast, NetworkState, UnifiedEvent
 
 
 def test_event_and_state_contracts_accept_minimal_valid_data() -> None:

@@ -2,8 +2,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from trajectory.schemas import UnifiedEvent
-from trajectory.state_builder import build_network_states
+from sentinel.schemas import UnifiedEvent
+from sentinel.state_builder import build_network_states
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
 

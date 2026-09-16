@@ -16,14 +16,14 @@ import argparse
 import json
 from pathlib import Path
 
-from trajectory.evaluation import evaluate_replay
-from trajectory.predict import load_artifacts
-from trajectory.rollout import (
+from sentinel.evaluation import evaluate_replay
+from sentinel.predict import load_artifacts
+from sentinel.rollout import (
     fit_transition_model,
     rollout_forecast,
     save_transition_model,
 )
-from trajectory.synthetic import DATASET_ID, generate_labelled_states
+from sentinel.synthetic import DATASET_ID, generate_labelled_states
 
 
 def _rollout_forecast_fn(transition_model, baseline_model, schema):
@@ -58,7 +58,7 @@ def main() -> None:
     parser.add_argument("--output", required=True, help="Output directory")
     args = parser.parse_args()
 
-    from trajectory.predict import DECISION_THRESHOLD as _D  # local import for clarity
+    from sentinel.predict import DECISION_THRESHOLD as _D  # local import for clarity
 
     threshold = args.threshold if args.threshold is not None else _D
 

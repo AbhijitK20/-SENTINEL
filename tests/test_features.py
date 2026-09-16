@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 import pytest
 
-from trajectory.features import fit_feature_schema, vectorize_states
-from trajectory.schemas import NetworkState
+from sentinel.features import fit_feature_schema, vectorize_states
+from sentinel.schemas import NetworkState
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
 

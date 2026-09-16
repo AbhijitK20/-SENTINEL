@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.baseline import save_baseline_artifacts, train_baseline
-from trajectory.config import BaselineConfig
-from trajectory.predict import DECISION_THRESHOLD, forecast, load_artifacts
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
-from trajectory.temporal import (
+from sentinel.baseline import save_baseline_artifacts, train_baseline
+from sentinel.config import BaselineConfig
+from sentinel.predict import DECISION_THRESHOLD, forecast, load_artifacts
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
+from sentinel.temporal import (
     TemporalConfig,
     save_temporal_artifacts,
     train_temporal,
@@ -25,7 +25,7 @@ SCENARIOS = [f"tp{i}" for i in range(6)]
 
 torch = pytest.importorskip("torch")
 
-from trajectory.features import fit_feature_schema  # noqa: E402
+from sentinel.features import fit_feature_schema  # noqa: E402
 
 
 def _train_and_save(tmp_path: Path, seed: int = 5):

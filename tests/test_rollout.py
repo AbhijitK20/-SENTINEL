@@ -6,18 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.baseline import save_baseline_artifacts, train_baseline
-from trajectory.config import BaselineConfig
-from trajectory.predict import DECISION_THRESHOLD, load_artifacts
-from trajectory.rollout import (
+from sentinel.baseline import save_baseline_artifacts, train_baseline
+from sentinel.config import BaselineConfig
+from sentinel.predict import DECISION_THRESHOLD, load_artifacts
+from sentinel.rollout import (
     ROLLOUT_MODEL_VERSION,
     fit_transition_model,
     load_transition_model,
     rollout_forecast,
     save_transition_model,
 )
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
 
 SCENARIOS = [f"ro{i}" for i in range(6)]
 
@@ -130,7 +130,7 @@ def test_transition_model_round_trip(tmp_path: Path) -> None:
 
 def test_replay_accepts_rollout_forecast_fn(tmp_path: Path) -> None:
     """The replay evaluator scores the rollout on identical windows."""
-    from trajectory.evaluation import evaluate_replay
+    from sentinel.evaluation import evaluate_replay
 
     labelled, loaded, manifest = _setup(tmp_path)
 

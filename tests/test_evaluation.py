@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.baseline import save_baseline_artifacts, train_baseline
-from trajectory.config import BaselineConfig
-from trajectory.evaluation import evaluate_replay
-from trajectory.predict import DECISION_THRESHOLD, load_artifacts
-from trajectory.report import render_report
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
+from sentinel.baseline import save_baseline_artifacts, train_baseline
+from sentinel.config import BaselineConfig
+from sentinel.evaluation import evaluate_replay
+from sentinel.predict import DECISION_THRESHOLD, load_artifacts
+from sentinel.report import render_report
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
 
 SCENARIOS = [f"ev{i}" for i in range(6)]
 
@@ -89,7 +89,7 @@ def test_report_contains_contract_sections(tmp_path: Path) -> None:
     evaluation = evaluate_replay(labelled, loaded, horizon=2, split_filter="test")
     scenario = evaluation.summaries[0].scenario_id
     states = [i.state for i in labelled if i.scenario_id == scenario]
-    from trajectory.predict import forecast
+    from sentinel.predict import forecast
 
     result = forecast(states, loaded, max_horizon=3)
     report = render_report(
@@ -111,7 +111,7 @@ def test_report_json_round_trip_stability(tmp_path: Path) -> None:
     evaluation = evaluate_replay(labelled, loaded, horizon=2, split_filter="test")
     scenario = evaluation.summaries[0].scenario_id
     states = [i.state for i in labelled if i.scenario_id == scenario]
-    from trajectory.predict import forecast
+    from sentinel.predict import forecast
 
     result = forecast(states, loaded, max_horizon=2)
     report_one = render_report(result, scenario_id=scenario, evaluation=evaluation)

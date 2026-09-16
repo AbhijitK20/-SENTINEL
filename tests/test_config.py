@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from trajectory.config import load_settings
+from sentinel.config import load_settings
 
 
 def test_default_config_is_valid() -> None:

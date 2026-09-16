@@ -31,20 +31,20 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from trajectory.baseline import (
+from sentinel.baseline import (
     BaselineConfig,
     save_baseline_artifacts,
     train_baseline,
 )
-from trajectory.calibration import calibrate_threshold
-from trajectory.cic_ids2017 import AdapterStats, build_labelled_states
-from trajectory.cic_ids2017 import load_flow_csv_with_stats as _load_flow
-from trajectory.evaluation import evaluate_replay
-from trajectory.features import vectorize_states
-from trajectory.predict import DECISION_THRESHOLD, load_artifacts
-from trajectory.rollout import fit_transition_model, rollout_forecast
-from trajectory.schemas import SplitManifest
-from trajectory.targets import build_sequence_samples
+from sentinel.calibration import calibrate_threshold
+from sentinel.cic_ids2017 import AdapterStats, build_labelled_states
+from sentinel.cic_ids2017 import load_flow_csv_with_stats as _load_flow
+from sentinel.evaluation import evaluate_replay
+from sentinel.features import vectorize_states
+from sentinel.predict import DECISION_THRESHOLD, load_artifacts
+from sentinel.rollout import fit_transition_model, rollout_forecast
+from sentinel.schemas import SplitManifest
+from sentinel.targets import build_sequence_samples
 
 SEED = 42
 

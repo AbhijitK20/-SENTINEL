@@ -24,8 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from trajectory.live import JsonlSensorSource, LiveEngine  # noqa: E402
-from trajectory.predict import load_artifacts  # noqa: E402
+from sentinel.live import JsonlSensorSource, LiveEngine  # noqa: E402
+from sentinel.predict import load_artifacts  # noqa: E402
 
 ARTIFACTS = ROOT / "reports" / "generated" / "baseline"
 EVENTS = Path("/tmp/live-events.jsonl")

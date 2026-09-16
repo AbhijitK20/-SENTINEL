@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from trajectory.metrics import compute_binary_metrics
+from sentinel.metrics import compute_binary_metrics
 
 
 def test_metrics_match_hand_computed_confusion_matrix() -> None:

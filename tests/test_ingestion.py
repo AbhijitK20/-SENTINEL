@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.ingestion import read_flow_csv
+from sentinel.ingestion import read_flow_csv
 
 FIXTURE = Path("data/fixtures/flow_sample.csv")
 

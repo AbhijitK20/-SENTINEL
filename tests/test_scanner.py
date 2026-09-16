@@ -52,7 +52,7 @@ def test_successful_login_is_not_failed_auth() -> None:
 
 
 def test_auth_features_aggregate_as_counts() -> None:
-    from trajectory.state_builder import build_network_states
+    from sentinel.state_builder import build_network_states
 
     events = []
     for index in range(3):
@@ -63,7 +63,7 @@ def test_auth_features_aggregate_as_counts() -> None:
             index,
         )
         assert event is not None
-        from trajectory.schemas import UnifiedEvent
+        from sentinel.schemas import UnifiedEvent
 
         events.append(UnifiedEvent.model_validate(event))
 

@@ -1,11 +1,11 @@
-from trajectory.case_studies import (
+from sentinel.case_studies import (
     case_study_topology,
     dubsmash_inspired_case,
     packet_flow_steps,
     replay_topology,
 )
-from trajectory.dashboard.network_graphs import kill_chain_figure, topology_figure
-from trajectory.sequence_detector import ATTACK_TRANSITIONS
+from sentinel.dashboard.network_graphs import kill_chain_figure, topology_figure
+from sentinel.sequence_detector import ATTACK_TRANSITIONS
 
 
 def test_case_study_is_synthetic_and_has_complete_flow() -> None:

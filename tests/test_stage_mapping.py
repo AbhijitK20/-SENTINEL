@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from trajectory.schemas import NetworkState
-from trajectory.stage_mapping import (
+from sentinel.schemas import NetworkState
+from sentinel.stage_mapping import (
     STAGE_MAPPING_VERSION,
     map_stage,
 )

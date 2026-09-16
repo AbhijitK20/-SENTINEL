@@ -10,13 +10,13 @@ import argparse
 import time
 from pathlib import Path
 
-from trajectory.baseline import save_baseline_artifacts, train_baseline
-from trajectory.config import load_settings
-from trajectory.features import fit_feature_schema
-from trajectory.metrics import BinaryMetrics
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
-from trajectory.temporal import TemporalConfig, save_temporal_artifacts, train_temporal
+from sentinel.baseline import save_baseline_artifacts, train_baseline
+from sentinel.config import load_settings
+from sentinel.features import fit_feature_schema
+from sentinel.metrics import BinaryMetrics
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
+from sentinel.temporal import TemporalConfig, save_temporal_artifacts, train_temporal
 
 DEFAULT_SCENARIOS = [f"scenario-{index:02d}" for index in range(1, 11)]
 

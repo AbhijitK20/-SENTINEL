@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.cases import CaseStore
-from trajectory.compliance import generate_report, write_report
-from trajectory.drift import band_of, compare_feature, psi
-from trajectory.federated import fed_average
-from trajectory.feedback import sign_feedback, verify_feedback
-from trajectory.registry import ModelRegistry
-from trajectory.schemas import AnalystFeedback, NetworkState
-from trajectory.synthetic import generate_labelled_states, generate_scenario_events
+from sentinel.cases import CaseStore
+from sentinel.compliance import generate_report, write_report
+from sentinel.drift import band_of, compare_feature, psi
+from sentinel.federated import fed_average
+from sentinel.feedback import sign_feedback, verify_feedback
+from sentinel.registry import ModelRegistry
+from sentinel.schemas import AnalystFeedback, NetworkState
+from sentinel.synthetic import generate_labelled_states, generate_scenario_events
 
 
 @pytest.fixture()
@@ -66,7 +66,7 @@ def test_psi_bands_and_snapshot(tmp: Path) -> None:
     shifted = [10.4] * 20 + [30.0] * 80  # large distribution change
     assert band_of(psi(reference, shifted)) in {"moderate", "significant"}
 
-    from trajectory.drift import DriftSnapshot
+    from sentinel.drift import DriftSnapshot
 
     snapshot = DriftSnapshot(tmp / "drift.json")
     snapshot.capture({"bytes": reference})
@@ -124,7 +124,7 @@ def test_compliance_report_is_honest(tmp: Path) -> None:
 def test_fedavg_weighted_average_and_guards() -> None:
     import numpy as np
 
-    from trajectory.federated import ClientUpdate
+    from sentinel.federated import ClientUpdate
 
     updates = [
         ClientUpdate("a", np.array([1.0, 2.0]), 0.5, 100),
@@ -144,7 +144,7 @@ def test_fedavg_weighted_average_and_guards() -> None:
 def test_fedavg_trains_real_clients() -> None:
     scenarios = [f"fed{i}" for i in range(4)]
     labelled = generate_labelled_states(scenarios, seed=9, window_seconds=60, stride_seconds=60)
-    from trajectory.targets import build_sequence_samples, make_split_manifest
+    from sentinel.targets import build_sequence_samples, make_split_manifest
 
     updates = []
     for c in range(2):
@@ -152,7 +152,7 @@ def test_fedavg_trains_real_clients() -> None:
         cl = [item for item in labelled if item.scenario_id in cs]
         samples = build_sequence_samples(cl, sequence_length=2, horizon=1)
         manifest = make_split_manifest(cs, seed=9)
-        from trajectory.federated import train_client
+        from sentinel.federated import train_client
 
         updates.append(train_client(f"client-{c}", cl, samples, manifest, seed=9))
     result = fed_average(updates)
@@ -179,7 +179,7 @@ def test_signed_feedback_detects_tampering() -> None:
 
 # ── tenant keys ──────────────────────────────────────────────────────────
 def test_api_key_carries_org_id(tmp: Path) -> None:
-    from trajectory.auth import ApiKeyStore
+    from sentinel.auth import ApiKeyStore
 
     store = ApiKeyStore(tmp / "keys.jsonl")
     raw, record = store.create("analyst", org_id="org-b")
@@ -208,7 +208,7 @@ BENIGN_HISTORY = tuple(_state(i, dict(BENIGN_FEATURES)) for i in range(5))
 
 
 def test_new_detectors_disabled_without_telemetry() -> None:
-    from trajectory.detectors import DetectorSet, run_all_detectors
+    from sentinel.detectors import DetectorSet, run_all_detectors
 
     findings = run_all_detectors(_state(5, dict(BENIGN_FEATURES)), BENIGN_HISTORY, DetectorSet())
     by_type = {f.attack_type: f for f in findings}
@@ -219,10 +219,10 @@ def test_new_detectors_disabled_without_telemetry() -> None:
 
 
 def test_c2_scores_only_with_beacon_signal() -> None:
-    from trajectory.detectors import DetectorSet, detect_c2_beacon
+    from sentinel.detectors import DetectorSet, detect_c2_beacon
 
     ctx_hist = BENIGN_HISTORY
-    from trajectory.detectors import DetectorContext
+    from sentinel.detectors import DetectorContext
 
     quiet = detect_c2_beacon(
         DetectorContext(
@@ -241,7 +241,7 @@ def test_c2_scores_only_with_beacon_signal() -> None:
 
 
 def test_malware_alerts_on_execution_burst() -> None:
-    from trajectory.detectors import DetectorContext, DetectorSet, detect_malware
+    from sentinel.detectors import DetectorContext, DetectorSet, detect_malware
 
     burst = detect_malware(
         DetectorContext(
@@ -257,7 +257,7 @@ def test_malware_alerts_on_execution_burst() -> None:
 
 
 def test_phishing_scores_dns_surrogate() -> None:
-    from trajectory.detectors import DetectorContext, DetectorSet, detect_phishing
+    from sentinel.detectors import DetectorContext, DetectorSet, detect_phishing
 
     tunnel = detect_phishing(
         DetectorContext(
@@ -271,7 +271,7 @@ def test_phishing_scores_dns_surrogate() -> None:
 
 
 def test_correlation_includes_new_stages() -> None:
-    from trajectory.correlation import PROGRESSION_ORDER, STAGE_NAMES
+    from sentinel.correlation import PROGRESSION_ORDER, STAGE_NAMES
 
     for attack_type in ("insider_threat", "phishing", "malware_activity"):
         assert attack_type in PROGRESSION_ORDER
@@ -285,12 +285,12 @@ def api_client(tmp_path: Path):
     (the default artifacts dir is git-ignored and absent on CI)."""
     from fastapi.testclient import TestClient
 
-    from trajectory.api import create_app
-    from trajectory.auth import ApiKeyStore
-    from trajectory.baseline import save_baseline_artifacts, train_baseline
-    from trajectory.config import BaselineConfig
-    from trajectory.predict import DECISION_THRESHOLD
-    from trajectory.targets import build_sequence_samples, make_split_manifest
+    from sentinel.api import create_app
+    from sentinel.auth import ApiKeyStore
+    from sentinel.baseline import save_baseline_artifacts, train_baseline
+    from sentinel.config import BaselineConfig
+    from sentinel.predict import DECISION_THRESHOLD
+    from sentinel.targets import build_sequence_samples, make_split_manifest
 
     scenarios = [f"ent{i}" for i in range(5)]
     labelled = generate_labelled_states(scenarios, seed=31, window_seconds=60, stride_seconds=60)

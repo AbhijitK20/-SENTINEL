@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from trajectory.detectors import (
+from sentinel.detectors import (
     DetectorContext,
     DetectorSet,
     detect_c2_beacon,
@@ -16,14 +16,14 @@ from trajectory.detectors import (
     run_all_detectors,
     severity_from_probability,
 )
-from trajectory.targets import LabelledState
+from sentinel.targets import LabelledState
 
 SCENARIOS = [f"det{i}" for i in range(4)]
 
 
 @pytest.fixture(scope="module")
 def labelled() -> list[LabelledState]:
-    from trajectory.synthetic import generate_labelled_states
+    from sentinel.synthetic import generate_labelled_states
 
     return generate_labelled_states(SCENARIOS, seed=17, window_seconds=60, stride_seconds=30)
 

@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from trajectory.threat_intel import ThreatIntelFeed  # noqa: E402
+from sentinel.threat_intel import ThreatIntelFeed  # noqa: E402
 
 URLHAUS_CSV = "https://urlhaus.abuse.ch/downloads/csv/"
 DEFAULT_OUT = Path("reports/threat_intel/feed.json")

@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import argparse
 
-from trajectory.ledger import AlertLedger
-from trajectory.predict import forecast, load_artifacts, save_forecast
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import make_split_manifest
+from sentinel.ledger import AlertLedger
+from sentinel.predict import forecast, load_artifacts, save_forecast
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import make_split_manifest
 
 
 def main() -> None:

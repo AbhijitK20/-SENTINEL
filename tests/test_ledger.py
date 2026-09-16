@@ -6,13 +6,13 @@ from pathlib import Path
 
 from test_predict import _build_artifact_paths
 
-from trajectory.ledger import GENESIS_HASH, AlertLedger, evidence_hash, forecast_hash
-from trajectory.predict import forecast
+from sentinel.ledger import GENESIS_HASH, AlertLedger, evidence_hash, forecast_hash
+from sentinel.predict import forecast
 
 
 def _forecast(tmp_path: Path):
     baseline_dir, _, states = _build_artifact_paths(tmp_path)
-    from trajectory.predict import load_artifacts
+    from sentinel.predict import load_artifacts
 
     return forecast(states, load_artifacts(baseline_dir), max_horizon=2)
 

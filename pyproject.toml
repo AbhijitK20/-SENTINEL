@@ -1,5 +1,5 @@
 [project]
-name = "trajectory-sih26153"
+name = "sentinel-sih26153"
 version = "0.1.0"
 description = "Offline, explainable network attack forecasting prototype for SIH26153."
 readme = "README.md"

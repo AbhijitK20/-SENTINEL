@@ -38,7 +38,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from trajectory.schemas import UnifiedEvent  # noqa: E402
+from sentinel.schemas import UnifiedEvent  # noqa: E402
 
 BATCH_SIZE = 100
 FLUSH_SECONDS = 2.0

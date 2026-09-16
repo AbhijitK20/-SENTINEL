@@ -12,18 +12,18 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.baseline import train_baseline
-from trajectory.config import BaselineConfig
-from trajectory.predict import (
+from sentinel.baseline import train_baseline
+from sentinel.config import BaselineConfig
+from sentinel.predict import (
     DECISION_THRESHOLD,
     FORECAST_VERSION,
     forecast,
     load_artifacts,
     save_forecast,
 )
-from trajectory.schemas import NetworkState
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
+from sentinel.schemas import NetworkState
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
 
 SCENARIOS = [f"p{i}" for i in range(5)]
 START = datetime(2026, 1, 1, tzinfo=UTC)
@@ -46,7 +46,7 @@ def _build_artifact_paths(tmp_path: Path) -> tuple[Path, Path, list[NetworkState
 
     baseline_dir = tmp_path / "baseline"
     baseline_dir.mkdir(parents=True, exist_ok=True)
-    from trajectory.baseline import save_baseline_artifacts
+    from sentinel.baseline import save_baseline_artifacts
 
     save_baseline_artifacts(run, baseline_dir)
 

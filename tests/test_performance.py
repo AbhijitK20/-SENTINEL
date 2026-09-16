@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.ingestion import read_flow_csv
-from trajectory.schemas import UnifiedEvent
-from trajectory.state_builder import build_network_states
+from sentinel.ingestion import read_flow_csv
+from sentinel.schemas import UnifiedEvent
+from sentinel.state_builder import build_network_states
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
 

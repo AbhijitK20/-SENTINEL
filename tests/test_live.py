@@ -11,18 +11,18 @@ from pathlib import Path
 
 import pytest
 
-from trajectory.baseline import save_baseline_artifacts, train_baseline
-from trajectory.config import BaselineConfig
-from trajectory.live import (
+from sentinel.baseline import save_baseline_artifacts, train_baseline
+from sentinel.config import BaselineConfig
+from sentinel.live import (
     CsvReplaySource,
     EventReplaySource,
     JsonlSensorSource,
     LiveEngine,
 )
-from trajectory.predict import DECISION_THRESHOLD, artifacts_from_runs, load_artifacts
-from trajectory.schemas import UnifiedEvent
-from trajectory.synthetic import generate_labelled_states
-from trajectory.targets import build_sequence_samples, make_split_manifest
+from sentinel.predict import DECISION_THRESHOLD, artifacts_from_runs, load_artifacts
+from sentinel.schemas import UnifiedEvent
+from sentinel.synthetic import generate_labelled_states
+from sentinel.targets import build_sequence_samples, make_split_manifest
 
 SCENARIOS = [f"lv{i}" for i in range(5)]
 START = datetime(2026, 1, 1, tzinfo=UTC)
@@ -229,7 +229,7 @@ def test_jsonl_sensor_source_streams_events(tmp_path: Path) -> None:
     worker = threading.Thread(target=source.run, args=(events, stop), daemon=True)
     worker.start()
 
-    from trajectory.live import _SENTINEL
+    from sentinel.live import _SENTINEL
 
     collected = []
     while len(collected) < 3:
@@ -256,7 +256,7 @@ def test_jsonl_sensor_source_can_finish_uploaded_replay(tmp_path: Path) -> None:
     source.run(events, stop)
 
     collected = []
-    from trajectory.live import _SENTINEL
+    from sentinel.live import _SENTINEL
 
     while True:
         item = events.get_nowait()
@@ -329,7 +329,7 @@ def test_csv_replay_source_ordered_and_terminated(tmp_path: Path) -> None:
     collected = []
     while True:
         item = events.get(timeout=2.0)
-        from trajectory.live import _SENTINEL
+        from sentinel.live import _SENTINEL
 
         if item is _SENTINEL:
             break
