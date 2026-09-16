@@ -190,7 +190,7 @@ def test_high_port_ratio_absent_when_no_ports() -> None:
         )
     ]
     (state,) = build_network_states(events, window_seconds=10, stride_seconds=10)
-    assert "high_port_ratio" not in state.features
+    assert state.features.get("high_port_ratio") == 0.0
 
 
 def test_iat_and_bidirectional_features_present() -> None:
