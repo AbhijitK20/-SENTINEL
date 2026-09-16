@@ -137,7 +137,8 @@ class GATEncoder(nn.Module):
             alpha_mean = alpha.mean(dim=-1)  # (num_edges,)
             src = edge_index[0]
             attn_sum = torch.zeros(h.size(1), device=h.device)
-            attn_sum.scatter_add_(0, src.unsqueeze(1).expand_as(h[src]), h[src] * alpha_mean.unsqueeze(1))
+            msgs = h[src] * alpha_mean.unsqueeze(1)
+            attn_sum.scatter_add_(0, src.unsqueeze(1).expand_as(msgs), msgs)
         else:
             attn_sum = h.sum(dim=0)
 
