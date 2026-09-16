@@ -1,5 +1,13 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["@dietrichgebert/ponytail"],
-  "instructions": ["AGENTS.md"]
+  "instructions": ["AGENTS.md"],
+  "skills": [
+    "C:\\Users\\MANSI\\.config\\opencode\\skills\\perseus",
+    "C:\\Users\\MANSI\\.config\\opencode\\skills\\security-skills",
+    "C:\\Users\\MANSI\\.config\\opencode\\skills\\python-expert",
+    "C:\\Users\\MANSI\\.config\\opencode\\skills\\superpowers",
+    "C:\\Users\\MANSI\\.config\\opencode\\skills\\understand-anything",
+    "C:\\Users\\MANSI\\.config\\opencode\\skills\\stop-slop"
+  ]
 }
