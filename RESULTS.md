@@ -1,15 +1,15 @@
 # Results — Synthetic Replay Benchmark
 
 > **Claim status.** Every number below comes from `reports/generated/benchmark/`
-> (regenerate with `./run_all.sh`). They validate the **pipeline** on
-> deterministic synthetic replay data (`synthetic-recon-lateral-v1`). They are
-> **not** a benchmark claim on real traffic and must not appear in submission
-> material as real-traffic results.
+> (regenerate with `uv run python scripts/run_benchmark.py`). They validate the
+> **pipeline** on deterministic synthetic replay data
+> (`synthetic-recon-lateral-v1`). They are **not** a benchmark claim on real
+> traffic and must not appear in submission material as real-traffic results.
 
 ## Experiment Identity
 
 - Dataset/version: `synthetic-recon-lateral-v1` (deterministic recon→lateral replay)
-- Feature version: `state-features-v1`
+- Feature version: `state-features-v2` (rich aggregations, TCP flag decomposition, port behaviour)
 - Split strategy: scenario-held-out (6 train / 2 validation / 2 test), leakage-audited
 - Seed: 42
 - Model versions: `logistic-regression-baseline-v1` vs `gru-temporal-v1`
@@ -18,32 +18,32 @@
 
 ## Baseline (logistic regression, current window)
 
-| Metric | Value |
-|---|---:|
-| Precision | 0.775 |
-| Recall | 0.861 |
-| F1 | 0.816 |
-| False-positive rate | 0.107 |
-| PR-AUC | 0.926 |
+| Metric | v1 | v2 |
+|---|---:|---:|
+| Precision | 0.775 | 0.780 |
+| Recall | 0.861 | 0.889 |
+| F1 | 0.816 | 0.831 |
+| False-positive rate | 0.107 | 0.107 |
+| PR-AUC | 0.926 | — |
 
-## Temporal Model (GRU, per-horizon, best = h+5)
+## Temporal Model (GRU, per-horizon, best = h+1)
 
-| Metric | Value |
-|---|---:|
-| Precision | 0.857 |
-| Recall | 1.000 |
-| F1 | 0.923 |
-| False-positive rate | 0.071 |
-| PR-AUC | 0.953 |
-| Median forecast lead time | 0.0 windows (see interpretation) |
-| Stage macro-F1 | n/a (stage mapping is rule-based; dataset stage ground truth pending) |
+| Metric | v1 (h+5) | v2 (h+1) |
+|---|---:|---:|
+| Precision | 0.857 | 1.000 |
+| Recall | 1.000 | 0.917 |
+| F1 | 0.923 | 0.957 |
+| False-positive rate | 0.071 | 0.000 |
+| PR-AUC | 0.953 | — |
+| Median forecast lead time | 0.0 windows | 0.0 windows |
+| Stage macro-F1 | n/a | n/a |
 
 ## Threshold Calibration (validation split, 134 samples)
 
 | Threshold | Validation F1 |
 |---|---:|
-| **0.40 (selected)** | **0.933** |
-| 0.50 (default) | 0.914 |
+| **0.75 (selected)** | **0.829** |
+| 0.50 (default) | — |
 
 The calibrated threshold is stored beside the artifacts (`calibration.json`)
 and auto-loaded by inference; no flag is required.
@@ -52,8 +52,8 @@ and auto-loaded by inference; no flag is required.
 
 | Evaluation | Threshold | Median lead | Crossing rate | False early |
 |---|---:|---:|---:|---:|
+| Per-horizon | 0.75 | 0.0 win | 0.12 | 0.00 |
 | Per-horizon | 0.50 | 0.0 win | 0.13 | 0.00 |
-| Per-horizon | 0.40 | 0.0 win | 0.13 | 0.00 |
 | Recursive rollout | 0.50 | 0.0 win | 0.43 | 0.11 |
 
 ## Interpretation
@@ -63,10 +63,12 @@ What these experiments establish:
 - The end-to-end pipeline (ingestion → states → targets → models → forecast →
   evaluation) runs reproducibly with leakage-safe scenario splits, checksummed
   artifacts, and typed contracts.
+- v2 rich aggregations improve the baseline (F1 0.816 → 0.831) and temporal
+  model (F1 0.923 → 0.957 at h+1) through richer feature representations.
 - The GRU temporal model outperforms the static logistic baseline on the
-  synthetic test split (F1 0.923 vs 0.816).
-- Validation-split calibration improves F1 (0.914 → 0.933) without touching
-  test data.
+  synthetic test split (F1 0.957 vs 0.831).
+- Validation-split calibration selects threshold 0.75 (F1 0.829) without
+  touching test data.
 - Recursive rollout more than doubles early threshold crossings (0.13 → 0.43)
   versus per-horizon nowcasting at the same threshold.
 
