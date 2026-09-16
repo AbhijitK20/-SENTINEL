@@ -87,6 +87,18 @@ class SplitManifest(BaseModel):
     test_scenarios: list[str]
 
 
+SPLIT_NAMES = ("train", "validation", "test")
+
+
+def split_assignment(manifest: SplitManifest) -> dict[str, str]:
+    """Map each scenario to its split name."""
+    assignment: dict[str, str] = {}
+    for name in SPLIT_NAMES:
+        for scenario in getattr(manifest, f"{name}_scenarios"):
+            assignment[scenario] = name
+    return assignment
+
+
 class ProbabilityPoint(BaseModel):
     """One point in a future infiltration probability timeline."""
 
