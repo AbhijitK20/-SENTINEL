@@ -1,0 +1,221 @@
+{
+  "model_version": "logistic-regression-baseline-v1",
+  "seed": 42,
+  "horizon": 5,
+  "config": {
+    "excluded_features": [
+      "source_port",
+      "destination_port",
+      "protocol",
+      "tcp_flags"
+    ],
+    "regularization_c": 1.0,
+    "class_weight": "balanced",
+    "max_iterations": 1000,
+    "decision_threshold": 0.5
+  },
+  "feature_schema": {
+    "version": "state-features-v1",
+    "names": [
+      "ack_count",
+      "bidirectional_ratio",
+      "bytes",
+      "duration",
+      "event_count",
+      "external_destination_count",
+      "failed_auth",
+      "flow_event_count",
+      "iat_mean",
+      "packet_event_count",
+      "packets",
+      "rst_count",
+      "syn_count"
+    ],
+    "excluded": [
+      "destination_port",
+      "protocol",
+      "source_port",
+      "tcp_flags"
+    ],
+    "means": [
+      247.13888888888889,
+      0.7052530465636961,
+      88756.26666666666,
+      1.005543850527902,
+      16.502777777777776,
+      0.0,
+      1.3277777777777777,
+      16.502777777777776,
+      0.0987728465034994,
+      0.0,
+      263.64166666666665,
+      6.211111111111111,
+      16.502777777777776
+    ],
+    "scales": [
+      189.4405290406725,
+      0.02888644878646349,
+      118559.77319132695,
+      0.08723891344599786,
+      9.016958901952815,
+      1.0,
+      2.0147526883123184,
+      9.016958901952815,
+      0.009083762864265951,
+      1.0,
+      190.41300707643086,
+      8.821998317897565,
+      9.016958901952815
+    ],
+    "missing_value": 0.0
+  },
+  "split_manifest": {
+    "seed": 42,
+    "train_scenarios": [
+      "scenario-03",
+      "scenario-04",
+      "scenario-06",
+      "scenario-07",
+      "scenario-08",
+      "scenario-09"
+    ],
+    "validation_scenarios": [
+      "scenario-05",
+      "scenario-10"
+    ],
+    "test_scenarios": [
+      "scenario-01",
+      "scenario-02"
+    ]
+  },
+  "split_audit": {
+    "sample_counts": {
+      "train": 360,
+      "validation": 120,
+      "test": 120
+    },
+    "positive_counts": {
+      "train": 108,
+      "validation": 36,
+      "test": 36
+    },
+    "scenario_counts": {
+      "train": 6,
+      "validation": 2,
+      "test": 2
+    },
+    "disjoint_scenarios": true,
+    "disjoint_state_keys": true,
+    "unassigned_scenarios": []
+  },
+  "metrics": {
+    "train": {
+      "sample_count": 360,
+      "positive_count": 108,
+      "precision": 0.782258064516129,
+      "recall": 0.8981481481481481,
+      "f1": 0.8362068965517242,
+      "false_positive_rate": 0.10714285714285714,
+      "pr_auc": 0.9502144034592492,
+      "counts": {
+        "true_positive": 97,
+        "false_positive": 27,
+        "true_negative": 225,
+        "false_negative": 11
+      }
+    },
+    "validation": {
+      "sample_count": 120,
+      "positive_count": 36,
+      "precision": 0.7209302325581395,
+      "recall": 0.8611111111111112,
+      "f1": 0.7848101265822784,
+      "false_positive_rate": 0.14285714285714285,
+      "pr_auc": 0.9253257539283684,
+      "counts": {
+        "true_positive": 31,
+        "false_positive": 12,
+        "true_negative": 72,
+        "false_negative": 5
+      }
+    },
+    "test": {
+      "sample_count": 120,
+      "positive_count": 36,
+      "precision": 0.7837837837837838,
+      "recall": 0.8055555555555556,
+      "f1": 0.7945205479452055,
+      "false_positive_rate": 0.09523809523809523,
+      "pr_auc": 0.9319111540837329,
+      "counts": {
+        "true_positive": 29,
+        "false_positive": 8,
+        "true_negative": 76,
+        "false_negative": 7
+      }
+    }
+  },
+  "feature_weights": [
+    {
+      "name": "bytes",
+      "coefficient": 2.609616641194318
+    },
+    {
+      "name": "rst_count",
+      "coefficient": 1.1263118571987982
+    },
+    {
+      "name": "ack_count",
+      "coefficient": 1.007759621519388
+    },
+    {
+      "name": "packets",
+      "coefficient": 0.9984581449923611
+    },
+    {
+      "name": "failed_auth",
+      "coefficient": 0.7816699154644006
+    },
+    {
+      "name": "bidirectional_ratio",
+      "coefficient": -0.14684773962078618
+    },
+    {
+      "name": "duration",
+      "coefficient": -0.1153011584868262
+    },
+    {
+      "name": "event_count",
+      "coefficient": -0.087734459823138
+    },
+    {
+      "name": "flow_event_count",
+      "coefficient": -0.087734459823138
+    },
+    {
+      "name": "syn_count",
+      "coefficient": -0.08773445982313668
+    },
+    {
+      "name": "iat_mean",
+      "coefficient": 0.06931520039279206
+    },
+    {
+      "name": "packet_event_count",
+      "coefficient": 0.0
+    },
+    {
+      "name": "external_destination_count",
+      "coefficient": 0.0
+    }
+  ],
+  "training_seconds": 0.014767899992875755,
+  "inference_microseconds_per_sample": 1.631166475514571,
+  "runtime": {
+    "python": "3.11.15",
+    "scikit_learn": "1.9.0",
+    "numpy": "2.4.6",
+    "platform": "Windows-10-10.0.26200-SP0"
+  },
+  "model_sha256": "7b1fafedbc094b4c37747959bf01a2c80032ab01973c35a13734acb4ca8c5c43"
+}

@@ -1,0 +1,66 @@
+{
+  "version": "release-v1",
+  "created_at": "2026-09-16T16:16:00.220303+00:00",
+  "git_sha": "7f56018472cef106388f195386fb1f4b92702874",
+  "python": "3.11.15",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "config": "configs\\default.yaml",
+  "files": {
+    "PROVENANCE.md": {
+      "sha256": "64f668bc606113c9d79102370610740c8675cc65fad355589fb5cdfbe156f59f",
+      "size_bytes": 209
+    },
+    "TRAINING_CONFIG.yaml": {
+      "sha256": "a0792ee3312901e6090f4f57dbd42718f88028f47866e640b434e0f2e4ebdc19",
+      "size_bytes": 698
+    },
+    "baseline_model.joblib": {
+      "sha256": "7b1fafedbc094b4c37747959bf01a2c80032ab01973c35a13734acb4ca8c5c43",
+      "size_bytes": 943
+    },
+    "baseline_report.md": {
+      "sha256": "a4afda63bdb382d7d963ae6480805dcbdc201bc2bce1818f80f2b99bee9cb217",
+      "size_bytes": 2091
+    },
+    "baseline_result.json": {
+      "sha256": "7e6d2a57148f2a57666fbba55649ae356b5a9c775a594b910792decb26ba9adb",
+      "size_bytes": 5131
+    },
+    "calibration.json": {
+      "sha256": "038599e659d0011a96e473b1d6f33ba835a050e4ffde6c7200d40284bdb2e3d6",
+      "size_bytes": 4727
+    },
+    "feature_schema.json": {
+      "sha256": "7eb921c8fde3ceae363fe3d63753f4ad1b25be67184a2cfc0caca53e7bd11750",
+      "size_bytes": 1082
+    },
+    "split_manifest.json": {
+      "sha256": "64238db9bc2766b20c3f6cbce8593a0afc2649bd7ee4eeb0f1d72d6a037e5bad",
+      "size_bytes": 309
+    },
+    "temporal_result.json": {
+      "sha256": "4fc6d08d377cb5fb80ededf74bcb8b215aab642dab7b55f58a46594cdad6edd0",
+      "size_bytes": 10583
+    },
+    "weights/model_h1.pt": {
+      "sha256": "6f252245e2f33691fcf1eb143a6d27ed92c51b07485c64ac96c6fdb9f088c76a",
+      "size_bytes": 21217
+    },
+    "weights/model_h2.pt": {
+      "sha256": "2331f1ee7444373dc9dc86a2f931ad4c99ae1828650c94cb80ee2dd175b30576",
+      "size_bytes": 21217
+    },
+    "weights/model_h3.pt": {
+      "sha256": "96a708ab7a62eda48a7a7083942383595dc84b250260dcb13aaaab5d5cf377f1",
+      "size_bytes": 21217
+    },
+    "weights/model_h4.pt": {
+      "sha256": "0acdc2f79759083ef72a6d473fc3b7cdbfab208e7f613d4a1eb6b598602a89ed",
+      "size_bytes": 21217
+    },
+    "weights/model_h5.pt": {
+      "sha256": "053ca35025036d43dc3e9487a3714292189381d34d3b5eafff2f9ccf97a0fb54",
+      "size_bytes": 21217
+    }
+  }
+}

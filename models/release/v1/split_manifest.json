@@ -1,0 +1,19 @@
+{
+  "seed": 42,
+  "train_scenarios": [
+    "scenario-03",
+    "scenario-04",
+    "scenario-06",
+    "scenario-07",
+    "scenario-08",
+    "scenario-09"
+  ],
+  "validation_scenarios": [
+    "scenario-05",
+    "scenario-10"
+  ],
+  "test_scenarios": [
+    "scenario-01",
+    "scenario-02"
+  ]
+}

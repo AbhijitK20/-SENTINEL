@@ -1,0 +1,374 @@
+{
+  "model_version": "gru-temporal-v1",
+  "config": {
+    "hidden_size": 32,
+    "num_layers": 1,
+    "dropout": 0.1,
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "max_epochs": 100,
+    "early_stopping_patience": 10
+  },
+  "feature_schema": {
+    "version": "state-features-v1",
+    "names": [
+      "ack_count",
+      "bidirectional_ratio",
+      "bytes",
+      "duration",
+      "event_count",
+      "external_destination_count",
+      "failed_auth",
+      "flow_event_count",
+      "iat_mean",
+      "packet_event_count",
+      "packets",
+      "rst_count",
+      "syn_count"
+    ],
+    "excluded": [
+      "destination_port",
+      "protocol",
+      "source_port",
+      "tcp_flags"
+    ],
+    "means": [
+      256.75925925925924,
+      0.7042251973465761,
+      95944.08796296296,
+      1.001179193041931,
+      15.50925925925926,
+      0.0,
+      1.1064814814814814,
+      15.50925925925926,
+      0.09915346903363352,
+      0.0,
+      272.26851851851853,
+      5.175925925925926,
+      15.50925925925926
+    ],
+    "scales": [
+      200.3914511913181,
+      0.029874491910103718,
+      125384.3208360047,
+      0.08974844199324351,
+      8.672268884176235,
+      1.0,
+      1.904612974593629,
+      8.672268884176235,
+      0.009375785958672703,
+      1.0,
+      201.58603100861234,
+      8.37940453964109,
+      8.672268884176235
+    ],
+    "missing_value": 0.0
+  },
+  "split_manifest": {
+    "seed": 42,
+    "train_scenarios": [
+      "scenario-03",
+      "scenario-04",
+      "scenario-06",
+      "scenario-07",
+      "scenario-08",
+      "scenario-09"
+    ],
+    "validation_scenarios": [
+      "scenario-05",
+      "scenario-10"
+    ],
+    "test_scenarios": [
+      "scenario-01",
+      "scenario-02"
+    ]
+  },
+  "horizons": [
+    {
+      "horizon": 1,
+      "metrics": {
+        "train": {
+          "sample_count": 384,
+          "positive_count": 108,
+          "precision": 0.9469026548672567,
+          "recall": 0.9907407407407407,
+          "f1": 0.9683257918552035,
+          "false_positive_rate": 0.021739130434782608,
+          "pr_auc": 0.9970579094709578,
+          "counts": {
+            "true_positive": 107,
+            "false_positive": 6,
+            "true_negative": 270,
+            "false_negative": 1
+          }
+        },
+        "validation": {
+          "sample_count": 128,
+          "positive_count": 36,
+          "precision": 0.9,
+          "recall": 1.0,
+          "f1": 0.9473684210526316,
+          "false_positive_rate": 0.043478260869565216,
+          "pr_auc": 0.9955680955680957,
+          "counts": {
+            "true_positive": 36,
+            "false_positive": 4,
+            "true_negative": 88,
+            "false_negative": 0
+          }
+        },
+        "test": {
+          "sample_count": 128,
+          "positive_count": 36,
+          "precision": 0.8888888888888888,
+          "recall": 0.8888888888888888,
+          "f1": 0.8888888888888888,
+          "false_positive_rate": 0.043478260869565216,
+          "pr_auc": 0.981017075834149,
+          "counts": {
+            "true_positive": 32,
+            "false_positive": 4,
+            "true_negative": 88,
+            "false_negative": 4
+          }
+        }
+      },
+      "best_epoch": 31,
+      "training_seconds": 2.560850100009702,
+      "model_sha256": "88e306c339a128cb801745ec934309c54f7434573a9d9ed21380ad4898f127dc"
+    },
+    {
+      "horizon": 2,
+      "metrics": {
+        "train": {
+          "sample_count": 378,
+          "positive_count": 108,
+          "precision": 0.8770491803278688,
+          "recall": 0.9907407407407407,
+          "f1": 0.9304347826086956,
+          "false_positive_rate": 0.05555555555555555,
+          "pr_auc": 0.9902303041251319,
+          "counts": {
+            "true_positive": 107,
+            "false_positive": 15,
+            "true_negative": 255,
+            "false_negative": 1
+          }
+        },
+        "validation": {
+          "sample_count": 126,
+          "positive_count": 36,
+          "precision": 0.8372093023255814,
+          "recall": 1.0,
+          "f1": 0.9113924050632911,
+          "false_positive_rate": 0.07777777777777778,
+          "pr_auc": 0.9882894033387455,
+          "counts": {
+            "true_positive": 36,
+            "false_positive": 7,
+            "true_negative": 83,
+            "false_negative": 0
+          }
+        },
+        "test": {
+          "sample_count": 126,
+          "positive_count": 36,
+          "precision": 0.8421052631578947,
+          "recall": 0.8888888888888888,
+          "f1": 0.8648648648648649,
+          "false_positive_rate": 0.06666666666666667,
+          "pr_auc": 0.9741475601328723,
+          "counts": {
+            "true_positive": 32,
+            "false_positive": 6,
+            "true_negative": 84,
+            "false_negative": 4
+          }
+        }
+      },
+      "best_epoch": 24,
+      "training_seconds": 2.196600600029342,
+      "model_sha256": "20716164498c643e0f3a7a17809f731926f56413232b5c60cd4add105cf2757a"
+    },
+    {
+      "horizon": 3,
+      "metrics": {
+        "train": {
+          "sample_count": 372,
+          "positive_count": 108,
+          "precision": 0.875,
+          "recall": 0.9722222222222222,
+          "f1": 0.9210526315789473,
+          "false_positive_rate": 0.056818181818181816,
+          "pr_auc": 0.9802242428194742,
+          "counts": {
+            "true_positive": 105,
+            "false_positive": 15,
+            "true_negative": 249,
+            "false_negative": 3
+          }
+        },
+        "validation": {
+          "sample_count": 124,
+          "positive_count": 36,
+          "precision": 0.8181818181818182,
+          "recall": 1.0,
+          "f1": 0.9,
+          "false_positive_rate": 0.09090909090909091,
+          "pr_auc": 0.9887665268453578,
+          "counts": {
+            "true_positive": 36,
+            "false_positive": 8,
+            "true_negative": 80,
+            "false_negative": 0
+          }
+        },
+        "test": {
+          "sample_count": 124,
+          "positive_count": 36,
+          "precision": 0.8205128205128205,
+          "recall": 0.8888888888888888,
+          "f1": 0.8533333333333333,
+          "false_positive_rate": 0.07954545454545454,
+          "pr_auc": 0.9644349349976415,
+          "counts": {
+            "true_positive": 32,
+            "false_positive": 7,
+            "true_negative": 81,
+            "false_negative": 4
+          }
+        }
+      },
+      "best_epoch": 19,
+      "training_seconds": 1.5275028999894857,
+      "model_sha256": "7268b05e08f6c6f36e20ed77815d9f5ebf015e2521f4216ba8a45f019325f93a"
+    },
+    {
+      "horizon": 4,
+      "metrics": {
+        "train": {
+          "sample_count": 366,
+          "positive_count": 108,
+          "precision": 0.8548387096774194,
+          "recall": 0.9814814814814815,
+          "f1": 0.9137931034482759,
+          "false_positive_rate": 0.06976744186046512,
+          "pr_auc": 0.9865517579116143,
+          "counts": {
+            "true_positive": 106,
+            "false_positive": 18,
+            "true_negative": 240,
+            "false_negative": 2
+          }
+        },
+        "validation": {
+          "sample_count": 122,
+          "positive_count": 36,
+          "precision": 0.8181818181818182,
+          "recall": 1.0,
+          "f1": 0.9,
+          "false_positive_rate": 0.09302325581395349,
+          "pr_auc": 0.9792675427600565,
+          "counts": {
+            "true_positive": 36,
+            "false_positive": 8,
+            "true_negative": 78,
+            "false_negative": 0
+          }
+        },
+        "test": {
+          "sample_count": 122,
+          "positive_count": 36,
+          "precision": 0.8372093023255814,
+          "recall": 1.0,
+          "f1": 0.9113924050632911,
+          "false_positive_rate": 0.08139534883720931,
+          "pr_auc": 0.9596234076251549,
+          "counts": {
+            "true_positive": 36,
+            "false_positive": 7,
+            "true_negative": 79,
+            "false_negative": 0
+          }
+        }
+      },
+      "best_epoch": 25,
+      "training_seconds": 1.9889351000310853,
+      "model_sha256": "0c1bca50b09200accfefa48928dd91d32d4336cace2cfa77d35b4a01b10e4f90"
+    },
+    {
+      "horizon": 5,
+      "metrics": {
+        "train": {
+          "sample_count": 360,
+          "positive_count": 108,
+          "precision": 0.8739495798319328,
+          "recall": 0.9629629629629629,
+          "f1": 0.9162995594713657,
+          "false_positive_rate": 0.05952380952380952,
+          "pr_auc": 0.9831004081969555,
+          "counts": {
+            "true_positive": 104,
+            "false_positive": 15,
+            "true_negative": 237,
+            "false_negative": 4
+          }
+        },
+        "validation": {
+          "sample_count": 120,
+          "positive_count": 36,
+          "precision": 0.8571428571428571,
+          "recall": 1.0,
+          "f1": 0.923076923076923,
+          "false_positive_rate": 0.07142857142857142,
+          "pr_auc": 0.9880263855560033,
+          "counts": {
+            "true_positive": 36,
+            "false_positive": 6,
+            "true_negative": 78,
+            "false_negative": 0
+          }
+        },
+        "test": {
+          "sample_count": 120,
+          "positive_count": 36,
+          "precision": 0.8571428571428571,
+          "recall": 1.0,
+          "f1": 0.923076923076923,
+          "false_positive_rate": 0.07142857142857142,
+          "pr_auc": 0.9605387773935801,
+          "counts": {
+            "true_positive": 36,
+            "false_positive": 6,
+            "true_negative": 78,
+            "false_negative": 0
+          }
+        }
+      },
+      "best_epoch": 19,
+      "training_seconds": 1.526954900007695,
+      "model_sha256": "2346647193bf8cae8e74c96f7cfcd2d67a7708640555aa89db07dd53a5fd43bd"
+    }
+  ],
+  "feature_names": [
+    "ack_count",
+    "bidirectional_ratio",
+    "bytes",
+    "duration",
+    "event_count",
+    "external_destination_count",
+    "failed_auth",
+    "flow_event_count",
+    "iat_mean",
+    "packet_event_count",
+    "packets",
+    "rst_count",
+    "syn_count"
+  ],
+  "runtime": {
+    "python": "3.11.15",
+    "torch": "2.14.0+cpu",
+    "numpy": "2.4.6",
+    "platform": "Windows-10-10.0.26200-SP0"
+  }
+}
