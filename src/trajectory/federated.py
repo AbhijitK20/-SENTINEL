@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Federated learning simulation (roadmap Phase 11): FedAvg over clients.
 
 Simulates cross-silo federated averaging for the logistic-regression

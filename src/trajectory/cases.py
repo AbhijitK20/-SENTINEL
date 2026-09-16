@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Case management (roadmap Phase 10): incident lifecycle with SLA tracking.
 
 Cases wrap correlated incidents in an analyst-owned lifecycle: OPEN ->

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Markdown analyst report export for forecasts and replay evaluation.
 
 The report separates observed facts from model forecasts, names its evidence,

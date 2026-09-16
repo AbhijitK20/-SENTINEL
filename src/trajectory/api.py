@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """FastAPI inference service (roadmap Phase 1): the pipeline over REST.
 
 Loads the same SHA-256-checksummed artifacts as the dashboard and reuses the

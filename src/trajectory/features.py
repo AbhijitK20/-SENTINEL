@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Turn network states into fixed-width, leakage-safe feature vectors."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Synthetic scenario generator for SENTINEL.
 
 Generates flow events with a *precursor ramp* in the benign phase so the

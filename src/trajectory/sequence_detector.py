@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Sequence-aware attack prediction detector.
 
 Uses the history of past attack findings to predict the NEXT likely

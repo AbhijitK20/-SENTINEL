@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Compliance reporting (roadmap Phase 10): control mapping from real state.
 
 Each control cites the module that implements it, so the report is auditable

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Logistic-regression baseline on the current window of a sequence sample.
 
 The baseline is a leakage-safe reference model: it uses the most recent state

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Phase 2 telemetry adapters (stubs): DNS and auth logs -> UnifiedEvent.
 
 These adapters demonstrate the multi-telemetry normalization path the

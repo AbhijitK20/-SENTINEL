@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Keyless threat-intelligence feeds (roadmap Phase 4/6 enrichment).
 
 Loads free indicator feeds (abuse.ch URLhaus-style CSV: no API key, free for

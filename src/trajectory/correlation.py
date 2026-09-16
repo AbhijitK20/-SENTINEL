@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Incident correlation: group attack findings into analyst-facing cases."""
 
 from __future__ import annotations

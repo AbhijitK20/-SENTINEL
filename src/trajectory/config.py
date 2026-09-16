@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Configuration loading for reproducible local runs."""
 
 from __future__ import annotations

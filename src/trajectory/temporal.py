@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """GRU-based temporal state-transition model with multi-horizon probability prediction.
 
 Requires the optional ``deep-learning`` extra (PyTorch)::

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Deterministic educational attack stories for the SENTINEL dashboard.
 
 The Dubsmash story is explicitly illustrative: public reporting describes the

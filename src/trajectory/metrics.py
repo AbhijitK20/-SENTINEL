@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Binary classification metrics with explicit handling of degenerate cases."""
 
 from __future__ import annotations

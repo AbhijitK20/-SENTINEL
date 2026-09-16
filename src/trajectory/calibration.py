@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Leakage-safe decision-threshold calibration on validation data.
 
 The shipped decision threshold (0.5) is a default, not a tuned value. This

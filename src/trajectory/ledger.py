@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Tamper-evident forecast audit ledger.
 
 This is a local, append-only ledger for the prototype. It deliberately stores

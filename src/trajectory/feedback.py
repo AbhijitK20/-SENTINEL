@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Append-only analyst feedback store.
 
 Feedback is recorded for threshold recalibration and rule-improvement review.

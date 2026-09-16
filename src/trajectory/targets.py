@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Build labels, future targets, and leakage-safe sequence samples."""
 
 from __future__ import annotations

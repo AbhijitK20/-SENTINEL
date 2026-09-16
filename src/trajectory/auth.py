@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """API-key authentication, roles, and audit logging (roadmap Phase 2).
 
 Scope honesty: this is key-based auth for services and analysts over the

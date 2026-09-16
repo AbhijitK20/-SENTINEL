@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """MITRE-oriented stage mapping from observable network-state features.
 
 Every rule here is a documented, reviewable association between an observable

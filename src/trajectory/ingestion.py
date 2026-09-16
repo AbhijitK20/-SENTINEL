@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Flow CSV ingestion and normalization."""
 
 from __future__ import annotations

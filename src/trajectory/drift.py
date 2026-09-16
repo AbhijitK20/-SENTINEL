@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Feature-drift monitoring (roadmap Phase 7): PSI vs a training snapshot.
 
 The Population Stability Index compares live feature distributions against a

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """PCAP ingestion and packet-level feature extraction."""
 
 from __future__ import annotations

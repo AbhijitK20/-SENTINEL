@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Recursive K-step rollout: a next-state transition model with forecast heads.
 
 This module closes the documented gap between multi-horizon nowcasting and

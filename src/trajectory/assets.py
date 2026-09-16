@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Asset criticality registry and risk fusion.
 
 Risk is made explicit rather than magical: every assessment carries the

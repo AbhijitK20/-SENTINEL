@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Walk-forward replay evaluation: forecast-versus-reality and measured lead time.
 
 For every labelled state in a scenario, the evaluator produces the forecast

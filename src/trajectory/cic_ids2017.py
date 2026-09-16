@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """CIC-IDS2017 dataset adapter.
 
 Converts CICFlowMeter CSV exports of CIC-Flow-Meter (the dataset's standard

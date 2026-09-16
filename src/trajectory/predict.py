@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Forecast inference: load saved baseline + temporal artifacts and emit a
 ``Forecast`` object that the dashboard and demo can consume.
 

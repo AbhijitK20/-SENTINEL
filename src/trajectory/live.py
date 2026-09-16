@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Live detection engine: bounded-window inference over streaming telemetry.
 
 The engine turns a stream of :class:`UnifiedEvent` into rolling windows of

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Attack-type detectors over NetworkState windows.
 
 Each detector inspects one window state and emits a normalized AttackFinding

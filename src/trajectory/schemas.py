@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Stable contracts shared by ingestion, modelling, and the UI."""
 
 from __future__ import annotations

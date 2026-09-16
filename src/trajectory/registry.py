@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Model registry (roadmap Phase 7): versioned model records with approval.
 
 Scope honesty: this is a local JSON-backed registry demonstrating the
