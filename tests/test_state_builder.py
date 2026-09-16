@@ -37,7 +37,7 @@ def test_states_sort_events_and_aggregate_coverage() -> None:
 
 
 def test_rich_aggregations_produced() -> None:
-    """S2-T1 AC1: ttl_var, iat_mean_mean, payload_size_p90 present when events carry those features."""
+    """S2-T1: ttl_var, iat_mean_mean, payload_size_p90 present."""
     base = datetime(2026, 1, 1, tzinfo=UTC)
     events = [
         UnifiedEvent(
@@ -46,7 +46,12 @@ def test_rich_aggregations_produced() -> None:
             source_entity="a",
             destination_entity="b",
             event_type="flow",
-            features={"bytes": 100.0, "ttl": float(64 + i), "iat_mean": float(i), "payload_size": float(50 + i)},
+            features={
+                "bytes": 100.0,
+                "ttl": float(64 + i),
+                "iat_mean": float(i),
+                "payload_size": float(50 + i),
+            },
             source_format="replay",
             provenance=f"r:e{i}",
         )
@@ -121,3 +126,68 @@ def test_empty_windows_can_be_retained() -> None:
 def test_invalid_window_configuration_is_rejected() -> None:
     with pytest.raises(ValueError, match="must be positive"):
         build_network_states([], window_seconds=0, stride_seconds=30)
+
+
+def test_tcp_flag_bitmask_decomposed_into_counts() -> None:
+    """tcp_flags bitmask is decomposed into individual flag counts."""
+    events = []
+    for i in range(3):
+        flags = 18 if i < 2 else 4  # SYN|ACK for first two, RST for third
+        events.append(
+            UnifiedEvent(
+                event_id=f"f{i}",
+                timestamp=START + timedelta(seconds=i),
+                source_entity="a",
+                destination_entity="b",
+                event_type="flow",
+                features={"bytes": 50.0, "tcp_flags": float(flags)},
+                source_format="replay",
+                provenance=f"r:f{i}",
+            )
+        )
+    (state,) = build_network_states(events, window_seconds=10, stride_seconds=10)
+    f = state.features
+    # SYN|ACK = 1|16 = 18; RST = 4
+    assert f.get("syn_count_sum") == 2.0
+    assert f.get("ack_count_sum") == 2.0
+    assert f.get("rst_count_sum") == 1.0
+    assert f.get("urg_count_sum", 0.0) == 0.0
+
+
+def test_high_port_ratio_computed() -> None:
+    """high_port_ratio = fraction of flows with source_port > 1024."""
+    events = []
+    ports = [80.0, 443.0, 8080.0]  # only 8080 > 1024, so 1 of 3
+    for i, port in enumerate(ports):
+        events.append(
+            UnifiedEvent(
+                event_id=f"f{i}",
+                timestamp=START + timedelta(seconds=i),
+                source_entity="a",
+                destination_entity="b",
+                event_type="flow",
+                features={"bytes": 50.0, "source_port": port},
+                source_format="replay",
+                provenance=f"r:f{i}",
+            )
+        )
+    (state,) = build_network_states(events, window_seconds=10, stride_seconds=10)
+    assert state.features["high_port_ratio"] == pytest.approx(1.0 / 3.0)
+
+
+def test_high_port_ratio_absent_when_no_ports() -> None:
+    """high_port_ratio is absent when source_port is not in features."""
+    events = [
+        UnifiedEvent(
+            event_id="f1",
+            timestamp=START,
+            source_entity="a",
+            destination_entity="b",
+            event_type="flow",
+            features={"bytes": 50.0},
+            source_format="replay",
+            provenance="r:f1",
+        )
+    ]
+    (state,) = build_network_states(events, window_seconds=10, stride_seconds=10)
+    assert "high_port_ratio" not in state.features

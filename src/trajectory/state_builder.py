@@ -8,14 +8,14 @@ import math
 import warnings
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 
 from trajectory.schemas import NetworkState, UnifiedEvent
 
 FEATURE_VERSION = "state-features-v2"
 
 
-class Agg(str, Enum):
+class Agg(StrEnum):
     """Aggregation functions applied to per-window feature value lists."""
 
     SUM = "sum"
@@ -49,6 +49,7 @@ AGGREGATION_POLICY: dict[str, tuple[Agg, ...]] = {
     "ack_count": (Agg.SUM, Agg.MEAN),
     "fin_count": (Agg.SUM, Agg.MEAN),
     "rst_count": (Agg.SUM, Agg.MEAN),
+    "urg_count": (Agg.SUM, Agg.MEAN),
     "failed_auth": (Agg.SUM,),
     "auth_attempt": (Agg.SUM,),
     "source_port": (Agg.MEAN, Agg.NUNIQUE),
@@ -74,6 +75,7 @@ LEGACY_ALIASES: dict[str, str] = {
     "failed_auth": "failed_auth_sum",
     "iat_mean": "iat_mean_mean",
     "auth_attempt": "auth_attempt_sum",
+    "urg_count": "urg_count_sum",
 }
 
 
@@ -222,6 +224,24 @@ def _build_state(
                     features[flat_name] = sum(values) / n
                 elif first == Agg.NUNIQUE:
                     features[flat_name] = float(len(set(values)))
+
+    # TCP flag bitmask decomposition: if tcp_flags bitmask values were
+    # collected, decompose into per-flag counts. This always overwrites
+    # any pre-existing individual flag features, ensuring bitmask truth.
+    _FLAG_MAP = {2: "syn_count", 16: "ack_count", 1: "fin_count", 4: "rst_count", 32: "urg_count"}
+    tcp_vals = feature_values.get("tcp_flags")
+    if tcp_vals:
+        n = len(tcp_vals)
+        for bit, fname in _FLAG_MAP.items():
+            flag_vals = [1.0 if int(v) & bit else 0.0 for v in tcp_vals]
+            features[f"{fname}_sum"] = sum(flag_vals)
+            features[f"{fname}_mean"] = sum(flag_vals) / n if n else 0.0
+
+    # Port behaviour: high_port_ratio = fraction of flows with source_port > 1024
+    src_ports = feature_values.get("source_port")
+    if src_ports:
+        high_count = sum(1 for p in src_ports if p > 1024)
+        features["high_port_ratio"] = high_count / len(src_ports)
 
     edge_summary = [
         {
