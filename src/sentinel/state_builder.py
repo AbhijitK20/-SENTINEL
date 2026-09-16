@@ -272,6 +272,18 @@ def _build_state(
             features[f"{fname}_sum"] = sum(flag_vals)
             features[f"{fname}_mean"] = sum(flag_vals) / n if n else 0.0
 
+    def _set_feature_if(d: dict, key: str, val):
+        """Set feature if value is not None."""
+        if val is not None:
+            d[key] = val
+
+    def _set_if(name: str, fn, args=None):
+        """Helper to compute and set a feature if result is not None."""
+        if args is None:
+            args = ()
+        result = fn(*args) if args else fn()
+        _set_feature_if(features, name, result)
+
     # Port behaviour features (P1-T1)
     src_ports = feature_values.get("source_port", [])
     dst_ports = feature_values.get("destination_port", [])
