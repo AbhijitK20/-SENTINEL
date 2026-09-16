@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-APP = Path(__file__).resolve().parent.parent / "src" / "trajectory" / "dashboard" / "app.py"
+APP = Path(__file__).resolve().parent.parent / "src" / "sentinel" / "dashboard" / "app.py"
 
 
 def _scenario_ids_from_source(count: int) -> list[str]:

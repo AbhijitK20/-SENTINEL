@@ -11,7 +11,7 @@ from pathlib import Path
 
 from sentinel.config import load_settings
 
-SRC = Path(__file__).resolve().parent.parent / "src" / "trajectory"
+SRC = Path(__file__).resolve().parent.parent / "src" / "sentinel"
 
 NETWORK_MODULES = (
     "import requests",
