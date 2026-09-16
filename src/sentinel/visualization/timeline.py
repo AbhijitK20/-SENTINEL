@@ -31,15 +31,8 @@ def lttb_downsample(
         bucket_end = int(i * bucket_size) + 1
         bucket_end = min(bucket_end, len(data))
 
-        next_bucket_start = int(i * bucket_size) + 1
-        next_bucket_end = int((i + 1) * bucket_size) + 1
-        next_bucket_end = min(next_bucket_end, len(data))
-
         avg_x = np.mean(np.arange(bucket_start, bucket_end))
         avg_y = np.mean(data[bucket_start:bucket_end])
-
-        next_avg_x = np.mean(np.arange(next_bucket_start, next_bucket_end))
-        next_avg_y = np.mean(data[next_bucket_start:next_bucket_end])
 
         max_area = -1
         max_index = bucket_start
