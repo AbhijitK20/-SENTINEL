@@ -62,7 +62,9 @@ class Explanation:
         if top:
             parts.append("Driven by:")
             for fa in top:
-                parts.append(f"  {fa.name} ({fa.value:.3f}, {fa.direction} {abs(fa.shap_value):.3f})")
+                parts.append(
+                    f"  {fa.name} ({fa.value:.3f}, {fa.direction} {abs(fa.shap_value):.3f})"
+                )
 
         # Counterfactual
         if self.counterfactual:
