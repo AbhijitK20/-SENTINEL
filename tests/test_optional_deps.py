@@ -107,28 +107,42 @@ def test_core_module_imports_without_optional_deps(module_name: str, hide_option
 
 def test_predict_imports_without_torch(monkeypatch: pytest.MonkeyPatch):
     """AC1: importing trajectory.predict must not fail when torch is absent."""
-    finder = _HideOptionalImporter(("torch",))
-    monkeypatch.setattr(sys, "meta_path", [finder] + sys.meta_path, raising=False)
-    for k in list(sys.modules):
-        if k == "torch" or k.startswith("torch."):
-            monkeypatch.delitem(sys.modules, k, raising=False)
-    if "trajectory.predict" in sys.modules:
-        del sys.modules["trajectory.predict"]
-    mod = importlib.import_module("trajectory.predict")
-    assert hasattr(mod, "ForecastArtifacts")
+    saved_modules = dict(sys.modules)
+    saved_meta_path = list(sys.meta_path)
+    try:
+        finder = _HideOptionalImporter(("torch",))
+        sys.meta_path.insert(0, finder)
+        for k in list(sys.modules):
+            if k == "torch" or k.startswith("torch."):
+                sys.modules.pop(k, None)
+        if "trajectory.predict" in sys.modules:
+            del sys.modules["trajectory.predict"]
+        mod = importlib.import_module("trajectory.predict")
+        assert hasattr(mod, "ForecastArtifacts")
+    finally:
+        sys.modules.clear()
+        sys.modules.update(saved_modules)
+        sys.meta_path[:] = saved_meta_path
 
 
 def test_temporal_raises_runtime_error_not_import_error(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """AC2: torch-requiring tests must raise RuntimeError, not ImportError."""
-    finder = _HideOptionalImporter(("torch",))
-    monkeypatch.setattr(sys, "meta_path", [finder] + sys.meta_path, raising=False)
-    for k in list(sys.modules):
-        if k == "torch" or k.startswith("torch."):
-            monkeypatch.delitem(sys.modules, k, raising=False)
-    if "trajectory.temporal" in sys.modules:
-        del sys.modules["trajectory.temporal"]
-    mod = importlib.import_module("trajectory.temporal")
-    with pytest.raises(RuntimeError, match="PyTorch"):
-        mod._require_torch()
+    saved_modules = dict(sys.modules)
+    saved_meta_path = list(sys.meta_path)
+    try:
+        finder = _HideOptionalImporter(("torch",))
+        sys.meta_path.insert(0, finder)
+        for k in list(sys.modules):
+            if k == "torch" or k.startswith("torch."):
+                sys.modules.pop(k, None)
+        if "trajectory.temporal" in sys.modules:
+            del sys.modules["trajectory.temporal"]
+        mod = importlib.import_module("trajectory.temporal")
+        with pytest.raises(RuntimeError, match="PyTorch"):
+            mod._require_torch()
+    finally:
+        sys.modules.clear()
+        sys.modules.update(saved_modules)
+        sys.meta_path[:] = saved_meta_path
