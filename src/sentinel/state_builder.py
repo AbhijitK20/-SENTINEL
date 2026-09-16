@@ -280,8 +280,11 @@ def _build_state(
     def _set_if(name: str, fn, args=None):
         """Helper to compute and set a feature if result is not None."""
         if args is None:
-            args = ()
-        result = fn(*args) if args else fn()
+            result = fn()
+        elif isinstance(args, (list, tuple)):
+            result = fn(args)
+        else:
+            result = fn(args)
         _set_feature_if(features, name, result)
 
     # Port behaviour features (P1-T1)
