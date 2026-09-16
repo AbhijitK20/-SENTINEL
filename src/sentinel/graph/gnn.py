@@ -51,7 +51,6 @@ class MultiHeadGATLayer(nn.Module):
         Wh = Wh.view(num_nodes, H, D)  # (num_nodes, H, D)
 
         src, dst = edge_index[0], edge_index[1]
-        num_edges = src.size(0)
 
         # Compute attention scores
         e_src = (Wh[src] * self.a_src).sum(dim=-1)  # (num_edges, H)
