@@ -128,7 +128,7 @@ def train_temporal(
     torch.use_deterministic_algorithms(True)
 
     states_by_key = {item.state_key: item for item in labelled_states}
-    assignment = _assignment(manifest)
+    assignment = split_assignment(manifest)
     feature_dim = feature_schema.width
     seq_len = len(samples[0].input_state_keys)
 
