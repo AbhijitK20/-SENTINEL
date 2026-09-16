@@ -12,7 +12,7 @@ from enum import StrEnum
 
 from sentinel.schemas import NetworkState, UnifiedEvent
 
-FEATURE_VERSION = "state-features-v2"
+FEATURE_VERSION = "state-features-v3"
 
 
 class Agg(StrEnum):
@@ -34,6 +34,8 @@ class Agg(StrEnum):
 
 # Feature name -> tuple of aggregations to emit.
 # Absent inputs produce absent keys, never 0.0.
+# v3: removed meaningless aggregations (destination_port_mean, source_port_mean,
+# protocol_mean). Added derived behavioural features.
 AGGREGATION_POLICY: dict[str, tuple[Agg, ...]] = {
     "bytes": (Agg.SUM, Agg.MEAN, Agg.STD, Agg.MAX, Agg.P90),
     "packets": (Agg.SUM, Agg.MEAN, Agg.MAX),
@@ -52,8 +54,8 @@ AGGREGATION_POLICY: dict[str, tuple[Agg, ...]] = {
     "urg_count": (Agg.SUM, Agg.MEAN),
     "failed_auth": (Agg.SUM,),
     "auth_attempt": (Agg.SUM,),
-    "source_port": (Agg.MEAN, Agg.NUNIQUE),
-    "destination_port": (Agg.MEAN, Agg.NUNIQUE),
+    "source_port": (Agg.NUNIQUE,),
+    "destination_port": (Agg.NUNIQUE,),
     "protocol": (Agg.NUNIQUE,),
     "tcp_flags": (Agg.NUNIQUE,),
 }
