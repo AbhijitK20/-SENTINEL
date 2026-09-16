@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import torch
+import torch.nn.functional as F
 
 from sentinel.world_model.model import RSSMCore, RSSMState
 
