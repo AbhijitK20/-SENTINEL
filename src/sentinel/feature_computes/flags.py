@@ -7,7 +7,6 @@ ratios are the network-invariant signal.
 
 from __future__ import annotations
 
-from collections import Counter
 from typing import Sequence
 
 

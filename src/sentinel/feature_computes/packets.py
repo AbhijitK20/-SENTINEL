@@ -8,7 +8,6 @@ IAT statistics, bidirectional ratio, TTL analysis.
 from __future__ import annotations
 
 import math
-from collections import Counter, defaultdict
 from typing import Sequence
 
 
