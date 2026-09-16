@@ -21,7 +21,6 @@ import hashlib
 import json
 import platform
 import subprocess
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -166,7 +165,9 @@ def main() -> None:
     print(f"  files: {len(files)}")
     print(f"  git SHA: {git_sha}")
     for name in sorted(files):
-        print(f"  {name}: {file_hashes[name]['sha256'][:16]}… ({file_hashes[name]['size_bytes']} bytes)")
+        sha = file_hashes[name]["sha256"][:16]
+        size = file_hashes[name]["size_bytes"]
+        print(f"  {name}: {sha}… ({size} bytes)")
 
 
 if __name__ == "__main__":
