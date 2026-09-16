@@ -1292,6 +1292,104 @@ wheels = [
 ]
 
 [[package]]
+name = "sentinel-sih26153"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "joblib" },
+    { name = "networkx" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pandas" },
+    { name = "plotly" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "scikit-learn" },
+    { name = "streamlit" },
+    { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "fastapi" },
+    { name = "networkx" },
+    { name = "plotly" },
+    { name = "scapy" },
+    { name = "streamlit" },
+    { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+    { name = "uvicorn" },
+]
+api = [
+    { name = "fastapi" },
+    { name = "uvicorn" },
+]
+dashboard = [
+    { name = "networkx" },
+    { name = "plotly" },
+    { name = "streamlit" },
+]
+deep-learning = [
+    { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+]
+pcap = [
+    { name = "scapy" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+dev-api = [
+    { name = "httpx" },
+]
+presentation = [
+    { name = "python-pptx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.115,<1" },
+    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115,<1" },
+    { name = "joblib", specifier = ">=1.6.0" },
+    { name = "networkx", specifier = ">=3.3,<4" },
+    { name = "networkx", marker = "extra == 'all'", specifier = ">=3.3,<4" },
+    { name = "networkx", marker = "extra == 'dashboard'", specifier = ">=3.3,<4" },
+    { name = "numpy", specifier = ">=2.0,<3" },
+    { name = "pandas", specifier = ">=2.2,<3" },
+    { name = "plotly", specifier = ">=5.24,<7" },
+    { name = "plotly", marker = "extra == 'all'", specifier = ">=5.24,<7" },
+    { name = "plotly", marker = "extra == 'dashboard'", specifier = ">=5.24,<7" },
+    { name = "pydantic", specifier = ">=2.8,<3" },
+    { name = "pyyaml", specifier = ">=6.0,<7" },
+    { name = "scapy", marker = "extra == 'all'", specifier = ">=2.6,<3" },
+    { name = "scapy", marker = "extra == 'pcap'", specifier = ">=2.6,<3" },
+    { name = "scikit-learn", specifier = ">=1.5,<2" },
+    { name = "streamlit", specifier = ">=1.40,<2" },
+    { name = "streamlit", marker = "extra == 'all'", specifier = ">=1.40,<2" },
+    { name = "streamlit", marker = "extra == 'dashboard'", specifier = ">=1.40,<2" },
+    { name = "torch", specifier = ">=2.4,<3", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "extra == 'all'", specifier = ">=2.4,<3", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "extra == 'deep-learning'", specifier = ">=2.4,<3", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "uvicorn", marker = "extra == 'all'", specifier = ">=0.32,<1" },
+    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.32,<1" },
+]
+provides-extras = ["pcap", "deep-learning", "dashboard", "api", "all"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3,<9" },
+    { name = "pytest-cov", specifier = ">=5,<7" },
+    { name = "ruff", specifier = ">=0.9,<1" },
+]
+dev-api = [{ name = "httpx", specifier = ">=0.27,<1" }]
+presentation = [{ name = "python-pptx", specifier = ">=1.0,<2" }]
+
+[[package]]
 name = "setuptools"
 version = "84.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1477,104 +1575,6 @@ wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp313-cp313-win_amd64.whl", hash = "sha256:f2ffdacd95d7090a8bdfa8426f5d1557625874b19a96ba23a41f640d4a0c9c28", upload-time = "2026-09-02T18:32:10Z" },
     { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp313-cp313-win_arm64.whl", hash = "sha256:4b1b78f8b9b1393576ef03cab0e6d941a6aa562b7539c45da12d80e86c09f9ed", upload-time = "2026-09-02T18:32:13Z" },
 ]
-
-[[package]]
-name = "trajectory-sih26153"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "joblib" },
-    { name = "networkx" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "pandas" },
-    { name = "plotly" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "scikit-learn" },
-    { name = "streamlit" },
-    { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
-]
-
-[package.optional-dependencies]
-all = [
-    { name = "fastapi" },
-    { name = "networkx" },
-    { name = "plotly" },
-    { name = "scapy" },
-    { name = "streamlit" },
-    { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
-    { name = "uvicorn" },
-]
-api = [
-    { name = "fastapi" },
-    { name = "uvicorn" },
-]
-dashboard = [
-    { name = "networkx" },
-    { name = "plotly" },
-    { name = "streamlit" },
-]
-deep-learning = [
-    { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
-]
-pcap = [
-    { name = "scapy" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-dev-api = [
-    { name = "httpx" },
-]
-presentation = [
-    { name = "python-pptx" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.115,<1" },
-    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115,<1" },
-    { name = "joblib", specifier = ">=1.6.0" },
-    { name = "networkx", specifier = ">=3.3,<4" },
-    { name = "networkx", marker = "extra == 'all'", specifier = ">=3.3,<4" },
-    { name = "networkx", marker = "extra == 'dashboard'", specifier = ">=3.3,<4" },
-    { name = "numpy", specifier = ">=2.0,<3" },
-    { name = "pandas", specifier = ">=2.2,<3" },
-    { name = "plotly", specifier = ">=5.24,<7" },
-    { name = "plotly", marker = "extra == 'all'", specifier = ">=5.24,<7" },
-    { name = "plotly", marker = "extra == 'dashboard'", specifier = ">=5.24,<7" },
-    { name = "pydantic", specifier = ">=2.8,<3" },
-    { name = "pyyaml", specifier = ">=6.0,<7" },
-    { name = "scapy", marker = "extra == 'all'", specifier = ">=2.6,<3" },
-    { name = "scapy", marker = "extra == 'pcap'", specifier = ">=2.6,<3" },
-    { name = "scikit-learn", specifier = ">=1.5,<2" },
-    { name = "streamlit", specifier = ">=1.40,<2" },
-    { name = "streamlit", marker = "extra == 'all'", specifier = ">=1.40,<2" },
-    { name = "streamlit", marker = "extra == 'dashboard'", specifier = ">=1.40,<2" },
-    { name = "torch", specifier = ">=2.4,<3", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torch", marker = "extra == 'all'", specifier = ">=2.4,<3", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torch", marker = "extra == 'deep-learning'", specifier = ">=2.4,<3", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "uvicorn", marker = "extra == 'all'", specifier = ">=0.32,<1" },
-    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.32,<1" },
-]
-provides-extras = ["pcap", "deep-learning", "dashboard", "api", "all"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.3,<9" },
-    { name = "pytest-cov", specifier = ">=5,<7" },
-    { name = "ruff", specifier = ">=0.9,<1" },
-]
-dev-api = [{ name = "httpx", specifier = ">=0.27,<1" }]
-presentation = [{ name = "python-pptx", specifier = ">=1.0,<2" }]
 
 [[package]]
 name = "typing-extensions"

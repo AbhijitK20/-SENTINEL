@@ -2,7 +2,7 @@
 
 The runtime must not depend on cloud APIs. This test pins the configuration
 contract and statically asserts that no network client is imported anywhere
-under ``src/trajectory``.
+under ``src/sentinel``.
 """
 
 from __future__ import annotations

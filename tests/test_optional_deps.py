@@ -16,25 +16,25 @@ import pytest
 
 # Modules that must import without any optional dependency.
 CORE_MODULES: Sequence[str] = [
-    "trajectory.ingestion",
-    "trajectory.state_builder",
-    "trajectory.features",
-    "trajectory.baseline",
-    "trajectory.predict",
-    "trajectory.stage_mapping",
-    "trajectory.detectors",
-    "trajectory.evaluation",
-    "trajectory.schemas",
-    "trajectory.config",
-    "trajectory.targets",
-    "trajectory.calibration",
-    "trajectory.correlation",
-    "trajectory.assets",
-    "trajectory.cases",
-    "trajectory.drift",
-    "trajectory.compliance",
-    "trajectory.feedback",
-    "trajectory.ledger",
+    "sentinel.ingestion",
+    "sentinel.state_builder",
+    "sentinel.features",
+    "sentinel.baseline",
+    "sentinel.predict",
+    "sentinel.stage_mapping",
+    "sentinel.detectors",
+    "sentinel.evaluation",
+    "sentinel.schemas",
+    "sentinel.config",
+    "sentinel.targets",
+    "sentinel.calibration",
+    "sentinel.correlation",
+    "sentinel.assets",
+    "sentinel.cases",
+    "sentinel.drift",
+    "sentinel.compliance",
+    "sentinel.feedback",
+    "sentinel.ledger",
 ]
 
 OPTIONAL_MODULES = ("torch", "scapy", "fastapi", "streamlit")
@@ -115,9 +115,9 @@ def test_predict_imports_without_torch(monkeypatch: pytest.MonkeyPatch):
         for k in list(sys.modules):
             if k == "torch" or k.startswith("torch."):
                 sys.modules.pop(k, None)
-        if "trajectory.predict" in sys.modules:
-            del sys.modules["trajectory.predict"]
-        mod = importlib.import_module("trajectory.predict")
+        if "sentinel.predict" in sys.modules:
+            del sys.modules["sentinel.predict"]
+        mod = importlib.import_module("sentinel.predict")
         assert hasattr(mod, "ForecastArtifacts")
     finally:
         sys.modules.clear()
@@ -137,9 +137,9 @@ def test_temporal_raises_runtime_error_not_import_error(
         for k in list(sys.modules):
             if k == "torch" or k.startswith("torch."):
                 sys.modules.pop(k, None)
-        if "trajectory.temporal" in sys.modules:
-            del sys.modules["trajectory.temporal"]
-        mod = importlib.import_module("trajectory.temporal")
+        if "sentinel.temporal" in sys.modules:
+            del sys.modules["sentinel.temporal"]
+        mod = importlib.import_module("sentinel.temporal")
         with pytest.raises(RuntimeError, match="PyTorch"):
             mod._require_torch()
     finally:
