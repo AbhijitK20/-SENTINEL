@@ -93,4 +93,5 @@ class Counterfactual:
 
         drop_from = self.original
         drop_to = self.predicted_impact
-        return f"If {' and '.join(changes)}, probability would drop from {drop_from:.2f} to {drop_to:.2f}"
+        joined = " and ".join(changes)
+        return f"If {joined}, probability would drop from {drop_from:.2f} to {drop_to:.2f}"
