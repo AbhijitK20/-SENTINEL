@@ -73,6 +73,7 @@ LEGACY_ALIASES: dict[str, str] = {
     "rst_count": "rst_count_sum",
     "failed_auth": "failed_auth_sum",
     "iat_mean": "iat_mean_mean",
+    "auth_attempt": "auth_attempt_sum",
 }
 
 
