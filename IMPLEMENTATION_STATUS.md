@@ -282,25 +282,25 @@ Grafana/Prometheus smoke                      healthy scrape and live gauges
 ```
 
 Re-running `scripts/run_comparison.py` reproduces the saved metrics on
-synthetic replay:
+synthetic replay (v2 rich aggregations):
 
 ```text
-baseline: P=0.775 R=0.861 F1=0.816 FPR=0.107
-temporal h+5: P=0.857 R=1.000 F1=0.923 FPR=0.071
+baseline: P=0.780 R=0.889 F1=0.831 FPR=0.107
+temporal h+1: P=1.000 R=0.917 F1=0.957 FPR=0.000
 ```
 
 Re-running `scripts/run_forecast.py` against the saved artifacts:
 
 ```text
-scenario=scenario-01 peak_window=1 peak_probability=0.916
+scenario=scenario-01 peak_window=1 peak_probability=0.996
 predicted_stage=Lateral Movement confidence=high
 ```
 
 Baseline (10 scenarios, seed 42, horizon +5, test split):
-precision 0.775, recall 0.861, F1 0.816, FPR 0.107, PR-AUC 0.926.
+precision 0.780, recall 0.889, F1 0.831, FPR 0.107.
 
-Temporal (same data, horizon +5, test split):
-precision 0.857, recall 1.000, F1 0.923, FPR 0.071, PR-AUC 0.953.
+Temporal (same data, horizon +1, test split):
+precision 1.000, recall 0.917, F1 0.957, FPR 0.000.
 
 **These numbers validate the pipeline only. They are not a benchmark claim and
 must not appear in submission material as real-traffic results.**
