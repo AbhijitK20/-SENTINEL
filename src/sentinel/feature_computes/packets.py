@@ -8,7 +8,7 @@ IAT statistics, bidirectional ratio, TTL analysis.
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from collections.abc import Sequence
 
 
 def frag_df_share(flags: Sequence[int]) -> float | None:

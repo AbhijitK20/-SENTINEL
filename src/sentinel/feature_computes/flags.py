@@ -7,7 +7,7 @@ ratios are the network-invariant signal.
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 
 def flag_syn_ratio(flags: Sequence[int]) -> float | None:
