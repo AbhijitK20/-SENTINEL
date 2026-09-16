@@ -61,7 +61,7 @@ def imagine(
     divergences = []
     z_samples = []
 
-    for step in range(k):
+    for _ in range(k):
         # Prior: p(z | h)
         prior_out = core.prior_net(h)
         mu_p, log_sigma_p = prior_out.chunk(2, dim=-1)
