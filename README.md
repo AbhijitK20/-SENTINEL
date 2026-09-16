@@ -230,11 +230,11 @@ synthetic attack -> vulnerable app logs -> scanner -> /v1/events
 
 ## Claims And Limitations
 
-- Synthetic replay validates pipeline behavior, not production detection performance.
-- Replay lead time is currently measured at 0.0 windows on the available synthetic and checked-in real-data artifact paths because stage transitions occur within the window granularity.
-- Precursor windows may remain labelled `Benign` while intentionally triggering early-warning detectors; these are not ordinary benign-only false-positive measurements.
-- The vulnerable app, attack scripts, blocklist, and containment buttons are local training components and must not be exposed to untrusted networks.
-- Grafana and the admin dashboard are observability/demo surfaces, not production SOAR controls.
+- Synthetic replay validates pipeline behavior, not production detection performance
+- Replay lead time is currently measured at 0.0 windows on the available synthetic and checked-in real-data artifact paths because stage transitions occur within the window granularity
+- Precursor windows may remain labelled `Benign` while intentionally triggering early-warning detectors; these are not ordinary benign-only false-positive measurements
+- The vulnerable app, attack scripts, blocklist, and containment buttons are local training components and must not be exposed to untrusted networks
+- Grafana and the admin dashboard are observability/demo surfaces, not production SOAR controls
 
 ## Documentation Map
 
