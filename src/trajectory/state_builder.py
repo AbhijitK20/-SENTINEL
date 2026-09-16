@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -41,8 +42,9 @@ def build_network_states(
         return ()
 
     ordered_events = sorted(events, key=lambda event: event.timestamp)
-    origin = ordered_events[0].timestamp
-    latest = ordered_events[-1].timestamp
+    stamps = [e.timestamp for e in ordered_events]
+    origin = stamps[0]
+    latest = stamps[-1]
     window_delta = timedelta(seconds=window_seconds)
     stride_delta = timedelta(seconds=stride_seconds)
 
@@ -50,7 +52,9 @@ def build_network_states(
     start = origin
     while start <= latest:
         end = start + window_delta
-        window_events = [event for event in ordered_events if start <= event.timestamp < end]
+        lo = bisect.bisect_left(stamps, start)
+        hi = bisect.bisect_left(stamps, end)
+        window_events = ordered_events[lo:hi]
         if window_events or include_empty:
             states.append(_build_state(start, end, window_events))
         start += stride_delta

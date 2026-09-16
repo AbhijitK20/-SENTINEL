@@ -85,31 +85,43 @@ def read_flow_csv(path: str | Path) -> FlowIngestionResult:
         frame[column] = values
 
     events: list[UnifiedEvent] = []
-    for row_number, row in frame.iterrows():
-        features = {
-            column: float(row[column]) for column in OPTIONAL_COLUMNS.intersection(frame.columns)
-        }
+    optional_cols = sorted(OPTIONAL_COLUMNS.intersection(frame.columns))
+    frame = frame.reset_index(drop=True)
+    ts_array = timestamps.to_numpy()
+    source_entities = frame["source_entity"].to_numpy(dtype=str)
+    dest_entities = frame["destination_entity"].to_numpy(dtype=str)
+    protocols = frame["protocol"].to_numpy()
+    tcp_flags = frame["tcp_flags"].to_numpy() if "tcp_flags" in frame.columns else [""] * len(frame)
+    source_ports = frame["source_port"].to_numpy(dtype=float)
+    dest_ports = frame["destination_port"].to_numpy(dtype=float)
+    bytes_arr = frame["bytes"].to_numpy(dtype=float)
+    packets_arr = frame["packets"].to_numpy(dtype=float)
+    duration_arr = frame["duration"].to_numpy(dtype=float)
+    optional_arrays = {col: frame[col].to_numpy(dtype=float) for col in optional_cols}
+
+    for i in range(len(frame)):
+        features = {col: float(optional_arrays[col][i]) for col in optional_cols}
         features.update(
             {
-                "source_port": float(row["source_port"]),
-                "destination_port": float(row["destination_port"]),
-                "bytes": float(row["bytes"]),
-                "packets": float(row["packets"]),
-                "duration": float(row["duration"]),
+                "source_port": float(source_ports[i]),
+                "destination_port": float(dest_ports[i]),
+                "bytes": float(bytes_arr[i]),
+                "packets": float(packets_arr[i]),
+                "duration": float(duration_arr[i]),
             }
         )
-        features["protocol"] = float(_protocol_number(row["protocol"]))
-        features["tcp_flags"] = float(_flag_mask(row.get("tcp_flags", "")))
+        features["protocol"] = float(_protocol_number(protocols[i]))
+        features["tcp_flags"] = float(_flag_mask(tcp_flags[i]))
         events.append(
             UnifiedEvent(
-                event_id=f"{csv_path.name}:{row_number + 2}",
-                timestamp=timestamps.iloc[row_number].to_pydatetime(),
-                source_entity=str(row["source_entity"]),
-                destination_entity=str(row["destination_entity"]),
+                event_id=f"{csv_path.name}:{i + 2}",
+                timestamp=ts_array[i].to_pydatetime(),
+                source_entity=source_entities[i],
+                destination_entity=dest_entities[i],
                 event_type="flow",
                 features=features,
                 source_format="csv",
-                provenance=f"{csv_path}:{row_number + 2}",
+                provenance=f"{csv_path}:{i + 2}",
             )
         )
 
