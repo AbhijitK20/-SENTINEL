@@ -272,11 +272,93 @@ def _build_state(
             features[f"{fname}_sum"] = sum(flag_vals)
             features[f"{fname}_mean"] = sum(flag_vals) / n if n else 0.0
 
-    # Port behaviour: high_port_ratio = fraction of flows with source_port > 1024
-    src_ports = feature_values.get("source_port")
+    # Port behaviour features (P1-T1)
+    src_ports = feature_values.get("source_port", [])
+    dst_ports = feature_values.get("destination_port", [])
     if src_ports:
         high_count = sum(1 for p in src_ports if p > 1024)
         features["high_port_ratio"] = high_count / len(src_ports)
+    if dst_ports:
+        int_ports = [int(p) for p in dst_ports]
+        features["dst_port_nunique"] = float(dst_port_nunique(int_ports))
+        ent = dst_port_entropy(int_ports)
+        if ent is not None:
+            features["dst_port_entropy"] = ent
+        wellknown = dst_port_wellknown_share(int_ports)
+        if wellknown is not None:
+            features["dst_port_wellknown_share"] = wellknown
+        low = dst_port_low_share(int_ports)
+        if low is not None:
+            features["dst_port_low_share"] = low
+    if src_ports:
+        int_src = [int(p) for p in src_ports]
+        ephemeral = src_port_ephemeral_share(int_src)
+        if ephemeral is not None:
+            features["src_port_ephemeral_share"] = ephemeral
+
+    # Port sequential score needs time-ordered ports per source host.
+    # We approximate from event order (events are time-ordered).
+    host_dst_ports: dict[str, list[int]] = defaultdict(list)
+    for event in events:
+        if "destination_port" in event.features:
+            host_dst_ports[event.source_entity].append(int(event.features["destination_port"]))
+    sequential_scores = []
+    for host_ports in host_dst_ports.values():
+        score = dst_port_sequential_score(host_ports)
+        if score is not None:
+            sequential_scores.append(score)
+    if sequential_scores:
+        features["dst_port_sequential_score"] = sum(sequential_scores) / len(sequential_scores)
+        features["dst_port_randomness"] = 1.0 - features["dst_port_sequential_score"]
+
+    # Ports per host max
+    if dst_ports:
+        pairs = [(events[i].source_entity, int(dst_ports[i])) for i in range(len(events))]
+        features["ports_per_host_max"] = ports_per_host_max(pairs)
+
+    # Flag ratio features (P1-T2): computed from tcp_flags bitmask
+    if tcp_vals:
+        int_flags = [int(v) for v in tcp_vals]
+        _set_if = lambda name, fn: _set_feature_if(features, name, fn(int_flags))
+        _set_if("flag_syn_ratio", flag_syn_ratio)
+        _set_if("flag_ack_ratio", flag_ack_ratio)
+        _set_if("flag_fin_ratio", flag_fin_ratio)
+        _set_if("flag_rst_ratio", flag_rst_ratio)
+        _set_if("flag_psh_ratio", flag_psh_ratio)
+        _set_if("flag_urg_ratio", flag_urg_ratio)
+        _set_if("flag_syn_ack_ratio", flag_syn_ack_ratio)
+        _set_if("flag_no_ack_share", flag_no_ack_share)
+        _set_if("flag_xmas_share", flag_xmas_share)
+
+    # Protocol share features (P1-T2)
+    protos = feature_values.get("protocol", [])
+    if protos:
+        int_protos = [int(p) for p in protos]
+        _set_if("proto_tcp_share", proto_tcp_share, int_protos)
+        _set_if("proto_udp_share", proto_udp_share, int_protos)
+        _set_if("proto_icmp_share", proto_icmp_share, int_protos)
+
+    # Packet-level features (P1-T3) — fragment flags, retransmissions, IAT, TTL
+    # Fragment features from IP flags (if available)
+    ip_flags = feature_values.get("ip_flags", [])
+    if ip_flags:
+        int_ip_flags = [int(f) for f in ip_flags]
+        _set_if("frag_df_share", frag_df_share, int_ip_flags)
+        _set_if("frag_mf_share", frag_mf_share, int_ip_flags)
+
+    # IAT statistics from iat_mean values already collected
+    iat_vals = feature_values.get("iat_mean", [])
+    if iat_vals:
+        iat = iat_stats(iat_vals)
+        for k, v in iat.items():
+            if v is not None:
+                features[k] = v
+
+    # TTL uniqueness per source
+    if "ttl" in feature_values:
+        src_ttl = [(e.source_entity, int(e.features.get("ttl", 0))) for e in events if "ttl" in e.features]
+        if src_ttl:
+            _set_if("ttl_nunique_per_src", ttl_nunique_per_src, src_ttl)
 
     edge_summary = [
         {
