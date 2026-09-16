@@ -20,9 +20,9 @@ model:
   baseline: logistic_regression
   temporal: gru
   baseline_config:
-    # Mean-aggregated endpoint identifiers carry entity-memorization risk
-    # (FEATURE_SPECIFICATION.md) and are not eligible for the baseline.
-    excluded_features: [source_port, destination_port, protocol, tcp_flags]
+    # v3: raw identifiers remain ineligible (no semantics, entity-memorisation risk).
+    # All derived behavioural flag/port/timing features are now model inputs.
+    excluded_features: []
     regularization_c: 1.0
     class_weight: balanced
     max_iterations: 1000
