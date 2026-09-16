@@ -191,3 +191,36 @@ def test_high_port_ratio_absent_when_no_ports() -> None:
     ]
     (state,) = build_network_states(events, window_seconds=10, stride_seconds=10)
     assert "high_port_ratio" not in state.features
+
+
+def test_iat_and_bidirectional_features_present() -> None:
+    """IAT stats and bidirectional ratio are aggregated into state features."""
+    events = []
+    for i in range(4):
+        events.append(
+            UnifiedEvent(
+                event_id=f"e{i}",
+                timestamp=START + timedelta(seconds=i * 10),
+                source_entity="a",
+                destination_entity="b",
+                event_type="flow",
+                features={
+                    "bytes": 100.0,
+                    "iat_mean": 0.1 + i * 0.05,
+                    "bidirectional_ratio": 0.6 + i * 0.1,
+                },
+                source_format="replay",
+                provenance=f"r:e{i}",
+            )
+        )
+    (state,) = build_network_states(events, window_seconds=60, stride_seconds=60)
+    f = state.features
+    assert "iat_mean_mean" in f
+    assert "iat_mean_var" in f
+    assert "iat_mean_max" in f
+    assert "iat_mean_min" in f
+    assert "bidirectional_ratio_mean" in f
+    assert "bidirectional_ratio_std" in f
+    # Verify correctness
+    assert f["iat_mean_mean"] == pytest.approx(sum(0.1 + i * 0.05 for i in range(4)) / 4)
+    assert f["bidirectional_ratio_mean"] == pytest.approx(sum(0.6 + i * 0.1 for i in range(4)) / 4)
