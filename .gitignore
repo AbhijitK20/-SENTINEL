@@ -25,6 +25,12 @@ reports/generated/
 *.pth
 *.onnx
 
+# Exception: committed release bundle (checksummed, versioned)
+!models/release/**/*.pt
+!models/release/**/*.joblib
+!models/release/**/*.json
+!models/release/**/*.yaml
+
 # Local editor and OS files
 .idea/
 .vscode/
