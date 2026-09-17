@@ -1,180 +1,201 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Design tokens for SENTINEL."""
+"""Design tokens for SENTINEL — derived from the product's subject matter, not from fashion.
+
+The subject is time and probability. A defender watching a network at 3 a.m.,
+needing to decide within seconds whether something is happening.
+
+Design rules (§4.1):
+1. Observed and forecast are never confusable.
+2. Insufficient evidence is not low risk.
+3. Only probability is bright — chrome is neutral.
+4. Every number names its method.
+5. Time is shared — one time context across the whole application.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 
-@dataclass
+@dataclass(frozen=True)
 class ColorToken:
-    """Color token."""
+    """Semantic colour token. Name encodes purpose, not hue."""
 
     name: str
     value: str
     description: str = ""
 
 
-@dataclass
-class SpacingToken:
-    """Spacing token."""
-
-    name: str
-    value: str
-    description: str = ""
-
-
-@dataclass
-class RadiusToken:
-    """Radius token."""
-
-    name: str
-    value: str
-    description: str = ""
-
-
-@dataclass
-class ElevationToken:
-    """Elevation token."""
-
-    name: str
-    value: str
-    description: str = ""
-
-
-@dataclass
-class TypeToken:
-    """Type token."""
-
-    name: str
-    value: str
-    description: str = ""
-
-
-@dataclass
-class MotionToken:
-    """Motion token."""
-
-    name: str
-    value: str
-    description: str = ""
-
-
-# Color tokens (semantic, not literal)
-COLORS: list[ColorToken] = [
-    ColorToken("risk-high", "#ef4444", "High risk"),
-    ColorToken("risk-medium", "#f59e0b", "Medium risk"),
-    ColorToken("risk-low", "#22c55e", "Low risk"),
-    ColorToken("risk-unknown", "#6b7280", "Unknown risk"),
-    ColorToken("risk-insufficient", "#9ca3af", "Insufficient evidence"),
-    ColorToken("text-primary", "#f9fafb", "Primary text"),
-    ColorToken("text-secondary", "#d1d5db", "Secondary text"),
-    ColorToken("text-muted", "#9ca3af", "Muted text"),
-    ColorToken("bg-primary", "#111827", "Primary background"),
-    ColorToken("bg-secondary", "#1f2937", "Secondary background"),
-    ColorToken("bg-tertiary", "#374151", "Tertiary background"),
-    ColorToken("border-primary", "#374151", "Primary border"),
-    ColorToken("border-secondary", "#4b5563", "Secondary border"),
-    ColorToken("accent", "#3b82f6", "Accent color"),
-    ColorToken("success", "#22c55e", "Success color"),
-    ColorToken("warning", "#f59e0b", "Warning color"),
-    ColorToken("error", "#ef4444", "Error color"),
+# ── Risk ramp — the one thing to get exactly right ──────────────────────
+# Perceptually uniform sequential ramp: cool → warm → hot.
+# Maps monotonically to P(infiltration). Colour is never the sole carrier.
+RISK_RAMP: list[ColorToken] = [
+    ColorToken("risk-quiet",     "#3E6C8E", "0.00–0.25 — cool, low bar"),
+    ColorToken("risk-elevated",  "#6FA0B8", "0.25–0.50 — cool-mid, bar height"),
+    ColorToken("risk-concerning","#C9B458", "0.50–0.75 — warm-mid, subtle border"),
+    ColorToken("risk-critical",  "#D98324", "0.75–0.90 — hot, border + icon"),
+    ColorToken("risk-severe",    "#B33A3A", "0.90–1.00 — hottest"),
 ]
 
-# Spacing tokens (4px base, 8px rhythm)
-SPACING: list[SpacingToken] = [
-    SpacingToken("0", "0px", "No spacing"),
-    SpacingToken("1", "4px", "Extra small"),
-    SpacingToken("2", "8px", "Small"),
-    SpacingToken("3", "12px", "Medium small"),
-    SpacingToken("4", "16px", "Medium"),
-    SpacingToken("5", "20px", "Medium large"),
-    SpacingToken("6", "24px", "Large"),
-    SpacingToken("8", "32px", "Extra large"),
-    SpacingToken("10", "40px", "2x large"),
-    SpacingToken("12", "48px", "3x large"),
-    SpacingToken("16", "64px", "4x large"),
+# Confirmed = ground truth / realised attack. Deliberately OUTSIDE the ramp
+# so observed and forecast are never confusable.
+CONFIRMED_COLOR = ColorToken("confirmed", "#7A2E2E", "Ground truth / observed attack")
+
+# Insufficient evidence = outside the ramp, hatched fill + reason text
+INSUFFICIENT_COLOR = ColorToken("insufficient", "#4A5568", "Insufficient telemetry — NOT low risk")
+
+
+# ── Canvas layers (dark theme — the primary product theme) ──────────────
+CANVAS_DARK: list[ColorToken] = [
+    ColorToken("bg-base",    "#0E1116", "Deepest background"),
+    ColorToken("bg-canvas",  "#161A21", "Main canvas"),
+    ColorToken("bg-panel",   "#1E242D", "Panel / card surface"),
+    ColorToken("bg-raised",  "#262C36", "Raised element (dropdown, popover)"),
+    ColorToken("bg-hover",   "#2D3544", "Hover state on interactive surfaces"),
+    ColorToken("bg-active",  "#354052", "Active / pressed state"),
 ]
 
-# Radius tokens (two values only)
-RADIUS: list[RadiusToken] = [
-    RadiusToken("sm", "4px", "Small radius"),
-    RadiusToken("lg", "8px", "Large radius"),
+# ── Canvas layers (light theme) ─────────────────────────────────────────
+CANVAS_LIGHT: list[ColorToken] = [
+    ColorToken("bg-base",    "#FAFAF8", "Lightest background"),
+    ColorToken("bg-canvas",  "#FFFFFF", "Main canvas"),
+    ColorToken("bg-panel",   "#F0F1EE", "Panel / card surface"),
+    ColorToken("bg-raised",  "#E8E9E6", "Raised element"),
+    ColorToken("bg-hover",   "#DDDEDB", "Hover state"),
+    ColorToken("bg-active",  "#D2D3D0", "Active / pressed state"),
 ]
 
-# Elevation tokens (borders and background steps)
-ELEVATION: list[ElevationToken] = [
-    ElevationToken("none", "none", "No elevation"),
-    ElevationToken("sm", "0 1px 2px 0 rgba(0, 0, 0, 0.05)", "Small elevation"),
-    ElevationToken("md", "0 4px 6px -1px rgba(0, 0, 0, 0.1)", "Medium elevation"),
-    ElevationToken("lg", "0 10px 15px -3px rgba(0, 0, 0, 0.1)", "Large elevation"),
+# ── Ink (text) ──────────────────────────────────────────────────────────
+INK: list[ColorToken] = [
+    ColorToken("ink",          "#E6E9EE", "Primary text (dark) / #14181E (light)"),
+    ColorToken("ink-secondary","#A0AAB8", "Secondary text"),
+    ColorToken("ink-muted",    "#6B7A8D", "Muted / tertiary text"),
+    ColorToken("ink-disabled", "#4A5568", "Disabled text"),
 ]
 
-# Type tokens
-TYPE: list[TypeToken] = [
-    TypeToken("xs", "12px", "Extra small text"),
-    TypeToken("sm", "14px", "Small text"),
-    TypeToken("base", "16px", "Base text"),
-    TypeToken("lg", "18px", "Large text"),
-    TypeToken("xl", "20px", "Extra large text"),
-    TypeToken("2xl", "24px", "2x large text"),
-    TypeToken("3xl", "30px", "3x large text"),
+# ── Structure ───────────────────────────────────────────────────────────
+STRUCTURE: list[ColorToken] = [
+    ColorToken("hairline",     "#262C36", "1px dividers — never a shadow"),
+    ColorToken("hairline-strong","#3A4354", "Emphasised divider"),
+    ColorToken("focus-ring",   "#6FA0B8", "Keyboard focus indicator — matches risk-elevated"),
 ]
 
-# Motion tokens
-MOTION: list[MotionToken] = [
-    MotionToken("duration-fast", "100ms", "Fast duration"),
-    MotionToken("duration-normal", "200ms", "Normal duration"),
-    MotionToken("duration-slow", "300ms", "Slow duration"),
-    MotionToken("easing-default", "ease-in-out", "Default easing"),
-    MotionToken("easing-in", "ease-in", "In easing"),
-    MotionToken("easing-out", "ease-out", "Out easing"),
+# ── Semantic ────────────────────────────────────────────────────────────
+SEMANTIC: list[ColorToken] = [
+    ColorToken("success",      "#3E6C8E", "Success — uses risk-quiet (cool)"),
+    ColorToken("warning",      "#C9B458", "Warning — uses risk-concerning"),
+    ColorToken("error",        "#B33A3A", "Error — uses risk-severe"),
+    ColorToken("info",         "#6FA0B8", "Info — uses risk-elevated"),
+]
+
+# ── Accent — deliberately restrained ────────────────────────────────────
+# Only used for interactive elements that need to stand out from the
+# neutral chrome. Never competing with the risk ramp.
+ACCENT: list[ColorToken] = [
+    ColorToken("accent",       "#6FA0B8", "Interactive accent — matches risk-elevated"),
+    ColorToken("accent-hover", "#8BB8CC", "Accent hover"),
+    ColorToken("accent-active","#5A8FA6", "Accent active"),
+    ColorToken("accent-subtle","#1A2A36", "Accent background wash"),
 ]
 
 
-def get_color(name: str) -> str:
-    """Get color value by name."""
-    for color in COLORS:
-        if color.name == name:
-            return color.value
-    return "#000000"
+# ── Spacing (4px base, 8px rhythm) ─────────────────────────────────────
+SPACING: dict[str, str] = {
+    "0":  "0px",
+    "0.5":"2px",
+    "1":  "4px",
+    "1.5":"6px",
+    "2":  "8px",
+    "3":  "12px",
+    "4":  "16px",
+    "5":  "20px",
+    "6":  "24px",
+    "8":  "32px",
+    "10": "40px",
+    "12": "48px",
+    "16": "64px",
+    "20": "80px",
+}
 
 
-def get_spacing(name: str) -> str:
-    """Get spacing value by name."""
-    for spacing in SPACING:
-        if spacing.name == name:
-            return spacing.value
-    return "0px"
+# ── Radii — two values only, to encode hierarchy ────────────────────────
+# radius-sm for small elements (badges, chips), radius-lg for cards/panels.
+# A product that uses one radius everywhere reads as templated.
+RADIUS: dict[str, str] = {
+    "sm": "4px",
+    "lg": "8px",
+}
 
 
-def get_radius(name: str) -> str:
-    """Get radius value by name."""
-    for radius in RADIUS:
-        if radius.name == name:
-            return radius.value
-    return "0px"
+# ── Typography ──────────────────────────────────────────────────────────
+# One grotesque family with tight apertures + one mono for numeric alignment.
+# Five sizes, no more. Mono only where it does real work (tables, hex, IPs).
+TYPE_SCALE: dict[str, dict[str, str]] = {
+    "display": {"size": "28px", "line-height": "32px", "tracking": "-0.01em", "weight": "700"},
+    "section": {"size": "20px", "line-height": "28px", "tracking": "-0.01em", "weight": "600"},
+    "body":    {"size": "14px", "line-height": "20px", "tracking": "0em",     "weight": "400"},
+    "data":    {"size": "13px", "line-height": "18px", "tracking": "0em",     "weight": "400", "font": "mono"},
+    "label":   {"size": "12px", "line-height": "16px", "tracking": "+0.01em", "weight": "500"},
+    "micro":   {"size": "11px", "line-height": "14px", "tracking": "+0.01em", "weight": "500"},
+}
 
 
-def get_elevation(name: str) -> str:
-    """Get elevation value by name."""
-    for elevation in ELEVATION:
-        if elevation.name == name:
-            return elevation.value
-    return "none"
+# ── Elevation — borders and background steps, not soft shadows ──────────
+# Shadows on dark UI look muddy. Use borders + bg steps for depth.
+ELEVATION: dict[str, dict[str, str]] = {
+    "none":    {"border": "none",                   "bg": "bg-base"},
+    "flat":    {"border": "1px solid #262C36",      "bg": "bg-canvas"},
+    "raised":  {"border": "1px solid #3A4354",      "bg": "bg-panel"},
+    "overlay": {"border": "1px solid #3A4354",      "bg": "bg-raised"},
+}
 
 
-def get_type(name: str) -> str:
-    """Get type value by name."""
-    for type_token in TYPE:
-        if type_token.name == name:
-            return type_token.value
-    return "16px"
+# ── Motion ──────────────────────────────────────────────────────────────
+# Exactly one orchestrated moment: new alert arrival.
+# Everything else answers actions. Respect prefers-reduced-motion.
+MOTION: dict[str, str] = {
+    "duration-micro":  "100ms",
+    "duration-fast":   "150ms",
+    "duration-normal": "200ms",
+    "duration-slow":   "300ms",
+    "duration-page":   "400ms",
+    "easing-in":       "cubic-bezier(0.4, 0, 1, 1)",
+    "easing-out":      "cubic-bezier(0, 0, 0.2, 1)",
+    "easing-in-out":   "cubic-bezier(0.4, 0, 0.2, 1)",
+    "easing-spring":   "cubic-bezier(0.34, 1.56, 0.64, 1)",
+}
 
 
-def get_motion(name: str) -> str:
-    """Get motion value by name."""
-    for motion in MOTION:
-        if motion.name == name:
-            return motion.value
-    return "200ms"
+# ── Density ─────────────────────────────────────────────────────────────
+# Default to compact — 28px table rows, 8px base.
+# Analysts want more rows visible, not more air.
+DENSITY: dict[str, str] = {
+    "table-row-height": "28px",
+    "input-height":     "32px",
+    "button-height":    "32px",
+    "nav-item-height":  "36px",
+}
+
+
+def get_all_colors() -> dict[str, str]:
+    """Flatten all colour tokens into a name→value dict."""
+    result: dict[str, str] = {}
+    for token_list in [RISK_RAMP, CANVAS_DARK, CANVAS_LIGHT, INK, STRUCTURE, SEMANTIC, ACCENT]:
+        for t in token_list:
+            result[t.name] = t.value
+    result["confirmed"] = CONFIRMED_COLOR.value
+    result["insufficient"] = INSUFFICIENT_COLOR.value
+    return result
+
+
+def risk_color(probability: float) -> str:
+    """Map a probability to the risk ramp colour. Colour is never the sole carrier."""
+    if probability < 0.25:
+        return "#3E6C8E"
+    if probability < 0.50:
+        return "#6FA0B8"
+    if probability < 0.75:
+        return "#C9B458"
+    if probability < 0.90:
+        return "#D98324"
+    return "#B33A3A"
