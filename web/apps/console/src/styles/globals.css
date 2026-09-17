@@ -1,0 +1,192 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * SENTINEL Design System — CSS Custom Properties
+ *
+ * The subject is time and probability.
+ * A defender watching a network at 3 a.m., needing to decide
+ * within seconds whether something is happening.
+ *
+ * Design rules (§4.1):
+ * 1. Observed and forecast are never confusable.
+ * 2. Insufficient evidence is not low risk.
+ * 3. Only probability is bright — chrome is neutral.
+ * 4. Every number names its method.
+ * 5. Time is shared.
+ */
+
+@layer base {
+  :root {
+    /* ── Risk ramp — perceptually uniform sequential ──────────────── */
+    --risk-quiet:      #3E6C8E;
+    --risk-elevated:   #6FA0B8;
+    --risk-concerning: #C9B458;
+    --risk-critical:   #D98324;
+    --risk-severe:     #B33A3A;
+    --confirmed:       #7A2E2E;
+    --insufficient:    #4A5568;
+
+    /* ── Canvas (light theme) ────────────────────────────────────── */
+    --bg-base:    #FAFAF8;
+    --bg-canvas:  #FFFFFF;
+    --bg-panel:   #F0F1EE;
+    --bg-raised:  #E8E9E6;
+    --bg-hover:   #DDDEDB;
+    --bg-active:  #D2D3D0;
+
+    /* ── Ink ─────────────────────────────────────────────────────── */
+    --ink:          #14181E;
+    --ink-secondary:#4A5260;
+    --ink-muted:    #6B7A8D;
+    --ink-disabled: #A0AAB8;
+
+    /* ── Structure ───────────────────────────────────────────────── */
+    --hairline:          #DFE2E6;
+    --hairline-strong:   #C4C8CE;
+    --focus-ring:        #6FA0B8;
+
+    /* ── Accent ──────────────────────────────────────────────────── */
+    --accent:       #5A8FA6;
+    --accent-hover: #4A7F96;
+    --accent-active:#3A6F86;
+    --accent-subtle:#E8F0F4;
+
+    /* ── Semantic ────────────────────────────────────────────────── */
+    --success: #3E6C8E;
+    --warning: #C9B458;
+    --error:   #B33A3A;
+    --info:    #6FA0B8;
+
+    /* ── Typography ──────────────────────────────────────────────── */
+    --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+
+    /* ── Spacing (4px base) ──────────────────────────────────────── */
+    --space-0:  0px;
+    --space-05: 2px;
+    --space-1:  4px;
+    --space-15: 6px;
+    --space-2:  8px;
+    --space-3:  12px;
+    --space-4:  16px;
+    --space-5:  20px;
+    --space-6:  24px;
+    --space-8:  32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    /* ── Radius — two values only ────────────────────────────────── */
+    --radius-sm: 4px;
+    --radius-lg: 8px;
+
+    /* ── Motion ──────────────────────────────────────────────────── */
+    --duration-micro:  100ms;
+    --duration-fast:   150ms;
+    --duration-normal: 200ms;
+    --duration-slow:   300ms;
+    --duration-page:   400ms;
+    --easing-in:       cubic-bezier(0.4, 0, 1, 1);
+    --easing-out:      cubic-bezier(0, 0, 0.2, 1);
+    --easing-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
+    --easing-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    /* ── Density ─────────────────────────────────────────────────── */
+    --table-row-height: 28px;
+    --input-height:     32px;
+    --button-height:    32px;
+    --nav-item-height:  36px;
+  }
+
+  .dark {
+    /* ── Canvas (dark theme — primary product theme) ─────────────── */
+    --bg-base:    #0E1116;
+    --bg-canvas:  #161A21;
+    --bg-panel:   #1E242D;
+    --bg-raised:  #262C36;
+    --bg-hover:   #2D3544;
+    --bg-active:  #354052;
+
+    /* ── Ink ─────────────────────────────────────────────────────── */
+    --ink:          #E6E9EE;
+    --ink-secondary:#A0AAB8;
+    --ink-muted:    #6B7A8D;
+    --ink-disabled: #4A5568;
+
+    /* ── Structure ───────────────────────────────────────────────── */
+    --hairline:          #262C36;
+    --hairline-strong:   #3A4354;
+    --focus-ring:        #6FA0B8;
+
+    /* ── Accent ──────────────────────────────────────────────────── */
+    --accent:       #6FA0B8;
+    --accent-hover: #8BB8CC;
+    --accent-active:#5A8FA6;
+    --accent-subtle:#1A2A36;
+  }
+
+  /* ── Base resets ─────────────────────────────────────────────────── */
+  * {
+    border-color: var(--hairline);
+  }
+
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ── Focus ring — visible, consistent, brand-aligned ─────────────── */
+  :focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--bg-base),
+      0 0 0 4px var(--focus-ring);
+  }
+
+  /* ── Reduced motion ──────────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* ── Skeleton loader ─────────────────────────────────────────────── */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--bg-raised) 25%,
+      var(--bg-hover) 50%,
+      var(--bg-raised) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+    border-radius: var(--radius-sm);
+  }
+
+  @keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ── Insufficient evidence hatching ──────────────────────────────── */
+  .hatch-insufficient {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 4px,
+      var(--insufficient) 4px,
+      var(--insufficient) 5px
+    );
+    opacity: 0.3;
+  }
+}
