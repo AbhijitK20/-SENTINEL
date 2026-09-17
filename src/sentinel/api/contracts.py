@@ -158,3 +158,57 @@ class HealthResponse(BaseModel):
     version: str = ""
     database: str = "ok"
     event_bus: str = "ok"
+
+
+class ForecastRequest(BaseModel):
+    """Forecast request."""
+
+    entity_id: str
+    horizon: int = Field(default=5, ge=1, le=20)
+    include_explanation: bool = True
+    explanation_method: str = "shap-exact-linear"
+
+
+class ModelResponse(BaseModel):
+    """Model registry response."""
+
+    version: str
+    kind: str
+    status: str
+    metrics: dict[str, float] = Field(default_factory=dict)
+    created_at: str = ""
+
+
+class DriftResponse(BaseModel):
+    """Drift evaluation response."""
+
+    feature: str
+    psi: float
+    threshold: float
+    status: str  # "ok" | "warning" | "critical"
+    training_mean: float = 0.0
+    current_mean: float = 0.0
+
+
+class ComplianceResponse(BaseModel):
+    """Compliance mapping response."""
+
+    framework: str
+    controls: list[dict[str, str]] = Field(default_factory=list)
+    coverage: float = 0.0
+    gaps: list[str] = Field(default_factory=list)
+
+
+class CaseTransitionRequest(BaseModel):
+    """Case transition request."""
+
+    target_status: str
+    comment: str = ""
+
+
+class FeedbackRequest(BaseModel):
+    """Analyst feedback request."""
+
+    finding_id: str
+    verdict: str  # "true_positive" | "false_positive" | "inconclusive"
+    signature: str = ""

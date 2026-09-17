@@ -1,4 +1,4 @@
-.PHONY: setup gate demo train reproduce bench-real lint test clean
+.PHONY: setup gate demo train reproduce bench-real lint test clean web:dev
 
 setup:  ## install everything
 	uv sync --all-extras
@@ -29,6 +29,9 @@ reproduce:  ## train, then verify metrics match RESULTS.md within tolerance
 
 bench-real:  ## CIC-IDS2017 cross-day benchmark
 	uv run python scripts/run_real_benchmark.py --data-dir data/raw/cic-ids2017/TrafficLabelling
+
+web:dev:  ## run Next.js frontend dev server
+	cd web/apps/console && npm run dev
 
 clean:  ## remove build artifacts and caches
 	rm -rf .ruff_cache .pytest_cache __pycache__ dist build

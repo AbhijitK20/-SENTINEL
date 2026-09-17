@@ -23,7 +23,7 @@ const SEVERITY_STYLES: Record<DegradedSeverity, string> = {
 };
 
 interface DegradedBannerProps {
-  severity: DegreedSeverity;
+  severity: DegradedSeverity;
   reason: string;
   component?: string;
   action?: React.ReactNode;

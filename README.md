@@ -92,7 +92,7 @@ Dashboard / REST API / live sensors / trust ledger
 
 ### Operations
 
-- **GitHub Actions CI**: lint + tests + wheel build on every push
+- **GitHub Actions CI**: lint + test (Python 3.11–3.13) + security scan on every push
 - **Docker Compose**: local pilot stack (API + dashboard + Prometheus + Grafana)
 - **Prometheus + Grafana**: `/metrics` endpoint, auto-provisioned dashboard
 - **Live observability metrics**: current events, peak probability, alert-active state, retained findings, emitted windows, incidents, cases, threat-intel indicators, request rate, and latency
