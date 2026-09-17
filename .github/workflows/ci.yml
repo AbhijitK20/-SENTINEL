@@ -12,7 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - run: uv sync --all-extras
+        with:
+          python-version: "3.11"
+      - run: uv sync
       - run: uv run ruff check src tests scripts
       - run: uv run ruff format --check src tests scripts
 
@@ -26,14 +28,6 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --all-extras
-      - run: uv run pytest -q --ignore=tests/test_api.py --ignore=tests/test_auth.py --ignore=tests/test_enterprise.py --ignore=tests/test_threat_intel.py --ignore=tests/test_optional_deps.py
-
-  core-only:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
       - run: uv sync
       - run: uv run pytest -q --ignore=tests/test_api.py --ignore=tests/test_auth.py --ignore=tests/test_enterprise.py --ignore=tests/test_threat_intel.py --ignore=tests/test_optional_deps.py
 
@@ -42,5 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - run: uv sync --all-extras
-      - run: uv run pip-audit || true
+        with:
+          python-version: "3.11"
+      - run: uv sync
+      - run: uv run bandit -c pyproject.toml -r src/sentinel
