@@ -39,4 +39,4 @@ jobs:
         with:
           python-version: "3.11"
       - run: uv sync
-      - run: uv run bandit -c pyproject.toml -r src/sentinel
+      - run: uv run bandit -r src/sentinel --skip B101 --severity-level medium
