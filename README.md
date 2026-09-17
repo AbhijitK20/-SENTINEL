@@ -90,9 +90,29 @@ Dashboard / REST API / live sensors / trust ledger
 - **Live Detection**: synthetic, CSV, JSONL, syslog, local capture, attack triggers, detector grid, incident feedback, reset, and stop controls
 - **Attack Story**: synthetic Dubsmash-inspired credential-reuse workflow, topology graph, TCP/HTTP/database flow, kill-chain graph, phase replay, containment simulation, and before/after defense comparison
 
+### Next.js Console (`web/apps/console/`)
+
+Production-grade React frontend replacing Streamlit for the analyst surface:
+
+- **RiskMeter**: probability + uncertainty band + numeral, uses SENTINEL risk ramp (`#3E6C8E → #6FA0B8 → #C9B458 → #D98324 → #B33A3A`)
+- **StageBadge**: MITRE tactic + technique display
+- **DegradedBanner**: honest degradation surface when model unavailable
+- **EvidencePanel**: driving-feature attribution breakdown
+- **ObservedForecastLegend**: observed vs forecast distinction
+- **FlowTable**: flow data table with sorting
+- **OverviewPage**: aggregated risk summary
+- **Design tokens**: SENTINEL-specific palette, typography, spacing, elevation (`src/sentinel/frontend/tokens.py` → `web/apps/console/src/styles/globals.css`)
+
+```bash
+cd web/apps/console
+npm install
+npm run dev    # http://localhost:3000
+```
+
 ### Operations
 
-- **GitHub Actions CI**: lint + test (Python 3.11–3.13) + security scan on every push
+- **GitHub Actions CI** (`.github/workflows/ci.yml`): lint + test (Python 3.11–3.13) + security scan on every push
+- **Pre-commit hooks** (`.pre-commit-config.yaml`): ruff lint + format on commit
 - **Docker Compose**: local pilot stack (API + dashboard + Prometheus + Grafana)
 - **Prometheus + Grafana**: `/metrics` endpoint, auto-provisioned dashboard
 - **Live observability metrics**: current events, peak probability, alert-active state, retained findings, emitted windows, incidents, cases, threat-intel indicators, request rate, and latency
@@ -129,11 +149,14 @@ uv run ruff format --check src tests scripts
 # Full benchmark
 ./run_all.sh                  # lint + tests + benchmark + charts
 
-# Dashboard
+# Dashboard (Streamlit)
 uv run streamlit run src/sentinel/dashboard/app.py
 
 # REST API
 uv run uvicorn sentinel.api:create_app --factory --port 8000
+
+# Next.js console (development)
+cd web/apps/console && npm install && npm run dev
 
 # Local vulnerable target, scanner, and admin response dashboard
 docker compose --profile demo up -d
@@ -241,9 +264,11 @@ synthetic attack -> vulnerable app logs -> scanner -> /v1/events
 ## Documentation Map
 
 - **Status**: `IMPLEMENTATION_STATUS.md` (sprints 0–11, current limitations), `RESULTS.md` (measured numbers), `QUALITY_GATES.md` (per-gate evidence)
-- **Product**: `PROJECT_CHARTER.md`, `VISION_AND_POSITIONING.md`, `PRD.md`, `REQUIREMENTS.md`
+- **Product**: `PROJECT_CHARTER.md`, `VISION_AND_POSITIONING.md`, `PRD.md`, `REQUIREMENTS.md`, `DESIGN.md` (design direction, risk ramp, canvas, typography)
 - **Technical**: `ARCHITECTURE.md`, `DATASET_PLAN.md`, `DATA_CONTRACTS.md`, `MODEL_PLAN.md`
 - **Quality**: `EVALUATION_PLAN.md`, `EXPLAINABILITY_PLAN.md`, `TEST_STRATEGY.md`, `KNOWN_LIMITATIONS.md`
+- **Security**: `SECURITY.md` (disclosure policy, SLA), `SENTINEL_PRODUCTION_PLAN.md` (threat model, STRIDE)
+- **Operations**: `CHANGELOG.md`, `docs/adr/0001-feature-versioning.md`, `docs/runbooks/alert-high-cpu.md`, `docs/runbooks/forecast-latency-high.md`
 - **Detectors**: `DETECTORS.md` (attack-type detectors, incident correlation, asset risk fusion)
 - **Enterprise**: `ROADMAP.md` (scale levels, phase status) + `DEPLOYMENT.md` (compose stack, Hugging Face Spaces, observability, real-data mode, sensors)
 - **Platform modules**:
