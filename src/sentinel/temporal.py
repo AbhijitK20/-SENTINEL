@@ -299,7 +299,7 @@ def load_temporal_models(result: TemporalResult, model_dir: str | Path) -> dict[
             result.config.num_layers,
             result.config.dropout,
         )
-        model.load_state_dict(torch.load(path, map_location="cpu"))
+        model.load_state_dict(torch.load(path, map_location="cpu", weights_only=True))
         model.eval()
         models[horizon_result.horizon] = model
     return models
