@@ -5,14 +5,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from sentinel.streaming.windowing import EventTimeWindower
-from sentinel.graph.state import NetworkGraph
 from sentinel.explain.contracts import (
     Counterfactual,
     Explanation,
     FeatureAttribution,
 )
-
+from sentinel.graph.state import NetworkGraph
+from sentinel.streaming.windowing import EventTimeWindower
 
 # ── Streaming / Windowing ───────────────────────────────────────────────
 
