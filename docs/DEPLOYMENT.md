@@ -33,13 +33,13 @@ integration boundary for a future permissioned blockchain.
 Build the image:
 
 ```bash
-docker build -t trajectory-demo .
+docker build -t sentinel-demo .
 ```
 
 Start it:
 
 ```bash
-docker run --rm -p 8501:8501 trajectory-demo
+docker run --rm -p 8501:8501 sentinel-demo
 ```
 
 Open `http://localhost:8501`.
@@ -95,7 +95,16 @@ Normal traffic -> reconnaissance -> forecast -> evidence -> reality check
 For the local operational demo:
 
 ```bash
-docker compose --profile demo up -d
+docker compose --profile demo up --build -d
+```
+
+For a fresh clone or after pulling code changes, rebuild the project image so
+port 8501 serves this checkout's SENTINEL dashboard rather than a cached image:
+
+```bash
+docker compose down --remove-orphans
+docker compose build --no-cache
+docker compose up --build -d
 ```
 
 Open `http://localhost:5001`, use `Reset System` before a new attack, launch
@@ -128,7 +137,7 @@ Deploy with:
 1. Push the repository to GitHub.
 2. Open `https://share.streamlit.io`.
 3. Choose the repository and branch.
-4. Set the main file to `src/trajectory/dashboard/app.py`.
+4. Set the main file to `src/sentinel/dashboard/app.py`.
 5. Deploy and wait for dependency installation to finish.
 
 After changing `requirements.txt`, use **Manage app -> Reboot app** or push a
@@ -153,7 +162,7 @@ with capture privileges:
 
 ```bash
 uv sync --extra dashboard --extra pcap
-sudo -E uv run streamlit run src/trajectory/dashboard/app.py
+sudo -E uv run streamlit run src/sentinel/dashboard/app.py
 ```
 
 Select `Local loopback capture` and interface `lo`. This captures packets on
@@ -164,7 +173,7 @@ sensor simulation and may still show the packet-features-unavailable warning.
 ## Deploying the REST API (Hugging Face Space or any container host)
 
 `Dockerfile.api` builds a container that serves the FastAPI service
-(`trajectory/api.py`) on one port (default 7860 for HF Spaces).
+(`sentinel/api/`) on one port (default 7860 for HF Spaces).
 
 ```bash
 docker build -f Dockerfile.api -t sentinel-api .
@@ -201,7 +210,7 @@ Prometheus scrapes the API's `/metrics` endpoint and Grafana renders the
 provisioned `SENTINEL API Overview` dashboard:
 
 ```bash
-docker compose --profile obs up -d      # api + prometheus + grafana
+docker compose --profile obs up --build -d      # api + prometheus + grafana
 # Grafana: http://localhost:3000 (anonymous viewer; admin/admin)
 # Prometheus targets: http://localhost:9090/targets
 ```
@@ -235,7 +244,7 @@ Run it (needs an analyst-or-higher API key with `POST /v1/events`):
 
 ```bash
 export SENTINEL_API_KEY=sent_<analyst-key>        # see /admin/keys
-docker compose --profile realtime up -d           # api + target + sensor, then attacker
+docker compose --profile realtime up --build -d           # api + target + sensor, then attacker
 docker compose logs -f demo-attacker demo-sensor  # watch the scan + ALERT lines
 ```
 

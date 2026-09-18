@@ -4,7 +4,7 @@
 Scope honesty: this is a local JSON-backed registry demonstrating the
 promotion workflow (registered -> approved -> rolled-back). MLflow, shadow
 deployment, and A/B evaluation need production infrastructure and are
-documented as future work in ROADMAP.md.
+documented as future work in docs/ROADMAP.md.
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ Tests that detectors degrade gracefully under adversarial perturbation:
 - Threshold evasion (attacker stays just below detector thresholds)
 
 These tests verify that the detector suite is not brittle under realistic
-adversarial conditions, as required by THREAT_MODEL.md.
+adversarial conditions, as required by docs/planning/THREAT_MODEL.md.
 """
 
 from __future__ import annotations

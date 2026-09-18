@@ -1,6 +1,6 @@
 """Tests for scripts/fetch_threat_feed.py — network is mocked in every test.
 
-The script is the out-of-band refresh path documented in DEPLOYMENT.md; these
+The script is the out-of-band refresh path documented in docs/DEPLOYMENT.md; these
 tests pin its parsing, freshness guard, and failure behaviour without any
 real HTTP traffic (CI stays offline).
 """

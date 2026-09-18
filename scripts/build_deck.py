@@ -1,6 +1,6 @@
 """Build the six-slide SIH idea deck for Trajectory (SIH26153).
 
-The content mirrors PRESENTATION_OUTLINE.md. Unverified values (team ID, market
+The content mirrors docs/PRESENTATION_OUTLINE.md. Unverified values (team ID, market
 figures, metrics, links) are emitted as visible [ADD ...] placeholders so they
 are never mistaken for facts. Run with:
 
@@ -1305,8 +1305,8 @@ def slide_6(prs: Presentation) -> None:
         Inches(2.75),
         [
             "Source repo: [ADD GITHUB URL]",
-            "Architecture: ARCHITECTURE.md",
-            "Status: IMPLEMENTATION_STATUS.md",
+            "Architecture: docs/ARCHITECTURE.md",
+            "Status: docs/IMPLEMENTATION_STATUS.md",
             "Evaluation report: [ADD LINK AFTER BENCHMARKS]",
             "Demo video: [ADD FINAL VIDEO LINK]",
             "Consolidated research: [ADD FOLDER LINK]",

@@ -6,6 +6,6 @@ plotly>=5.24,<7
 networkx>=3.3,<4
 torch>=2.4,<3
 
-# FastAPI inference service (ROADMAP.md Phase 1; level-2 scale)
+# FastAPI inference service (docs/ROADMAP.md Phase 1; level-2 scale)
 fastapi>=0.115,<1
 uvicorn>=0.32,<1

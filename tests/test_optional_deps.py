@@ -106,7 +106,7 @@ def test_core_module_imports_without_optional_deps(module_name: str, hide_option
 
 
 def test_predict_imports_without_torch(monkeypatch: pytest.MonkeyPatch):
-    """AC1: importing trajectory.predict must not fail when torch is absent."""
+    """AC1: importing sentinel.predict must not fail when torch is absent."""
     saved_modules = dict(sys.modules)
     saved_meta_path = list(sys.meta_path)
     try:

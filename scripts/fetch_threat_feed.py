@@ -1,8 +1,8 @@
 """Fetch a free threat-intel feed (abuse.ch URLhaus) into the local feed file.
 
-Offline-first contract: the SENTINEL runtime (``src/trajectory``) never touches
+Offline-first contract: the SENTINEL runtime (``src/sentinel``) never touches
 the network — this script is the out-of-band refresh path that
-``DEPLOYMENT.md`` documents. Run it from cron, a compose init container, or by
+``docs/DEPLOYMENT.md`` documents. Run it from cron, a compose init container, or by
 hand; the API picks the refreshed file up on restart.
 
 Free sources (no key, no payment):

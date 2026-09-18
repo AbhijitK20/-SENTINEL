@@ -9,7 +9,7 @@ feature pattern and a stage hypothesis. The rules:
 - never force a stage when evidence is insufficient (``Unknown`` is valid),
 - never imply a guaranteed linear kill chain.
 
-The vocabulary follows ``MITRE_MAPPING_PLAN.md``: Reconnaissance, Initial
+The vocabulary follows ``docs/planning/MITRE_MAPPING_PLAN.md``: Reconnaissance, Initial
 Access, Lateral Movement, Command and Control, Exfiltration, with ``Unknown``
 when no rule fires. Feature names referenced by the rules exist in the
 state-builder output (``state_builder.SUM_FEATURES`` and averaged per-event

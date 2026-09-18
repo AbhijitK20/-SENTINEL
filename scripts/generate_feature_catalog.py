@@ -13,7 +13,7 @@ from sentinel.state_builder import (
 )
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-OUT = ROOT / "docs" / "FEATURE_CATALOG.md"
+OUT = ROOT / "docs" / "docs/planning/FEATURE_CATALOG.md"
 
 # ── Descriptions per base feature ──────────────────────────────────────────
 DESCRIPTIONS: dict[str, str] = {

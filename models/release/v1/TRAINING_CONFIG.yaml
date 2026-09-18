@@ -18,7 +18,7 @@ model:
   temporal: gru
   baseline_config:
     # Mean-aggregated endpoint identifiers carry entity-memorization risk
-    # (FEATURE_SPECIFICATION.md) and are not eligible for the baseline.
+    # (docs/planning/FEATURE_SPECIFICATION.md) and are not eligible for the baseline.
     excluded_features: [source_port, destination_port, protocol, tcp_flags]
     regularization_c: 1.0
     class_weight: balanced

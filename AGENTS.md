@@ -52,7 +52,7 @@ models/release/          committed release bundle (checksummed)
 3. **Never delete an honesty caveat** to make a result look better.
 4. **Read before write.** Before editing a module, read the module *and* its test file.
 5. **Tests are part of the task.** No task is complete without tests.
-6. **Contracts are Pydantic, `extra="forbid"`.** Adding a field is an API change — update `DATA_CONTRACTS.md` and bump the version string.
+6. **Contracts are Pydantic, `extra="forbid"`.** Adding a field is an API change — update `docs/DATA_CONTRACTS.md` and bump the version string.
 7. **Version strings are load-bearing.** If behaviour changes, bump the version and keep the old loader working or fail loudly.
 8. **Leakage guards are sacred.** Feature statistics fit on train only. Threshold calibration on validation only. Test data is touched exactly once, at the end.
 9. **Offline-first.** `tests/test_offline.py` asserts no network clients in `src/sentinel`. Do not import `requests`/`httpx` into `src/sentinel/`.

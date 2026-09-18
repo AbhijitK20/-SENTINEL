@@ -6,7 +6,7 @@ engine's wire format. The attack is a *simulation* — it opens and closes
 sockets with attack-shaped traffic patterns; it never exploits anything,
 never sends credentials anywhere, and binds only to 127.0.0.1.
 
-Story (matches DEMO_SCENARIO.md):
+Story (matches docs/DEMO_SCENARIO.md):
 
     PHASE 1  benign background chatter          → model stays low
     PHASE 2  reconnaissance: many short SYNs    → Reconnaissance fires

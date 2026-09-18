@@ -3,7 +3,7 @@
 
 Scope honesty: this is key-based auth for services and analysts over the
 REST API. SSO/OIDC, MFA, and multi-tenancy are NOT implemented — they need a
-real identity provider and stay listed as future work in ROADMAP.md.
+real identity provider and stay listed as future work in docs/ROADMAP.md.
 
 Design rules:
 - Raw keys are shown once at creation; only SHA-256 hashes are stored.

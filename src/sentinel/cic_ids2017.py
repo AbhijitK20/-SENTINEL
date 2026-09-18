@@ -48,7 +48,7 @@ ADAPTER_VERSION = "cic-ids2017-adapter-v1"
 DATASET_ID = "CIC-IDS2017"
 DATASET_URL = "https://www.unb.ca/cic/datasets/ids-2017.html"
 
-# Project stage vocabulary (see MITRE_MAPPING_PLAN.md). Each attack label maps
+# Project stage vocabulary (see docs/planning/MITRE_MAPPING_PLAN.md). Each attack label maps
 # to (project stage, infiltration flag). Keep sorted for review.
 STAGE_RULES: dict[str, tuple[str, bool]] = {
     "benign": ("Benign", False),

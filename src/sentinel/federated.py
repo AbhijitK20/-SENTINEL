@@ -6,7 +6,7 @@ baseline: each client trains on its own scenarios and only model weights
 plus sample counts are shared — no raw data ever leaves a client. This is a
 single-process simulation of the protocol (no network, no secure
 aggregation); production federated learning needs those and stays in
-ROADMAP.md.
+docs/ROADMAP.md.
 """
 
 from __future__ import annotations

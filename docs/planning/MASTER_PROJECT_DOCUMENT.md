@@ -538,7 +538,7 @@ SHAP, attention, or another local attribution method may be used. The product mu
 
 The final stack is subject to a Sprint 0 decision after environment validation.
 
-Full architecture details are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+Full architecture details are in [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 ---
 
@@ -644,7 +644,7 @@ Rules:
 - Missing evidence must produce a warning.
 - Explanation fields must not be fabricated.
 
-The complete contract is maintained in [`DATA_CONTRACTS.md`](DATA_CONTRACTS.md).
+The complete contract is maintained in [`DATA_CONTRACTS.md`](../DATA_CONTRACTS.md).
 
 ---
 
@@ -703,7 +703,7 @@ Every result must include:
 - Coverage limitations
 - Runtime details
 
-The evaluation procedure is defined in [`EVALUATION_PLAN.md`](EVALUATION_PLAN.md), with final values recorded in [`RESULTS_TEMPLATE.md`](RESULTS_TEMPLATE.md).
+The evaluation procedure is defined in [`EVALUATION_PLAN.md`](EVALUATION_PLAN.md), with final values recorded in [`RESULTS_TEMPLATE.md`](../RESULTS_TEMPLATE.md).
 
 ---
 
@@ -754,7 +754,7 @@ Trajectory does not automatically isolate hosts, block traffic, or modify firewa
 - Sensitive report exposure
 - Unsafe action based on a false positive
 
-Threats and mitigations are maintained in [`THREAT_MODEL.md`](THREAT_MODEL.md) and [`SECURITY_AND_PRIVACY.md`](SECURITY_AND_PRIVACY.md).
+Threats and mitigations are maintained in [`THREAT_MODEL.md`](THREAT_MODEL.md) and [`SECURITY_AND_PRIVACY.md`](../SECURITY_AND_PRIVACY.md).
 
 ---
 
@@ -900,7 +900,7 @@ An enterprise-like network contains a suspicious workstation, an authentication 
 - The replay is deterministic.
 - The spoken claim matches actual measured results.
 
-The detailed demo package is in [`DEMO_PLAN.md`](DEMO_PLAN.md), [`DEMO_SCENARIO.md`](DEMO_SCENARIO.md), and [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
+The detailed demo package is in [`DEMO_PLAN.md`](../DEMO_PLAN.md), [`DEMO_SCENARIO.md`](../DEMO_SCENARIO.md), and [`DEMO_SCRIPT.md`](../DEMO_SCRIPT.md).
 
 ---
 
@@ -954,7 +954,7 @@ The official idea presentation has a maximum of six slides including the title s
 - Technical research areas
 - Open-source tools
 
-The detailed, presentation-ready content is maintained in [`PRESENTATION_OUTLINE.md`](PRESENTATION_OUTLINE.md).
+The detailed, presentation-ready content is maintained in [`PRESENTATION_OUTLINE.md`](../PRESENTATION_OUTLINE.md).
 
 ### PPT Rules
 
@@ -1095,7 +1095,7 @@ We should use this sentence only if the final experiment supports it.
 
 ### Product And Requirements
 
-- [`README.md`](README.md)
+- [`README.md`](../../README.md)
 - [`PROJECT_CHARTER.md`](PROJECT_CHARTER.md)
 - [`VISION_AND_POSITIONING.md`](VISION_AND_POSITIONING.md)
 - [`PRD.md`](PRD.md)
@@ -1117,9 +1117,9 @@ We should use this sentence only if the final experiment supports it.
 
 ### Technical Planning
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md)
+- [`ARCHITECTURE.md`](../ARCHITECTURE.md)
 - [`DATASET_PLAN.md`](DATASET_PLAN.md)
-- [`DATA_CONTRACTS.md`](DATA_CONTRACTS.md)
+- [`DATA_CONTRACTS.md`](../DATA_CONTRACTS.md)
 - [`FEATURE_SPECIFICATION.md`](FEATURE_SPECIFICATION.md)
 - [`MODEL_PLAN.md`](MODEL_PLAN.md)
 - [`EXPLAINABILITY_PLAN.md`](EXPLAINABILITY_PLAN.md)
@@ -1130,19 +1130,19 @@ We should use this sentence only if the final experiment supports it.
 - [`EVALUATION_PLAN.md`](EVALUATION_PLAN.md)
 - [`TEST_STRATEGY.md`](TEST_STRATEGY.md)
 - [`QUALITY_GATES.md`](QUALITY_GATES.md)
-- [`SECURITY_AND_PRIVACY.md`](SECURITY_AND_PRIVACY.md)
+- [`SECURITY_AND_PRIVACY.md`](../SECURITY_AND_PRIVACY.md)
 - [`THREAT_MODEL.md`](THREAT_MODEL.md)
-- [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md)
-- [`RESULTS_TEMPLATE.md`](RESULTS_TEMPLATE.md)
+- [`KNOWN_LIMITATIONS.md`](../KNOWN_LIMITATIONS.md)
+- [`RESULTS_TEMPLATE.md`](../RESULTS_TEMPLATE.md)
 
 ### Demo And Submission
 
-- [`DEMO_PLAN.md`](DEMO_PLAN.md)
-- [`DEMO_SCENARIO.md`](DEMO_SCENARIO.md)
-- [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md)
+- [`DEMO_PLAN.md`](../DEMO_PLAN.md)
+- [`DEMO_SCENARIO.md`](../DEMO_SCENARIO.md)
+- [`DEMO_SCRIPT.md`](../DEMO_SCRIPT.md)
 - [`SUBMISSION_PLAN.md`](SUBMISSION_PLAN.md)
-- [`PRESENTATION_OUTLINE.md`](PRESENTATION_OUTLINE.md)
-- [`ARCHITECTURE_SUBMISSION.md`](ARCHITECTURE_SUBMISSION.md)
+- [`PRESENTATION_OUTLINE.md`](../PRESENTATION_OUTLINE.md)
+- [`ARCHITECTURE_SUBMISSION.md`](../ARCHITECTURE_SUBMISSION.md)
 
 ---
 

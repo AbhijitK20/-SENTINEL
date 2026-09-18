@@ -159,14 +159,16 @@ uv run uvicorn sentinel.api:create_app --factory --port 8000
 cd web/apps/console && npm install && npm run dev
 
 # Local vulnerable target, scanner, and admin response dashboard
-docker compose --profile demo up -d
+docker compose --profile demo up --build -d
 ```
 
 ## Docker Compose (Local Pilot)
 
 ```bash
 # Default stack: API + dashboard + Prometheus + Grafana
-docker compose up -d
+# --build is important after cloning or pulling changes so the image contains
+# this checkout's dashboard instead of a stale local image.
+docker compose up --build -d
 
 # Dashboard: http://localhost:8501
 # API docs:  http://localhost:8000/docs
@@ -207,7 +209,7 @@ docker compose run --rm feed-refresher
 # Run a genuine nmap SYN scan against a containerized target;
 # SENTINEL detects it live via tcpdump capture on the wire.
 export SENTINEL_API_KEY=sent_<your-key>
-docker compose --profile realtime up -d
+docker compose --profile realtime up --build -d
 docker compose logs -f demo-sensor demo-attacker
 ```
 
@@ -263,32 +265,32 @@ synthetic attack -> vulnerable app logs -> scanner -> /v1/events
 
 ## Documentation Map
 
-- **Status**: `IMPLEMENTATION_STATUS.md` (sprints 0–11, current limitations), `RESULTS.md` (measured numbers), `QUALITY_GATES.md` (per-gate evidence)
-- **Product**: `PROJECT_CHARTER.md`, `VISION_AND_POSITIONING.md`, `PRD.md`, `REQUIREMENTS.md`, `DESIGN.md` (design direction, risk ramp, canvas, typography)
-- **Technical**: `ARCHITECTURE.md`, `DATASET_PLAN.md`, `DATA_CONTRACTS.md`, `MODEL_PLAN.md`
-- **Quality**: `EVALUATION_PLAN.md`, `EXPLAINABILITY_PLAN.md`, `TEST_STRATEGY.md`, `KNOWN_LIMITATIONS.md`
-- **Security**: `SECURITY.md` (disclosure policy, SLA), `SENTINEL_PRODUCTION_PLAN.md` (threat model, STRIDE)
+- **Status**: `docs/IMPLEMENTATION_STATUS.md` (sprints 0–11, current limitations), `docs/RESULTS.md` (measured numbers), `docs/planning/QUALITY_GATES.md` (per-gate evidence)
+- **Product**: `docs/planning/PROJECT_CHARTER.md`, `docs/planning/VISION_AND_POSITIONING.md`, `docs/planning/PRD.md`, `docs/planning/REQUIREMENTS.md`, `docs/DESIGN.md` (design direction, risk ramp, canvas, typography)
+- **Technical**: `docs/ARCHITECTURE.md`, `docs/planning/DATASET_PLAN.md`, `docs/DATA_CONTRACTS.md`, `docs/planning/MODEL_PLAN.md`
+- **Quality**: `docs/planning/EVALUATION_PLAN.md`, `docs/planning/EXPLAINABILITY_PLAN.md`, `docs/planning/TEST_STRATEGY.md`, `docs/KNOWN_LIMITATIONS.md`
+- **Security**: `SECURITY.md` (disclosure policy, SLA), `docs/planning/SENTINEL_PRODUCTION_PLAN.md` (threat model, STRIDE)
 - **Operations**: `CHANGELOG.md`, `docs/adr/0001-feature-versioning.md`, `docs/runbooks/alert-high-cpu.md`, `docs/runbooks/forecast-latency-high.md`
-- **Detectors**: `DETECTORS.md` (attack-type detectors, incident correlation, asset risk fusion)
-- **Enterprise**: `ROADMAP.md` (scale levels, phase status) + `DEPLOYMENT.md` (compose stack, Hugging Face Spaces, observability, real-data mode, sensors)
+- **Detectors**: `docs/DETECTORS.md` (attack-type detectors, incident correlation, asset risk fusion)
+- **Enterprise**: `docs/ROADMAP.md` (scale levels, phase status) + `docs/DEPLOYMENT.md` (compose stack, Hugging Face Spaces, observability, real-data mode, sensors)
 - **Platform modules**:
-  - `sentinel/api.py` — REST API (forecast, detect, events, alerts, cases, registry, drift, compliance, metrics, auth)
-  - `sentinel/auth.py` — API-key auth, RBAC, audit trail
-  - `sentinel/live.py` — live detection engine (5 sources: CSV, JSONL, syslog, Scapy, flow sensor)
-  - `sentinel/detectors.py` — 9 attack-type detectors with measured thresholds
-  - `sentinel/correlation.py` — incident correlation with risk fusion
-  - `sentinel/cases.py` — case lifecycle + SLA
-  - `sentinel/drift.py` — PSI monitoring
-  - `sentinel/registry.py` — model promotion workflow
-  - `sentinel/compliance.py` — NIST / ISO / SOC 2 control mapping
-  - `sentinel/federated.py` — FedAvg simulation
-  - `sentinel/feedback.py` — HMAC-signed analyst feedback
-  - `sentinel/threat_intel.py` — keyless threat-intel feed enrichment
+  - `src/sentinel/api/app.py` — REST API (forecast, detect, events, alerts, cases, registry, drift, compliance, metrics, auth)
+  - `src/sentinel/auth.py` — API-key auth, RBAC, audit trail
+  - `src/sentinel/live.py` — live detection engine (5 sources: CSV, JSONL, syslog, Scapy, flow sensor)
+  - `src/sentinel/detectors.py` — 9 attack-type detectors with measured thresholds
+  - `src/sentinel/correlation.py` — incident correlation with risk fusion
+  - `src/sentinel/cases.py` — case lifecycle + SLA
+  - `src/sentinel/drift.py` — PSI monitoring
+  - `src/sentinel/registry.py` — model promotion workflow
+  - `src/sentinel/compliance.py` — NIST / ISO / SOC 2 control mapping
+  - `src/sentinel/federated.py` — FedAvg simulation
+  - `src/sentinel/feedback.py` — HMAC-signed analyst feedback
+  - `src/sentinel/threat_intel.py` — keyless threat-intel feed enrichment
   - `scripts/fetch_threat_feed.py` — internet-fetched feed refresh
   - `scripts/flow_sensor.py` — 5-tuple flow aggregation from tcpdump
   - `scripts/packet_sensor.py` — per-packet event stream from tcpdump
-- **Delivery**: `SPRINT_PLAN.md`, `DEMO_PLAN.md`, `DEMO_SCENARIO.md`, `SUBMISSION_PLAN.md`
-- **Presentation**: `PRESENTATION_OUTLINE.md` (content), `scripts/build_deck.py` (generates `deliverables/Trajectory_SIH26153_Idea_Deck.pptx` and `.pdf`)
+- **Delivery**: `docs/planning/SPRINT_PLAN.md`, `docs/DEMO_PLAN.md`, `docs/DEMO_SCENARIO.md`, `docs/planning/SUBMISSION_PLAN.md`
+- **Presentation**: `docs/PRESENTATION_OUTLINE.md` (content), `scripts/build_deck.py` (generates `deliverables/Trajectory_SIH26153_Idea_Deck.pptx` and `.pdf`)
 
 ## Source Of Truth
 

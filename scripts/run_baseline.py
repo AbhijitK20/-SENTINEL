@@ -4,7 +4,7 @@
         --output reports/generated/baseline
 
 Without ``--flow-csv`` the run uses the deterministic synthetic replay scenarios
-(see ``trajectory.synthetic``); the report labels the dataset accordingly.
+(see ``sentinel.synthetic``); the report labels the dataset accordingly.
 """
 
 from __future__ import annotations
