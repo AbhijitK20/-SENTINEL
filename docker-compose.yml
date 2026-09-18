@@ -1,11 +1,12 @@
 # Local pilot compose: dashboard + REST API from one image, plus an optional
 # observability stack (Prometheus + Grafana) under the `obs` profile.
 # This is NOT the production architecture (Kubernetes, Kafka, Postgres) —
-# those need real infrastructure decisions and stay in ROADMAP.md.
+# those need real infrastructure decisions and stay in docs/ROADMAP.md.
 services:
   dashboard:
     build: .
-    image: sentinel:local
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
+    pull_policy: build
     ports:
       - "8501:8501"
     volumes:
@@ -16,9 +17,10 @@ services:
     restart: unless-stopped
 
   api:
-    image: sentinel:local
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
     build: .
-    command: ["uv", "run", "--no-sync", "uvicorn", "trajectory.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    pull_policy: build
+    command: ["uv", "run", "--no-sync", "uvicorn", "sentinel.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       SENTINEL_ARTIFACTS_DIR: /app/reports/generated/real-benchmark/baseline
       SENTINEL_THREAT_FEED_FILE: /app/reports/threat_intel/feed.json
@@ -37,8 +39,9 @@ services:
   # runtime itself never fetches; this container does, once, at compose up).
   # Re-run on a schedule with: docker compose run --rm feed-refresher
   feed-refresher:
-    image: sentinel:local
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
     build: .
+    pull_policy: build
     command: ["uv", "run", "--no-sync", "python", "scripts/fetch_threat_feed.py", "--out", "/app/reports/threat_intel/feed.json", "--max-age-hours", "12"]
     volumes:
       - ./reports:/app/reports
@@ -104,8 +107,9 @@ services:
   # push raw per-packet events instead. tcpdump installs via apt on first
   # start; NET_RAW is required to capture.
   demo-sensor:
-    image: sentinel:local
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
     build: .
+    pull_policy: build
     network_mode: "service:demo-target"
     cap_add: [NET_RAW]
     command:
@@ -141,8 +145,9 @@ services:
     profiles: ["demo"]
 
   demo-sentinel:
-    image: sentinel:local
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
     build: .
+    pull_policy: build
     command:
       - python
       - apps/vulnerable/scanner.py

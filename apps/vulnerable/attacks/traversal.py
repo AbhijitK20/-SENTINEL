@@ -62,7 +62,7 @@ def run(target: str, delay: float = 0.2, rounds: int = 2) -> int:
             if leaked:
                 leaked_count += 1
             print(
-                f"  round {round_idx+1}  traverse={payload[:35]:35s}  "
+                f"  round {round_idx + 1}  traverse={payload[:35]:35s}  "
                 f"status={code}  leaked={leaked}"
             )
             time.sleep(delay)
@@ -81,15 +81,10 @@ def run(target: str, delay: float = 0.2, rounds: int = 2) -> int:
                 code = 0
                 body = ""
             has_data = len(body) > 50
-            print(
-                f"  round {round_idx+1}  path={path[:35]:35s}  "
-                f"status={code}  data={has_data}"
-            )
+            print(f"  round {round_idx + 1}  path={path[:35]:35s}  status={code}  data={has_data}")
             time.sleep(delay)
 
-    print(
-        f"[traversal] done: {total} requests, {leaked_count} files leaked"
-    )
+    print(f"[traversal] done: {total} requests, {leaked_count} files leaked")
     return 0
 
 

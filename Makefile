@@ -1,4 +1,4 @@
-.PHONY: setup gate demo train reproduce bench-real lint test clean web:dev
+.PHONY: setup gate demo train reproduce bench-real lint test clean web-dev
 
 setup:  ## install everything
 	uv sync --all-extras
@@ -18,19 +18,19 @@ format:  ## auto-format code
 	uv run ruff format src tests scripts
 
 demo:  ## dashboard with pretrained release weights, no training
-	uv run streamlit run src/trajectory/dashboard/app.py -- --artifacts models/release/v1
+	uv run streamlit run src/sentinel/dashboard/app.py -- --artifacts models/release/v1
 
 train:  ## full reproducible training run
 	uv run python scripts/run_benchmark.py --config configs/default.yaml
 
-reproduce:  ## train, then verify metrics match RESULTS.md within tolerance
+reproduce:  ## train, then verify the checksummed release bundle
 	uv run python scripts/run_benchmark.py --config configs/default.yaml
-	uv run python scripts/verify_results.py --results RESULTS.md --run reports/generated/benchmark
+	uv run python scripts/verify_release_artifacts.py models/release/v1
 
 bench-real:  ## CIC-IDS2017 cross-day benchmark
 	uv run python scripts/run_real_benchmark.py --data-dir data/raw/cic-ids2017/TrafficLabelling
 
-web:dev:  ## run Next.js frontend dev server
+web-dev:  ## run Next.js frontend dev server
 	cd web/apps/console && npm run dev
 
 clean:  ## remove build artifacts and caches

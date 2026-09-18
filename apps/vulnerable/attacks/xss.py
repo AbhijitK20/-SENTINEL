@@ -59,7 +59,7 @@ def run(target: str, delay: float = 0.2, rounds: int = 2) -> int:
             if is_reflected:
                 reflected += 1
             print(
-                f"  round {round_idx+1}  payload={payload[:35]:35s}  "
+                f"  round {round_idx + 1}  payload={payload[:35]:35s}  "
                 f"status={code}  reflected={is_reflected}"
             )
             time.sleep(delay)
@@ -80,7 +80,7 @@ def run(target: str, delay: float = 0.2, rounds: int = 2) -> int:
                 body = ""
             is_reflected = payload in body
             print(
-                f"  round {round_idx+1}  search_xss={payload[:30]:30s}  "
+                f"  round {round_idx + 1}  search_xss={payload[:30]:30s}  "
                 f"status={code}  reflected={is_reflected}"
             )
             time.sleep(delay)

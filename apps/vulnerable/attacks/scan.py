@@ -66,7 +66,7 @@ def run(target: str, delay: float = 0.1, rounds: int = 2) -> int:
                 code = e.code
             except Exception:
                 code = 0
-            print(f"  round {round_idx+1}  path={path:25s}  status={code}")
+            print(f"  round {round_idx + 1}  path={path:25s}  status={code}")
             time.sleep(delay)
 
         # Directory traversal
@@ -83,7 +83,9 @@ def run(target: str, delay: float = 0.1, rounds: int = 2) -> int:
                 code = 0
                 body = ""
             leaked = "root:" in body or "password" in body.lower()
-            print(f"  round {round_idx+1}  traverse={payload:30s}  status={code}  leaked={leaked}")
+            print(
+                f"  round {round_idx + 1}  traverse={payload:30s}  status={code}  leaked={leaked}"
+            )
             time.sleep(delay)
 
         # Random port probes (generate connection-refused errors = real traffic)

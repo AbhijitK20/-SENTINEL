@@ -30,6 +30,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: uv sync
       - run: uv run pytest -q --ignore=tests/test_api.py --ignore=tests/test_auth.py --ignore=tests/test_enterprise.py --ignore=tests/test_threat_intel.py --ignore=tests/test_optional_deps.py
+        env:
+          OMP_NUM_THREADS: "1"
+          MKL_NUM_THREADS: "1"
+          OPENBLAS_NUM_THREADS: "1"
 
   security:
     runs-on: ubuntu-latest

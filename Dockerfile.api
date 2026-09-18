@@ -22,4 +22,4 @@ EXPOSE 7860
 
 # Bootstrap demo-grade artifacts when SENTINEL_ARTIFACTS_DIR is empty
 # (hosted deploys have no git-ignored artifacts), then serve.
-CMD ["sh", "-c", "if [ ! -f \"${SENTINEL_ARTIFACTS_DIR:-/tmp/sentinel-artifacts}/baseline_result.json\" ]; then uv run --no-sync python scripts/bootstrap_api_artifacts.py --out \"${SENTINEL_ARTIFACTS_DIR:-/tmp/sentinel-artifacts}\"; fi; uv run --no-sync uvicorn trajectory.api:create_app --factory --host 0.0.0.0 --port ${SENTINEL_PORT}"]
+CMD ["sh", "-c", "if [ ! -f \"${SENTINEL_ARTIFACTS_DIR:-/tmp/sentinel-artifacts}/baseline_result.json\" ]; then uv run --no-sync python scripts/bootstrap_api_artifacts.py --out \"${SENTINEL_ARTIFACTS_DIR:-/tmp/sentinel-artifacts}\"; fi; uv run --no-sync uvicorn sentinel.api:create_app --factory --host 0.0.0.0 --port ${SENTINEL_PORT}"]

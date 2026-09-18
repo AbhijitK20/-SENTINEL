@@ -21,4 +21,4 @@ RUN uv sync --frozen --extra all --no-dev
 
 EXPOSE 8501
 
-CMD ["uv", "run", "--no-sync", "streamlit", "run", "src/trajectory/dashboard/app.py"]
+CMD ["uv", "run", "--no-sync", "streamlit", "run", "src/sentinel/dashboard/app.py"]

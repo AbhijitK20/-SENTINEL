@@ -40,8 +40,7 @@ def run(target: str, delay: float = 0.15, rounds: int = 2) -> int:
     target = target.rstrip("/")
     total = len(ENUM_PATHS) * rounds
     print(
-        f"[enum] probing {target} — {len(ENUM_PATHS)} "
-        f"endpoints x{rounds} rounds ({total} requests)"
+        f"[enum] probing {target} — {len(ENUM_PATHS)} endpoints x{rounds} rounds ({total} requests)"
     )
 
     data_leaked = 0
@@ -78,7 +77,7 @@ def run(target: str, delay: float = 0.15, rounds: int = 2) -> int:
             indicator_str = ",".join(indicators) if indicators else "none"
 
             print(
-                f"  round {round_idx+1}  path={path[:30]:30s}  "
+                f"  round {round_idx + 1}  path={path[:30]:30s}  "
                 f"status={code}  leaked={indicator_str}"
             )
             time.sleep(delay)

@@ -60,6 +60,9 @@ all = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "performance: tests with explicit throughput or latency budgets",
+]
 
 [tool.ruff]
 line-length = 100

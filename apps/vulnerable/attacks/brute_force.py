@@ -37,7 +37,7 @@ def run(target: str, delay: float = 0.3, max_attempts: int = 30) -> int:
                 code = e.code
             except Exception:
                 code = 0
-            print(f"  attempt {attempt+1:03d}  password={password:15s}  status={code}")
+            print(f"  attempt {attempt + 1:03d}  password={password:15s}  status={code}")
             time.sleep(delay)
     print(f"[brute-force] done: {max_attempts * len(WORDLIST)} attempts sent")
     return 0

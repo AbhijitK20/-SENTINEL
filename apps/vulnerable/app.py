@@ -255,7 +255,7 @@ def index():
       <a href="/search">Search</a>
       <a href="/comments">Comments</a>
       <a href="/admin">Admin</a>
-      {'<a href="/logout" style="color:var(--red)">Logout</a>' if user else ''}
+      {'<a href="/logout" style="color:var(--red)">Logout</a>' if user else ""}
     </div>
   </div>
 
@@ -355,10 +355,7 @@ def login():
         password_hash = hashlib.md5(password.encode()).hexdigest()
         # Intentionally vulnerable: raw string formatting in SQL
         db = _get_db()
-        query = (
-            f"SELECT * FROM users WHERE username='{username}' "
-            f"AND password='{password_hash}'"
-        )
+        query = f"SELECT * FROM users WHERE username='{username}' AND password='{password_hash}'"
         try:
             user = db.execute(query).fetchone()
             if user:
@@ -372,7 +369,8 @@ def login():
         except Exception as e:
             g.auth_outcome = "failure"
             # Intentionally verbose error — leaks SQL to attacker
-            return f"""<!DOCTYPE html>
+            return (
+                f"""<!DOCTYPE html>
 <html><head><title>SQL Error</title>
 <style>{_SHARED_CSS}</style></head><body>
 <div class="container">
@@ -381,7 +379,9 @@ def login():
   <div class="alert alert-danger"><span>SQL injection detected — verbose error exposed</span></div>
   <div class="card"><h2>Database Error</h2><pre>{query}\\n\\n{e}</pre></div>
   <a href="/login" class="btn btn-ghost">← Back to Login</a>
-</div></body></html>""", 500
+</div></body></html>""",
+                500,
+            )
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -404,7 +404,7 @@ def login():
 
   <div class="card" style="max-width:400px">
     <h2>Sign In</h2>
-    {f'<div class="alert alert-danger"><span>{error}</span></div>' if error else ''}
+    {f'<div class="alert alert-danger"><span>{error}</span></div>' if error else ""}
     <form method="post">
       <div class="form-group">
         <label>Username</label>
@@ -436,9 +436,7 @@ def dashboard():
         return redirect(url_for("login"))
     db = _get_db()
     items = db.execute("SELECT * FROM items").fetchall()
-    comments = db.execute(
-        "SELECT * FROM comments ORDER BY created_at DESC LIMIT 10"
-    ).fetchall()
+    comments = db.execute("SELECT * FROM comments ORDER BY created_at DESC LIMIT 10").fetchall()
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dashboard — Sentinel Demo</title>
@@ -450,7 +448,7 @@ def dashboard():
       <div class="logo">S</div>
       <div>
         <h1>Dashboard</h1>
-        <div style="font-size:.75rem;color:var(--text3)">Welcome, {user['username']}</div>
+        <div style="font-size:.75rem;color:var(--text3)">Welcome, {user["username"]}</div>
       </div>
     </div>
     <div class="nav">
@@ -462,7 +460,7 @@ def dashboard():
   </div>
 
   <div class="alert alert-success">
-    <span>Logged in as <strong>{user['username']}</strong></span>
+    <span>Logged in as <strong>{user["username"]}</strong></span>
   </div>
 
   <div class="card">
@@ -498,7 +496,8 @@ def search():
         except Exception as e:
             error = (query, e)
 
-    return f"""<!DOCTYPE html>
+    return (
+        f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Search — Sentinel Demo</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -527,7 +526,24 @@ def search():
     {"<div class='alert alert-danger'><span>SQL Error — query leaked: " + error[0] + "</span></div>" if error else ""}
     {"<div class='alert alert-warning'><span>Query: <code>" + q + "</code> — " + str(len(results)) + " results</span></div>" if q and not error else ""}
 
-    """ + ('<table><thead><tr><th>Name</th><th>Secret</th></tr></thead><tbody>' + "".join('<tr><td>' + r["name"] + '</td><td style="font-family:monospace;color:var(--amber)">' + r["secret"] + '</td></tr>' for r in results) + '</tbody></table>' if results else '<div style="color:var(--text3);text-align:center;padding:1rem">No results found</div>' if q else '') + """
+    """
+        + (
+            "<table><thead><tr><th>Name</th><th>Secret</th></tr></thead><tbody>"
+            + "".join(
+                "<tr><td>"
+                + r["name"]
+                + '</td><td style="font-family:monospace;color:var(--amber)">'
+                + r["secret"]
+                + "</td></tr>"
+                for r in results
+            )
+            + "</tbody></table>"
+            if results
+            else '<div style="color:var(--text3);text-align:center;padding:1rem">No results found</div>'
+            if q
+            else ""
+        )
+        + """
 
     <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
       <div style="font-size:.8rem;color:var(--text3)">
@@ -538,6 +554,7 @@ def search():
 </div>
 <div class="vuln-badge">INTENTIONALLY VULNERABLE</div>
 </body></html>"""
+    )
 
 
 @app.route("/comments", methods=["GET", "POST"])
@@ -608,6 +625,9 @@ def admin():
     db = _get_db()
     users = db.execute("SELECT id, username FROM users").fetchall()
     comments = db.execute("SELECT * FROM comments").fetchall()
+    user_rows = "".join(
+        f"<tr><td>{row['id']}</td><td><strong>{row['username']}</strong></td></tr>" for row in users
+    )
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin Panel — Sentinel Demo</title>
@@ -644,7 +664,7 @@ def admin():
     <table>
       <thead><tr><th>ID</th><th>Username</th></tr></thead>
       <tbody>
-        {"".join(f'<tr><td>{r["id"]}</td><td><strong>{r["username"]}</strong></td></tr>' for r in users)}
+        {user_rows}
       </tbody>
     </table>
     <div style="margin-top:.75rem">

@@ -3,7 +3,7 @@
 
 Loads the same SHA-256-checksummed artifacts as the dashboard and reuses the
 live engine's windowing, so REST consumers get results identical to the UI.
-Scale level 2 per ROADMAP.md: single-process inference, no auth or
+Scale level 2 per docs/ROADMAP.md: single-process inference, no auth or
 multi-tenancy yet — limitations are stated here, not hidden.
 
 Run: ``uv run uvicorn sentinel.api:create_app --factory --port 8000``
