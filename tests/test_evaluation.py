@@ -12,7 +12,7 @@ from sentinel.evaluation import evaluate_replay
 from sentinel.predict import DECISION_THRESHOLD, load_artifacts
 from sentinel.report import render_report
 from sentinel.synthetic import generate_labelled_states
-from sentinel.targets import build_sequence_samples, make_split_manifest
+from sentinel.targets import LabelledState, build_sequence_samples, make_split_manifest
 
 SCENARIOS = [f"ev{i}" for i in range(6)]
 
@@ -68,6 +68,27 @@ def test_lead_credit_only_when_crossing_precedes_onset(tmp_path: Path) -> None:
             assert row.threshold_crossed
             assert row.realized_future_infiltration
             assert row.lead_windows >= 0
+
+
+def test_attack_free_scenario_is_not_pre_onset(tmp_path: Path) -> None:
+    labelled, loaded, _ = _setup(tmp_path)
+    benign = [
+        LabelledState(
+            state_key=item.state_key,
+            scenario_id=item.scenario_id,
+            state=item.state,
+            label=item.label.model_copy(update={"infiltration": False, "attack_stage": "Benign"}),
+        )
+        for item in labelled
+        if item.scenario_id == SCENARIOS[0]
+    ]
+
+    evaluation = evaluate_replay(benign, loaded, horizon=2, split_filter=None)
+
+    assert evaluation.rows
+    assert {row.prediction_category for row in evaluation.rows} == {"NO_ATTACK"}
+    assert evaluation.pre_onset_warning_rate == 0.0
+    assert evaluation.median_pre_onset_lead_windows is None
 
 
 def test_invalid_arguments_rejected(tmp_path: Path) -> None:

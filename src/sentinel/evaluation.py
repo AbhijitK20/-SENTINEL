@@ -12,6 +12,7 @@ Prediction categories:
     PRE_ONSET:     Prediction occurs BEFORE the first attack window in the scenario.
     DURING_ATTACK: Prediction occurs AFTER attack onset but while attack is ongoing.
     POST_ATTACK:   Prediction occurs after the attack period ends.
+    NO_ATTACK:     The scenario contains no labelled attack onset.
 
 The measured lead time is defined once, here:
 
@@ -180,8 +181,7 @@ def evaluate_replay(
 
             # Categorize prediction timing relative to attack onset
             if attack_onset_idx is None:
-                # No attack in this scenario
-                category = "PRE_ONSET"  # All predictions are "before attack" (which never comes)
+                category = "NO_ATTACK"
             elif index < attack_onset_idx:
                 # Current window is before attack onset
                 category = "PRE_ONSET"
