@@ -45,3 +45,18 @@ reports/threat_intel/
 
 # Local trust-ledger records may contain operational alert metadata
 reports/generated/ledger/
+
+# Video production captures and generated workspaces (hundreds of MB of frames)
+video/*-take/
+brag-output*/
+
+# Knowledge-graph / skill installers (local tooling, regenerable)
+graphify-out/
+.agents/
+skills-lock.json
+
+# Local audit notes from the code-review plugin (not product documentation)
+DUAL_DASHBOARD_PORTS.md
+PLUGIN_MEMORY.md
+PORT_AUDIT.md
+UI_INTERACTION_AUDIT.md
