@@ -104,6 +104,7 @@ class LiveStatus(BaseModel):
     model_version: str
     history: list[LiveWindow] = Field(default_factory=list)
     attack_findings: list[AttackFinding] = Field(default_factory=list)
+    detection_history: list[AttackFinding] = Field(default_factory=list)
     incidents: list[Incident] = Field(default_factory=list)
     last_error: str | None = None
 
@@ -501,6 +502,20 @@ class LiveEngine:
             )
             self._next_boundary += timedelta(seconds=self._stride_seconds)
 
+    def _flush_final_window(self) -> None:
+        """Emit the remaining buffer as a final window when the source ends."""
+        if not self._buffer or self._anchor is None:
+            return
+        last_event_ts = self._buffer[-1].timestamp
+        if self._next_boundary is not None and last_event_ts >= self._next_boundary:
+            return  # the last event already triggered a window emission
+        if self._next_boundary is not None:
+            start = self._next_boundary - timedelta(seconds=self._stride_seconds)
+        else:
+            start = self._anchor
+        end = last_event_ts + timedelta(seconds=1)
+        self._emit_window(start, end)
+
     # ── processing ───────────────────────────────────────────────────
     def poll(self) -> LiveStatus:
         """Drain queued events, emit due windows, return a UI snapshot."""
@@ -512,6 +527,8 @@ class LiveEngine:
             if isinstance(item, _SourceError):
                 if item is _SENTINEL:
                     self._stop.set()
+                    with self._lock:
+                        self._flush_final_window()
                 else:
                     self._last_error = str(item)
                 continue
@@ -536,6 +553,7 @@ class LiveEngine:
                 model_version=self._artifacts.baseline_result.model_version,
                 history=list(self._history),
                 attack_findings=list(self._findings),
+                detection_history=list(self._findings),
                 incidents=list(correlate(tuple(self._findings), registry=self._asset_registry)),
                 last_error=self._last_error,
             )

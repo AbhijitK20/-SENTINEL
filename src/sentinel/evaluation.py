@@ -8,6 +8,11 @@ horizon. The output rows answer the demo question directly:
 
     At window T, what did the model predict — and what actually happened next?
 
+Prediction categories:
+    PRE_ONSET:     Prediction occurs BEFORE the first attack window in the scenario.
+    DURING_ATTACK: Prediction occurs AFTER attack onset but while attack is ongoing.
+    POST_ATTACK:   Prediction occurs after the attack period ends.
+
 The measured lead time is defined once, here:
 
     lead_windows = the number of windows between the first forecast whose
@@ -17,14 +22,12 @@ The measured lead time is defined once, here:
     realized onset. A forecast that crosses after the onset, or never, earns
     no lead credit; false early warnings are counted separately.
 
-This is the measured counterpart to the predicted ``LeadTimeEstimate`` inside
-a single ``Forecast``; it is computed against labels, so it is only meaningful
-on data with trustworthy labels (currently the synthetic replay).
+Only PRE_ONSET predictions with lead > 0 count as genuine early warnings.
+DURING_ATTACK detection is a separate capability metric.
 """
 
 from __future__ import annotations
 
-import statistics
 from collections.abc import Callable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -33,7 +36,7 @@ from sentinel.predict import DECISION_THRESHOLD, LoadedArtifacts, forecast
 from sentinel.schemas import SPLIT_NAMES, Forecast, NetworkState
 from sentinel.targets import LabelledState
 
-REPLAY_EVALUATION_VERSION = "replay-evaluation-v1"
+REPLAY_EVALUATION_VERSION = "replay-evaluation-v2"
 
 
 class ReplayRow(BaseModel):
@@ -51,6 +54,7 @@ class ReplayRow(BaseModel):
     realized_future_stage: str = Field(min_length=1)
     lead_windows: int | None = Field(default=None, ge=0)
     correct_direction: bool
+    prediction_category: str = Field(default="UNKNOWN")
 
 
 class ReplayScenarioSummary(BaseModel):
@@ -66,6 +70,10 @@ class ReplayScenarioSummary(BaseModel):
     false_early_warnings: int = Field(ge=0)
     direction_accuracy: float = Field(ge=0.0, le=1.0)
     median_lead_windows: float | None = None
+    pre_onset_warnings: int = Field(ge=0)
+    during_attack_detections: int = Field(ge=0)
+    post_attack_predictions: int = Field(ge=0)
+    pre_onset_lead_windows: list[int] = Field(default_factory=list)
 
 
 class ReplayEvaluation(BaseModel):
@@ -83,6 +91,9 @@ class ReplayEvaluation(BaseModel):
     forecast_crossing_rate: float = Field(ge=0.0, le=1.0)
     false_early_warning_rate: float = Field(ge=0.0, le=1.0)
     warnings: list[str] = Field(default_factory=list)
+    pre_onset_warning_rate: float = Field(ge=0.0, le=1.0)
+    median_pre_onset_lead_windows: float | None = None
+    during_attack_detection_rate: float = Field(ge=0.0, le=1.0)
 
 
 def evaluate_replay(
@@ -130,8 +141,21 @@ def evaluate_replay(
     rows: list[ReplayRow] = []
     warnings: list[str] = []
     effective_forecast_fn = forecast_fn or forecast
+
+    # Pre-compute attack onset index per scenario
+    scenario_attack_onset: dict[str, int | None] = {}
     for scenario_id in sorted(by_scenario):
         states = sorted(by_scenario[scenario_id], key=lambda item: item.state.window_start)
+        onset_idx = None
+        for i, item in enumerate(states):
+            if item.label.infiltration:
+                onset_idx = i
+                break
+        scenario_attack_onset[scenario_id] = onset_idx
+
+    for scenario_id in sorted(by_scenario):
+        states = sorted(by_scenario[scenario_id], key=lambda item: item.state.window_start)
+        attack_onset_idx = scenario_attack_onset.get(scenario_id)
         for index in range(len(states) - horizon):
             history = states[: index + 1]
             if len(history) < min_history:
@@ -154,6 +178,20 @@ def evaluate_replay(
                 result.probability_timeline, threshold, [i.label.infiltration for i in future]
             )
 
+            # Categorize prediction timing relative to attack onset
+            if attack_onset_idx is None:
+                # No attack in this scenario
+                category = "PRE_ONSET"  # All predictions are "before attack" (which never comes)
+            elif index < attack_onset_idx:
+                # Current window is before attack onset
+                category = "PRE_ONSET"
+            elif index < attack_onset_idx + horizon:
+                # Current window overlaps with attack period
+                category = "DURING_ATTACK"
+            else:
+                # Current window is after attack period
+                category = "POST_ATTACK"
+
             rows.append(
                 ReplayRow(
                     scenario_id=scenario_id,
@@ -166,6 +204,7 @@ def evaluate_replay(
                     realized_future_stage=realized_stage,
                     lead_windows=lead,
                     correct_direction=(crossed == realized_infiltration),
+                    prediction_category=category,
                 )
             )
 
@@ -184,6 +223,21 @@ def evaluate_replay(
     crossings = sum(1 for r in rows if r.threshold_crossed)
     false_early = sum(1 for r in rows if r.threshold_crossed and not r.realized_future_infiltration)
 
+    # Pre-onset metrics
+    pre_onset_rows = [r for r in rows if r.prediction_category == "PRE_ONSET"]
+    pre_onset_crossings = sum(1 for r in pre_onset_rows if r.threshold_crossed)
+    pre_onset_warning_rate = pre_onset_crossings / len(pre_onset_rows) if pre_onset_rows else 0.0
+
+    pre_onset_leads = [r.lead_windows for r in pre_onset_rows if r.lead_windows is not None]
+    median_pre_onset_lead = _median(pre_onset_leads) if pre_onset_leads else None
+
+    # During-attack detection
+    during_attack_rows = [r for r in rows if r.prediction_category == "DURING_ATTACK"]
+    during_attack_crossings = sum(1 for r in during_attack_rows if r.threshold_crossed)
+    during_attack_rate = (
+        during_attack_crossings / len(during_attack_rows) if during_attack_rows else 0.0
+    )
+
     return ReplayEvaluation(
         evaluation_version=REPLAY_EVALUATION_VERSION,
         decision_threshold=threshold,
@@ -195,6 +249,9 @@ def evaluate_replay(
         forecast_crossing_rate=crossings / len(rows),
         false_early_warning_rate=false_early / len(rows),
         warnings=warnings,
+        pre_onset_warning_rate=pre_onset_warning_rate,
+        median_pre_onset_lead_windows=median_pre_onset_lead,
+        during_attack_detection_rate=during_attack_rate,
     )
 
 
@@ -220,6 +277,13 @@ def _lead_credit(timeline, threshold: float, realized_infiltration: list[bool]) 
 def _summarize(scenario_id: str, rows: list[ReplayRow]) -> ReplayScenarioSummary:
     scenario_rows = [r for r in rows if r.scenario_id == scenario_id]
     leads = [r.lead_windows for r in scenario_rows if r.lead_windows is not None]
+
+    pre_onset_rows = [r for r in scenario_rows if r.prediction_category == "PRE_ONSET"]
+    during_attack_rows = [r for r in scenario_rows if r.prediction_category == "DURING_ATTACK"]
+    post_attack_rows = [r for r in scenario_rows if r.prediction_category == "POST_ATTACK"]
+
+    pre_onset_leads = [r.lead_windows for r in pre_onset_rows if r.lead_windows is not None]
+
     return ReplayScenarioSummary(
         scenario_id=scenario_id,
         rows=len(scenario_rows),
@@ -235,13 +299,21 @@ def _summarize(scenario_id: str, rows: list[ReplayRow]) -> ReplayScenarioSummary
             sum(1 for r in scenario_rows if r.correct_direction) / len(scenario_rows)
         ),
         median_lead_windows=_median(leads),
+        pre_onset_warnings=sum(1 for r in pre_onset_rows if r.threshold_crossed),
+        during_attack_detections=sum(1 for r in during_attack_rows if r.threshold_crossed),
+        post_attack_predictions=sum(1 for r in post_attack_rows if r.threshold_crossed),
+        pre_onset_lead_windows=pre_onset_leads,
     )
 
 
 def _median(values: list[int]) -> float | None:
     if not values:
         return None
-    return float(statistics.median(values))
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return float(ordered[mid])
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
 
 
 def _allowed_scenarios(artifacts: LoadedArtifacts, split_filter: str | None) -> set[str] | None:
