@@ -62,6 +62,8 @@ models/release/          committed release bundle (checksummed)
     uv run ruff format --check src tests scripts && \
     uv run pytest -q
     ```
+    Performance tests are deselected by default (they allocate 200k events). Run
+    them when touching ingestion/state_builder budgets: `uv run pytest -m performance`.
 
 ## Honesty check (run before every doc edit)
 

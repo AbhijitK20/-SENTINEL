@@ -17,10 +17,10 @@ Prometheus alert: `HighCpuUsage` — CPU usage above 80% for > 5 minutes.
 top -bn1 | head -20
 
 # Check SENTINEL-specific metrics
-curl -s http://localhost:8000/metrics | grep sentinel
+curl -s http://localhost:8100/metrics | grep sentinel
 
 # Check windowing backlog
-curl -s http://localhost:8000/metrics | grep queue_depth
+curl -s http://localhost:8100/metrics | grep queue_depth
 ```
 
 ## Remediation

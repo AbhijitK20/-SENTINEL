@@ -9,24 +9,29 @@ services:
     pull_policy: build
     ports:
       - "8501:8501"
+    environment:
+      # Force Attack buttons run the attack modules from inside this container;
+      # the demo app is reachable by service name on the demo network.
+      SENTINEL_DEMO_TARGET: http://vulnerable-app:5000
     volumes:
       - ./reports:/app/reports
       # Read-only dataset mount: CIC-IDS2017 stays on the host (never baked
       # into the image) while the dashboard's real-data mode can load it.
       - ./data:/app/data:ro
+    networks: [default, demo-net]
     restart: unless-stopped
 
   api:
     image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
     build: .
     pull_policy: build
-    command: ["uv", "run", "--no-sync", "uvicorn", "sentinel.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uv", "run", "--no-sync", "uvicorn", "sentinel.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8100"]
     environment:
       SENTINEL_ARTIFACTS_DIR: /app/reports/generated/real-benchmark/baseline
       SENTINEL_THREAT_FEED_FILE: /app/reports/threat_intel/feed.json
       SENTINEL_BOOTSTRAP_KEY: ${SENTINEL_BOOTSTRAP_KEY:-sent_demo_key_2026}
     ports:
-      - "8000:8000"
+      - "8100:8100"
     volumes:
       - ./reports:/app/reports
     networks: [default, demo-net]
@@ -117,7 +122,7 @@ services:
       - -c
       - |
         command -v tcpdump >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq tcpdump)
-        exec tcpdump -l -n -tttt -i eth0 ip 2>/dev/null | uv run --no-sync python scripts/flow_sensor.py --api http://api:8000 --api-key "$${SENTINEL_API_KEY:-}"
+        exec tcpdump -l -n -tttt -i eth0 ip 2>/dev/null | uv run --no-sync python scripts/flow_sensor.py --api http://api:8100 --api-key "$${SENTINEL_API_KEY:-}"
     environment:
       SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
     depends_on: [api]
@@ -141,6 +146,9 @@ services:
       - "5000:5000"
     volumes:
       - demo-logs:/logs
+    environment:
+      SENTINEL_ACCESS_LOG: /logs/access.log
+      SENTINEL_BLOCKLIST: /logs/blocklist.jsonl
     restart: unless-stopped
     profiles: ["demo"]
 
@@ -152,7 +160,7 @@ services:
       - python
       - apps/vulnerable/scanner.py
       - --api
-      - http://api:8000
+      - http://api:8100
       - --log
       - /logs/access.log
     volumes:
@@ -173,9 +181,11 @@ services:
       - demo-logs:/logs
     environment:
       ATTACK_TARGET: http://vulnerable-app:5000
+      SENTINEL_ACCESS_LOG: /logs/access.log
+      SENTINEL_BLOCKLIST: /logs/blocklist.jsonl
     depends_on: [api, vulnerable-app]
     restart: unless-stopped
-    profiles: ["demo"]
+    profiles: ["demo-admin"]
 
   demo-attack:
     image: python:3.12-slim

@@ -59,7 +59,9 @@ all = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# Performance tests assert wall-clock budgets and allocate 200k events; they can
+# OOM on a loaded dev machine. Run them explicitly: uv run pytest -m performance.
+addopts = "-q -m 'not performance'"
 markers = [
     "performance: tests with explicit throughput or latency budgets",
 ]

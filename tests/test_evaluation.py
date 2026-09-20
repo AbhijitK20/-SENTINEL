@@ -117,7 +117,7 @@ def test_report_contains_contract_sections(tmp_path: Path) -> None:
         result, scenario_id=scenario, evaluation=evaluation, dataset_id="synthetic-recon-lateral-v2"
     )
 
-    assert "# Trajectory Forecast Report" in report
+    assert "# SENTINEL Forecast Report" in report
     assert "## Stage Mapping" in report
     assert "## Probability Timeline" in report
     assert "## Replay Evaluation (measured lead time)" in report

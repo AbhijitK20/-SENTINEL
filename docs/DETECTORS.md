@@ -11,9 +11,9 @@ UnifiedEvent stream → rolling NetworkState windows
         ├── trained forecaster  → P(infiltration), stage mapping (unchanged)
         └── attack-type detectors (run_all_detectors)
                 ↓ six AttackFinding contracts per window
-        asset-registry risk fusion (trajectory/assets.py)
+        asset-registry risk fusion (sentinel/assets.py)
         ↓
-incident correlation (trajectory/correlation.py) → Incident cases
+incident correlation (sentinel/correlation.py) → Incident cases
         ↓
 dashboard Live tab: risk grid + incident panel + analyst feedback
 ```
@@ -27,7 +27,7 @@ internal logic: `attack_type`, `probability`, `severity`, `confidence`,
 
 Thresholds were tuned on measured benign/attack distributions from
 `synthetic-recon-lateral-v1` (not guessed). Constants live in
-`trajectory/detectors.py`.
+`sentinel/detectors.py`.
 
 | Type | MITRE | Signal | Alert rule |
 |---|---|---|---|
@@ -58,12 +58,12 @@ Alerting findings whose windows overlap or sit within 300 s chain into one
 Abuse → Lateral Movement → Exfiltration), fused risk
 (`0.5*probability + 0.3*asset_criticality + 0.2*severity`, +0.05 per
 additional chained type), affected assets from the registry
-(`trajectory/assets.py`, default lab topology), and deduplicated
+(`sentinel/assets.py`, default lab topology), and deduplicated
 recommendations.
 
 ## Analyst feedback
 
-`trajectory/feedback.py` is an append-only JSONL store of incident verdicts
+`sentinel/feedback.py` is an append-only JSONL store of incident verdicts
 (`true_positive`, `false_positive`, `wrong_attack_type`, `late_alert`,
 `insufficient_evidence`, `useful_alert`). There is deliberately **no
 retraining path**: production models are never retrained from unreviewed
@@ -72,7 +72,7 @@ analyst input. The Live tab records verdicts to `reports/live/feedback.jsonl`
 
 ## Phase 2 telemetry stubs
 
-`trajectory/telemetry.py` normalizes DNS and auth-log lines into
+`sentinel/telemetry.py` normalizes DNS and auth-log lines into
 `UnifiedEvent` records (event types `dns_query`, `auth_event`) with explicit
 provenance. They are format-stubs demonstrating the multi-telemetry path, not
 validated ingestion for production log dialects.

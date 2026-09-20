@@ -26,6 +26,7 @@ from sentinel.config import BaselineConfig
 from sentinel.dashboard.network_graphs import kill_chain_figure, topology_figure
 from sentinel.dashboard.state import LEDGER_PATH
 from sentinel.dashboard.tabs import live as _live_tab
+from sentinel.dashboard.tabs.conference import run_conference
 from sentinel.evaluation import evaluate_replay
 from sentinel.features import fit_feature_schema
 from sentinel.ledger import AlertLedger
@@ -40,7 +41,7 @@ from sentinel.targets import (
 )
 from sentinel.temporal import TemporalConfig, train_temporal
 
-ROOT = Path(__file__).resolve().parent.parent.parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _scenario_ids(count: int) -> list[str]:
@@ -380,6 +381,7 @@ loaded = artifacts_from_runs(baseline_run, temporal_run=temporal_run)
     tab_live,
     tab_metrics,
     tab_story,
+    tab_conference,
 ) = st.tabs(
     [
         "Overview",
@@ -391,6 +393,7 @@ loaded = artifacts_from_runs(baseline_run, temporal_run=temporal_run)
         "Live Detection",
         "Metrics",
         "Attack Story",
+        "Agent Conference",
     ]
 )
 
@@ -1377,6 +1380,102 @@ with tab_story:
         st.caption(
             "Containment is simulated and analyst-approved; it does not alter host firewalls."
         )
+
+
+# ── Tab: Agent Conference ────────────────────────────────────────────
+with tab_conference:
+    st.header("4-Agent Conference")
+    st.caption(
+        "Four agents debate the current forecast: a data analyst, a defense advisor, "
+        "a devil's advocate, and a synthesizer. They argue, challenge each other, "
+        "and produce a consensus verdict with action items."
+    )
+
+    # Reuse the same scenario/cut selection as the Forecast tab
+    conf_scenario_choice = st.selectbox(
+        "Select scenario for conference",
+        all_scenarios,
+        format_func=lambda s: f"{s} ({scenario_split[s]})",
+        key="conf_scenario",
+    )
+    conf_states = [item.state for item in labelled if item.scenario_id == conf_scenario_choice]
+
+    if not conf_states:
+        st.warning("No states found for this scenario.")
+        st.stop()
+
+    conf_max_cut = len(conf_states)
+    conf_cut = st.slider(
+        "Forecast from window",
+        min_value=1,
+        max_value=conf_max_cut,
+        value=conf_max_cut,
+        key="conf_cut",
+        help="The conference analyzes the forecast made from this window.",
+    )
+
+    # Run the forecast (same as Forecast tab)
+    conf_result = forecast(
+        conf_states[:conf_cut],
+        loaded,
+        max_horizon=forecast_horizon,
+    )
+
+    # Run the conference
+    conference = run_conference(
+        conf_result,
+        conf_states,
+        conf_scenario_choice,
+        conf_cut,
+    )
+
+    # ── Round 1 ──
+    st.subheader("Round 1 — Opening Statements")
+    for claim in conference.round1:
+        with st.expander(f"{claim.emoji} {claim.agent} ({claim.role})", expanded=True):
+            st.markdown(f"**{claim.statement}**")
+            if claim.evidence:
+                st.caption("Evidence:")
+                for ev in claim.evidence:
+                    st.markdown(f"- {ev}")
+            st.progress(min(claim.confidence, 1.0))
+            st.caption(f"Confidence: {claim.confidence:.1%}")
+
+    # ── Round 2 ──
+    st.subheader("Round 2 — Rebuttals")
+    for resp in conference.round2:
+        with st.expander(
+            f"{resp.emoji} {resp.agent} responds to {resp.responds_to}", expanded=False
+        ):
+            st.markdown(resp.rebuttal)
+
+    # ── Round 3 ──
+    st.subheader("Round 3 — Consensus")
+    st.markdown(f"**{conference.verdict}**")
+    st.progress(min(conference.consensus_score, 1.0))
+    st.caption(f"Consensus score: {conference.consensus_score:.1%}")
+
+    st.subheader("Action Items")
+    for item in conference.action_items:
+        st.markdown(f"- {item}")
+
+    # ── Evidence Summary ──
+    with st.expander("Stage Evidence Details", expanded=False):
+        if conference.stage_rationale:
+            st.markdown(f"**Rationale:** {conference.stage_rationale}")
+        if conference.stage_evidence:
+            for ev in conference.stage_evidence:
+                value = (
+                    f" (observed {ev['observed_value']:.1f})" if ev.get("observed_value") else ""
+                )
+                st.markdown(
+                    f"- {ev['description']}{value} · confidence {ev.get('confidence', 0):.2f}"
+                )
+
+    if conference.top_features:
+        with st.expander("Top Driving Features", expanded=False):
+            for name, val in conference.top_features:
+                st.markdown(f"- **{name}**: {val:.3f}")
 
 
 # ── Tab: Live Detection (extracted to tabs/live.py) ──────────────────

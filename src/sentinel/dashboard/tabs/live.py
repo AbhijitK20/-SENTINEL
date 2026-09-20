@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -31,7 +32,7 @@ from sentinel.synthetic import generate_scenario_events
 if TYPE_CHECKING:
     pass
 
-ROOT = Path(__file__).resolve().parent.parent.parent.parent
+ROOT = Path(__file__).resolve().parents[4]
 REPORTS_DIR = ROOT / "reports" / "generated"
 LOCAL_ATTACK_SPEED = 2.0
 
@@ -192,10 +193,21 @@ def _render_live_status(status: Any) -> None:
             c2 = by_type.get("command_and_control")
             if c2 is not None and c2.warnings:
                 st.caption(f"ℹ️ {c2.warnings[0]}")
-            st.caption(
-                "Detector scores are per-window telemetry associations, not proof. "
-                "Alerts feed the incident panel below."
-            )
+            # Summary when no detectors fire
+            alert_count = sum(1 for f in latest.attack_findings if f.is_alert)
+            if alert_count == 0:
+                st.info(
+                    "All detectors below threshold on this window. This is normal "
+                    "during benign traffic. Detector scores are rule-based per-window "
+                    "associations — they are different from the ML forecast shown in "
+                    "the Forecast tab."
+                )
+            else:
+                st.caption(
+                    f"{alert_count} detector(s) fired on this window. Scores are "
+                    "rule-based per-window associations, not proof. Alerts feed "
+                    "the incident panel below."
+                )
 
         if status.incidents:
             st.subheader("Correlated incidents")
@@ -434,9 +446,10 @@ def render(seed: int = 42, loaded: Any = None, baseline_run: Any = None) -> None
 
     st.divider()
     st.subheader("Force Attack — Trigger Real Attack Scripts")
+    target_url = os.environ.get("SENTINEL_DEMO_TARGET", "http://127.0.0.1:5000")
     st.caption(
         "Launch attack scripts against the vulnerable demo app "
-        "(http://localhost:5000). The scanner picks up the traffic and pushes "
+        f"({target_url}). The scanner picks up the traffic and pushes "
         "it into the SENTINEL API so detectors fire on real HTTP requests."
     )
     st.caption(
@@ -457,7 +470,6 @@ def render(seed: int = 42, loaded: Any = None, baseline_run: Any = None) -> None
 
     pending_attack = st.session_state.pop("pending_attack", None)
     if pending_attack:
-        target_url = "http://127.0.0.1:5000"
         cmd_map = {
             "brute_force": [
                 sys.executable,

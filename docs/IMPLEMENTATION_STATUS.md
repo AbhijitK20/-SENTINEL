@@ -8,7 +8,7 @@ real-data run (PB-001): CIC-IDS2017 downloaded with licence review, and a
 cross-day temporal benchmark executed end-to-end on real traffic.
 See `reports/generated/real-benchmark/REAL_BENCHMARK.md`.
 
-Sprint 9 (live demo) adds real-time detection: `trajectory/live.py` runs
+Sprint 9 (live demo) adds real-time detection: `sentinel/live.py` runs
 rolling event-time windows from four sources (CSV replay, JSONL sensor,
 syslog file tail, scapy interface) through the trained artifacts, with a Live Detection
 dashboard tab and a localhost-safe scripted attack demo
@@ -19,7 +19,7 @@ Current verification also covers the Attack Story tab, Replay/Demo interaction
 paths, local vulnerable-app attack controls, API reset semantics, and the
 Prometheus/Grafana live-state panels. The local code-review plugin's
 deep/sweep/verify scans have been run against both `apps/vulnerable` and
-`src/trajectory`; its findings include intentional demo vulnerabilities and
+`src/sentinel`; its findings include intentional demo vulnerabilities and
 static-analysis heuristics, not automatic proof of runtime defects.
 
 ## Completed
@@ -61,20 +61,20 @@ static-analysis heuristics, not automatic proof of runtime defects.
 
 ### Sprint 3: static baseline
 
-- `trajectory.features`: fixed-width feature vectors from `NetworkState.features`.
+- `sentinel.features`: fixed-width feature vectors from `NetworkState.features`.
   Feature names and z-score statistics are fitted on training states only;
   missing values fill with a recorded constant; label/scenario names are
   hard-forbidden as inputs. Feature version `state-features-v2` (rich
   aggregations: sum/mean/std/var/max/min/p50/p90/p99/entropy/nunique per
   feature; TCP flag bitmask decomposition; port behaviour features).
-- `trajectory.metrics`: precision, recall, F1, false-positive rate, PR-AUC and
+- `sentinel.metrics`: precision, recall, F1, false-positive rate, PR-AUC and
   confusion counts. Undefined metrics are reported as `null`/`n/a`, never 0.
-- `trajectory.baseline`: logistic-regression baseline on the current window
+- `sentinel.baseline`: logistic-regression baseline on the current window
   predicting `target_infiltration` at the configured horizon. Includes a split
   audit (scenario and state-key isolation), refuses leaky or single-class
   training splits, records feature weights, timing, runtime versions, and a
   SHA-256 of the saved model. Renders the `RESULTS_TEMPLATE.md` baseline table.
-- `trajectory.synthetic`: deterministic recon-to-lateral-movement replay
+- `sentinel.synthetic`: deterministic recon-to-lateral-movement replay
   scenarios (`synthetic-recon-lateral-v1`) for end-to-end pipeline validation.
 - Config: new `split` section and `model.baseline_config` (feature exclusions,
   C, class weighting, iterations, decision threshold).
@@ -85,7 +85,7 @@ static-analysis heuristics, not automatic proof of runtime defects.
 
 ### Sprint 4: temporal state-transition model
 
-- `trajectory.temporal`: GRU encoder + linear classifier for binary
+- `sentinel.temporal`: GRU encoder + linear classifier for binary
   infiltration prediction. One independent model per horizon (1..K);
   multi-horizon prediction without recursive state rollout. Early stopping
   on validation loss, class-weighted BCE loss, reproducible seed.
@@ -104,7 +104,7 @@ static-analysis heuristics, not automatic proof of runtime defects.
 
 ### Sprint 5: forecast inference
 
-- `trajectory.predict`: loads saved baseline and (optionally) temporal
+- `sentinel.predict`: loads saved baseline and (optionally) temporal
   artifacts from `reports/generated/{baseline,temporal}` and emits a
   `Forecast` Pydantic object with probability timeline, predicted stage,
   affected entities, driving features, coverage, and warnings.
@@ -124,7 +124,7 @@ static-analysis heuristics, not automatic proof of runtime defects.
 
 ### Sprint 6: explainability and stage mapping
 
-- `trajectory.stage_mapping`: documented, versioned (`stage-mapping-v1`)
+- `sentinel.stage_mapping`: documented, versioned (`stage-mapping-v1`)
   MITRE-oriented stage rules over the state-builder feature vocabulary
   (failed-auth reconnaissance, large-transfer lateral movement,
   retransmission-heavy command-and-control, very-large-transfer exfiltration,
@@ -132,8 +132,8 @@ static-analysis heuristics, not automatic proof of runtime defects.
   the mapping returns `Unknown` with zero confidence when no rule fires —
   insufficient evidence is represented, never fabricated.
 - `StageEvidence`, `StageMapping`, and `LeadTimeEstimate` contracts in
-  `trajectory.schemas`; `Forecast` now carries `stage_mapping` and `lead_time`.
-- `trajectory.predict`: lead time is the first forecast window whose
+  `sentinel.schemas`; `Forecast` now carries `stage_mapping` and `lead_time`.
+- `sentinel.predict`: lead time is the first forecast window whose
   infiltration probability crosses the decision threshold, or an explicit
   `None` when the threshold is never crossed; stage mapping is attached to
   every forecast with observed evidence values and a documented rationale.
@@ -148,19 +148,19 @@ static-analysis heuristics, not automatic proof of runtime defects.
 
 ### Sprint 7: replay evaluation and report export
 
-- `trajectory.evaluation`: walk-forward replay evaluation. Every window of a
+- `sentinel.evaluation`: walk-forward replay evaluation. Every window of a
   scenario receives the forecast available at that moment, scored against the
   label realized within the horizon. Measured lead time is defined once:
   credit only when the threshold crossing precedes the realized onset; false
   early warnings are counted separately. Outputs typed `ReplayRow`,
   `ReplayScenarioSummary`, and `ReplayEvaluation` contracts (version
   `replay-evaluation-v1`). Split-filtered to test scenarios by default.
-- `trajectory.report`: Markdown analyst report (`report-v1`) separating
+- `sentinel.report`: Markdown analyst report (`report-v1`) separating
   observed window, forecast, stage mapping evidence, timeline, driving
   features, coverage, warnings, replay evaluation, and limitations.
 - `scripts/run_replay.py`: reproducible CLI writing `replay.json` and
   `replay.md` from saved artifacts.
-- `trajectory.predict`: `artifacts_from_runs` builds inference artifacts from
+- `sentinel.predict`: `artifacts_from_runs` builds inference artifacts from
   in-memory training runs; when trained per-horizon temporal weights are
   available, timeline points now run the GRU over the observed history
   sequence instead of a single-state surrogate.
@@ -180,7 +180,7 @@ static-analysis heuristics, not automatic proof of runtime defects.
   `weights/model_h{K}.pt`; new `load_temporal_models` restores them. Saved-artifact
   timelines no longer use the decay surrogate when weights are present — the
   demo forecast's peak probability moved from 0.916 (surrogate) to 0.994 (GRU).
-- `trajectory.calibration` (`threshold-calibration-v1`): leakage-safe decision
+- `sentinel.calibration` (`threshold-calibration-v1`): leakage-safe decision
   threshold selection on a fixed grid using validation-split probabilities only;
   test data untouched. Objectives `f1` and `youden`; ties resolve to the lowest
   threshold (earlier warning preferred); single-class validation degenerates
@@ -196,7 +196,7 @@ static-analysis heuristics, not automatic proof of runtime defects.
 
 ### Sprint 7 (continued): recursive K-step rollout
 
-- `trajectory.rollout` (`transition-rollout-v1`): linear ridge next-state
+- `sentinel.rollout` (`transition-rollout-v1`): linear ridge next-state
   transition model fitted on training-scenario windows only; `rollout_forecast`
   simulates future states recursively and scores each with the fitted baseline
   classifier. The forecast's `model_version` is marked
@@ -225,7 +225,7 @@ static-analysis heuristics, not automatic proof of runtime defects.
   infiltration is already observable. Lead time is bounded by how gradually
   label-relevant features drift — which real datasets with attack dwell time
   provide. This pins the synthetic-data limitation precisely.
-- `trajectory.cic_ids2017` (`cic-ids2017-adapter-v1`): CICFlowMeter CSV →
+- `sentinel.cic_ids2017` (`cic-ids2017-adapter-v1`): CICFlowMeter CSV →
   unified events. Day-first timestamp parsing (UTC), Infinity/NaN length
   defaults documented, required-column enforcement, and a strict unmapped-label
   rule: unknown CICFlowMeter labels abort conversion (extend STAGE_RULES
@@ -263,7 +263,7 @@ static-analysis heuristics, not automatic proof of runtime defects.
   with per-gate status and evidence; Sprint 7/8 plans marked complete with
   DoD mapping; sprint 9/10 plan files folded into Sprint 8 scope.
 - Offline operation verified by test (`tests/test_offline.py`): offline config
-  pinned, no network clients or cloud endpoints in `src/trajectory`.
+  pinned, no network clients or cloud endpoints in `src/sentinel`.
 - DoD audit (all items pass for synthetic scope): acceptance criteria covered
   by 92 tests; errors handled explicitly (strict adapter rules, leak guards);
   docs updated; dataset/feature/split/seed/config recorded in `RESULTS.md`;
@@ -320,7 +320,7 @@ must not appear in submission material as real-traffic results.**
   (explicit arg > calibration.json > 0.5 default); on the real-data
   validation split the F1-optimal threshold (0.15) is hypersensitive on the
   later test phase — the report ships a pinned-0.50 A/B alongside it.
-- True K-step recursive rollout is implemented (`trajectory/rollout.py`);
+- True K-step recursive rollout is implemented (`sentinel/rollout.py`);
   measured lead time remains 0.0 on both synthetic and real data — attack
   stage transitions complete within one window at this granularity.
 - Measured lead time against observed stage onset runs via
@@ -335,12 +335,12 @@ must not appear in submission material as real-traffic results.**
 ## Attack-Type Detector Layer (Phase 1 + Phase 2 stubs)
 
 Implemented beyond the original backlog: nine attack-type detectors
-(`trajectory/detectors.py`) with measured thresholds and explicit
+(`sentinel/detectors.py`) with measured thresholds and explicit
 insufficient-telemetry behaviour (C2, DDoS), asset criticality + risk fusion
-(`trajectory/assets.py`), incident correlation into analyst-facing cases
-(`trajectory/correlation.py`), an append-only analyst feedback store with no
-auto-retrain path (`trajectory/feedback.py`), and DNS/auth-log telemetry
-stubs normalizing into `UnifiedEvent` (`trajectory/telemetry.py`). The live
+(`sentinel/assets.py`), incident correlation into analyst-facing cases
+(`sentinel/correlation.py`), an append-only analyst feedback store with no
+auto-retrain path (`sentinel/feedback.py`), and DNS/auth-log telemetry
+stubs normalizing into `UnifiedEvent` (`sentinel/telemetry.py`). The live
 engine attaches all nine findings to every window and correlates alerts into
 incidents surfaced on the dashboard Live tab (risk grid, incident panel,
 verdict buttons). See `DETECTORS.md`. The synthetic generator includes

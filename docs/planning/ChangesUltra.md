@@ -1,5 +1,7 @@
 # ChangesUltra.md — Complete Session Changelog
 
+> **Historical snapshot.** Written before the package rename `trajectory` → `sentinel` (commit `9effab5`); paths below reflect the changes as they were made. The current package is `src/sentinel/`.
+
 > Every change made across all sprints in this conversation.
 > Each entry includes file paths, rationale, and commit references.
 > Ordered chronologically: S1 → Ponytail → S2.
