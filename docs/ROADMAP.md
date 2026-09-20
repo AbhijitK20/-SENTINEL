@@ -9,7 +9,7 @@ exists today, with the scale-level ladder from prototype to platform.
 | Level | Stack | Status |
 |---|---|---|
 | 1 — Hackathon demo | Streamlit + local files | **Current — done** |
-| 2 — Pilot / MVP | + FastAPI inference API, key-based auth + RBAC + audit | **Shipped** (`trajectory/api.py`, `trajectory/auth.py`) |
+| 2 — Pilot / MVP | + FastAPI inference API, key-based auth + RBAC + audit | **Shipped** (`sentinel/api.py`, `sentinel/auth.py`) |
 | 3 — Production SaaS | + React UI, Kafka, PostgreSQL, Redis, MLflow | 🟡 API-side ops shipped in-process (`registry.py`, `drift.py`, `/metrics`); React/Kafka/Postgres/Redis not started |
 | 4 — Enterprise platform | + TimescaleDB, Kubernetes, permissioned chain | 🟡 Case lifecycle (`cases.py`), compliance exports, signed feedback; K8s/TSDB/permissioned chain not started |
 | 5 — Ecosystem | Multi-tenant SaaS, federated learning, marketplace | 🟡 FedAvg simulation (`federated.py`), org-scoped API keys; real federated infra not started |
@@ -19,7 +19,7 @@ exists today, with the scale-level ladder from prototype to platform.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 — API layer | FastAPI service over the trained artifacts | ✅ `/health`, `/model`, `/v1/forecast`, `/v1/detect` with structured errors and per-request timing (`tests/test_api.py`) |
-| 2 — Auth + RBAC | API keys, RBAC, audit logging | 🟡 Shipped: hashed API keys (`trajectory/auth.py`), 4-role permission matrix, admin key lifecycle, append-only audit trail, org_id tenant field on keys + audit. Not built: SSO/OIDC, MFA — these need a real identity provider |
+| 2 — Auth + RBAC | API keys, RBAC, audit logging | 🟡 Shipped: hashed API keys (`sentinel/auth.py`), 4-role permission matrix, admin key lifecycle, append-only audit trail, org_id tenant field on keys + audit. Not built: SSO/OIDC, MFA — these need a real identity provider |
 | 3 — Real-time ingestion | Kafka/syslog sources feeding the window builder | 🟡 **Real-packet path verified live**: `realtime` compose profile streams a genuine nmap SYN scan from tcpdump capture through `POST /v1/events` into the push engine (4,835 real packets, recon incident detected live); live URLhaus feed refresh (`scripts/fetch_threat_feed.py`, 19,233 indicators). Kafka transport remains future work |
 | 4 — Enhanced detection | Scan classification, C2 from DNS/TLS, phishing, insider | 🟡 Nine detectors plus threat-intel enrichment: C2/exfil scores rise when a destination matches a loaded feed (URLhaus-format, TTL-bound, list evidence — not verdicts); recon detector verified against a **real nmap SYN scan** (not synthetic); validated quiet-on-benign, not on real multi-stage attack data |
 | 5 — Enterprise dashboard | Analyst console, CISO risk views, threat hunt | 🟡 Streamlit Live tab has risk grid + incidents + verdicts + case panel; no React split |

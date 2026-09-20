@@ -28,8 +28,9 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync
-      - run: uv run pytest -q --ignore=tests/test_api.py --ignore=tests/test_auth.py --ignore=tests/test_enterprise.py --ignore=tests/test_threat_intel.py --ignore=tests/test_optional_deps.py
+      - run: uv sync --all-extras --all-groups
+      # `-o addopts="-q"` clears the ini default that deselects performance tests.
+      - run: uv run pytest -o addopts="-q"
         env:
           OMP_NUM_THREADS: "1"
           MKL_NUM_THREADS: "1"

@@ -10,7 +10,7 @@ Evidence: `MASTER_PROJECT_DOCUMENT.md`, `REQUIREMENTS.md`, `PRODUCT_BACKLOG.md`,
 
 Feature coverage, label provenance, contracts, dataset version, and leakage controls are documented and validated.
 
-Evidence: `DATA_CONTRACTS.md`, split manifests with disjointness audits (`trajectory.targets`, `trajectory.baseline.audit_split`), scenario-level splits tested against leakage. Synthetic dataset `synthetic-recon-lateral-v1` fully governed; CIC-IDS2017 adapter implemented and fixture-tested, real-data acquisition/licence review still open (`PRODUCT_BACKLOG.md` PB-001).
+Evidence: `DATA_CONTRACTS.md`, split manifests with disjointness audits (`sentinel.targets`, `sentinel.baseline.audit_split`), scenario-level splits tested against leakage. Synthetic dataset `synthetic-recon-lateral-v1` fully governed; CIC-IDS2017 adapter implemented and fixture-tested, real-data acquisition/licence review still open (`PRODUCT_BACKLOG.md` PB-001).
 
 ## Gate 3: Baseline Ready — PASSED
 
@@ -22,7 +22,7 @@ Evidence: `RESULTS.md` baseline table (test F1 0.816, PR-AUC 0.926, seed 42), ch
 
 Temporal model performs a genuine K-step rollout with a probability timeline. A static classifier alone cannot pass this gate.
 
-Evidence: GRU per-horizon models (F1 0.923 at h+5) **plus** `trajectory.rollout` recursive next-state simulation with classifier-scored simulated windows — a static classifier cannot produce either. Measured lead time is honestly reported as 0.0 windows on synthetic data with the root cause documented (`RESULTS.md`).
+Evidence: GRU per-horizon models (F1 0.923 at h+5) **plus** `sentinel.rollout` recursive next-state simulation with classifier-scored simulated windows — a static classifier cannot produce either. Measured lead time is honestly reported as 0.0 windows on synthetic data with the root cause documented (`RESULTS.md`).
 
 ## Gate 5: Explainability Ready — PASSED
 

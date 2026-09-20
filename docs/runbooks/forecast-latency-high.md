@@ -14,13 +14,13 @@ Prometheus alert: `ForecastLatencyHigh` — p95 forecast latency above 30s.
 
 ```bash
 # Check inference worker status
-curl -s http://localhost:8000/metrics | grep inference
+curl -s http://localhost:8100/metrics | grep inference
 
 # Check model version
-curl -s http://localhost:8000/model | jq '.version'
+curl -s http://localhost:8100/model | jq '.version'
 
 # Check batch metrics
-curl -s http://localhost:8000/metrics | grep batch
+curl -s http://localhost:8100/metrics | grep batch
 ```
 
 ## Remediation

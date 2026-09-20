@@ -46,8 +46,8 @@ reports/threat_intel/
 # Local trust-ledger records may contain operational alert metadata
 reports/generated/ledger/
 
-# Video production captures and generated workspaces (hundreds of MB of frames)
-video/*-take/
+# Video production captures, renders, and generated workspaces (hundreds of MB)
+video/
 brag-output*/
 
 # Knowledge-graph / skill installers (local tooling, regenerable)

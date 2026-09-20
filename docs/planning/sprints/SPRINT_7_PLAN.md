@@ -15,8 +15,8 @@ Delivered against the Definition of Done:
 - Streamlit dashboard (Overview, Forecast with stage-mapping evidence panel,
   Network States, Comparison, Replay walk-forward evaluation, guided two-minute
   Demo tab, Metrics) with observed/forecast labelling on every screen.
-- Walk-forward replay evaluation (`trajectory.evaluation`) and Markdown analyst
-  report export (`trajectory.report`), downloadable from the UI.
+- Walk-forward replay evaluation (`sentinel.evaluation`) and Markdown analyst
+  report export (`sentinel.report`), downloadable from the UI.
 - Deterministic replay: fixed-seed scenario generation; the Demo tab repeats
   identically for a fixed seed.
 - Calibrated threshold auto-loads from artifacts; CLI override available.
