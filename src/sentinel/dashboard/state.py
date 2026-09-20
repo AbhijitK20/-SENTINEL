@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from sentinel.temporal import TemporalRun
 
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parent.parent.parent.parent
 REPORTS_DIR = ROOT / "reports" / "generated"
 LEDGER_PATH = REPORTS_DIR / "ledger" / "alerts.jsonl"
 LOCAL_ATTACK_SPEED = 2.0

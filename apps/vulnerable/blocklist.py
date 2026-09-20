@@ -10,22 +10,19 @@ from __future__ import annotations
 import hashlib  # noqa: F401 — imported for future HMAC signing of entries
 import json
 import time
+from pathlib import Path
 
-from paths import BLOCKLIST as BLOCKLIST_PATH
+BLOCKLIST_PATH = Path("apps/vulnerable/blocklist.jsonl")
 
 _blocked: dict[str, dict] = {}
 _loaded = False
-_mtime: float | None = None
 
 
 def _load() -> None:
-    """Reload when the file changes, so bans written by the admin container apply."""
-    global _loaded, _mtime
-    mtime = BLOCKLIST_PATH.stat().st_mtime if BLOCKLIST_PATH.exists() else None
-    if _loaded and mtime == _mtime:
+    global _loaded
+    if _loaded:
         return
-    _blocked.clear()
-    if mtime is not None:
+    if BLOCKLIST_PATH.exists():
         for line in BLOCKLIST_PATH.read_text().splitlines():
             if not line.strip():
                 continue
@@ -36,7 +33,6 @@ def _load() -> None:
             elif rec.get("action") == "unban":
                 _blocked.pop(ip, None)
     _loaded = True
-    _mtime = mtime
 
 
 def is_blocked(ip: str) -> bool:

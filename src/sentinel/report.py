@@ -26,7 +26,7 @@ def render_report(
 ) -> str:
     """Render a forecast (and optional replay evaluation) as a Markdown report."""
     lines: list[str] = [
-        "# SENTINEL Forecast Report",
+        "# Trajectory Forecast Report",
         "",
         f"- Generated: {datetime.now(tz=UTC).isoformat()}",
         f"- Forecast model version: `{forecast.model_version}`",

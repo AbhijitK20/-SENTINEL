@@ -1,6 +1,4 @@
 # SENTINEL — Production Engineering Plan
-
-> **Historical snapshot.** Written before the package rename `trajectory` → `sentinel` (commit `9effab5`); paths below reflect the plan as written. The current package is `src/sentinel/`, current state in [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md).
 ### From SIH prototype → a platform that can be deployed, sold, audited, and operated
 **20 sprints · full-stack · production-grade backend + world-class analyst UX**
 

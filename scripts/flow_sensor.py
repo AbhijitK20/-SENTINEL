@@ -19,7 +19,7 @@ Flow lifecycle (classic NetFlow semantics, simplified):
 Usage:
 
     tcpdump -l -n -tttt -i eth0 ip 2>/dev/null | \
-        uv run python scripts/flow_sensor.py --api http://api:8100 --api-key $KEY
+        uv run python scripts/flow_sensor.py --api http://api:8000 --api-key $KEY
 
 Offline-first contract preserved: this is a sensor process, not runtime
 source; the API never listens on raw sockets or fetches URLs.
@@ -224,7 +224,7 @@ def push_events(api_url: str, api_key: str, events: list[UnifiedEvent]) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--api", default=os.environ.get("SENTINEL_API_URL", "http://api:8100"))
+    parser.add_argument("--api", default=os.environ.get("SENTINEL_API_URL", "http://api:8000"))
     parser.add_argument("--api-key", default=os.environ.get("SENTINEL_API_KEY", ""))
     parser.add_argument("--batch", type=int, default=BATCH_SIZE)
     parser.add_argument("--idle", type=float, default=DEFAULT_IDLE_SECONDS)

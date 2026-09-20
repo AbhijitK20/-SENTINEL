@@ -1,6 +1,4 @@
 # SENTINEL — Master Analysis & 10-Sprint Execution Plan
-
-> **Historical snapshot.** Written before the package rename `trajectory` → `sentinel` (commit `9effab5`); paths below reflect the plan as written. The current package is `src/sentinel/`, current state in [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md).
 ### SIH 2026 · PS **26153** · *AI-Based Network Attack Forecasting from Network Traffic Data* · NTRO
 
 > **Audience:** the human team **and** the AI coding agent (OpenCode + MiMo v2.5) that will execute this plan.

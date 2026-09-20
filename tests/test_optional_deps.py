@@ -1,25 +1,18 @@
 """Verify that core modules import cleanly without optional dependencies.
 
 Covers acceptance criteria AC4 for S1-T1: each core module must be importable
-when torch, scapy, fastapi, and streamlit are hidden. Torch-requiring codepaths
-are expected to raise RuntimeError, not ImportError.
-
-Each check runs in a fresh subprocess. In-process ``sys.modules`` surgery on
-already-loaded C extensions (numpy, torch) makes Python raise
-``ImportError: cannot load module more than once per process`` and can
-segfault, so isolation is not optional here.
+when torch, scapy, fastapi, and streamlit are hidden via sys.modules patching.
+Torch-requiring codepaths are expected to raise RuntimeError, not ImportError.
 """
 
 from __future__ import annotations
 
-import subprocess
+import importlib
 import sys
+import types
 from collections.abc import Sequence
-from pathlib import Path
 
 import pytest
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Modules that must import without any optional dependency.
 CORE_MODULES: Sequence[str] = [
@@ -46,68 +39,110 @@ CORE_MODULES: Sequence[str] = [
 
 OPTIONAL_MODULES = ("torch", "scapy", "fastapi", "streamlit")
 
-# Runs before the check body: blocks imports of the optional top-level packages.
-_HIDE_OPTIONAL = """
-import sys
 
 class _HideOptionalImporter:
-    def __init__(self, blocked):
+    """Meta path finder that blocks imports of specified top-level packages.
+
+    Unlike setting sys.modules[name] = None, this makes ``import torch``
+    raise ImportError, which is what the codebase's try/except blocks expect
+    and what scipy's introspection can survive.
+    """
+
+    def __init__(self, blocked: tuple[str, ...]) -> None:
         self._blocked = set(blocked)
 
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname.split(".")[0] in self._blocked:
-            raise ImportError(f"Blocked optional dependency: {fullname}")
+    def find_module(
+        self, fullname: str, path: Sequence[str] | None = None
+    ) -> types.ModuleType | None:
+        top = fullname.split(".")[0]
+        if top in self._blocked:
+            return self
         return None
 
-sys.meta_path.insert(0, _HideOptionalImporter(BLOCKED))
-"""
+    def load_module(self, fullname: str) -> types.ModuleType:
+        raise ImportError(f"Blocked optional dependency: {fullname}")
 
 
-def _run_without_optional_deps(body: str, blocked: Sequence[str] = OPTIONAL_MODULES) -> str:
-    program = f"BLOCKED = {tuple(blocked)!r}\n{_HIDE_OPTIONAL}\n{body}"
-    result = subprocess.run(
-        [sys.executable, "-c", program],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert result.returncode == 0, (
-        f"subprocess failed (exit {result.returncode})\n"
-        f"--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}"
-    )
-    return result.stdout
+@pytest.fixture()
+def hide_optional_deps(monkeypatch: pytest.MonkeyPatch):
+    """Temporarily make optional top-level packages appear absent.
+
+    Saves and restores the *entire* ``sys.modules`` snapshot so that modules
+    which were already imported (and cached references to torch/scapy/etc.)
+    are restored to their pre-test state.  This prevents leakage across test
+    files in the same process.
+    """
+    # Snapshot the current state so we can fully restore it later.
+    saved_modules = dict(sys.modules)
+    saved_meta_path = list(sys.meta_path)
+
+    # Remove any already-imported optional deps and their submodules.
+    for mod_name in OPTIONAL_MODULES:
+        sys.modules.pop(mod_name, None)
+        prefix = mod_name + "."
+        for k in [k for k in sys.modules if k.startswith(prefix)]:
+            sys.modules.pop(k, None)
+
+    # Install a meta path finder that blocks future imports.
+    finder = _HideOptionalImporter(OPTIONAL_MODULES)
+    sys.meta_path.insert(0, finder)
+
+    yield
+
+    # Fully restore sys.modules and sys.meta_path to the pre-test snapshot.
+    sys.modules.clear()
+    sys.modules.update(saved_modules)
+    sys.meta_path[:] = saved_meta_path
 
 
 @pytest.mark.parametrize("module_name", CORE_MODULES)
-def test_core_module_imports_without_optional_deps(module_name: str) -> None:
+def test_core_module_imports_without_optional_deps(module_name: str, hide_optional_deps):
     """Each core module must be importable when optional deps are absent."""
-    _run_without_optional_deps(
-        f"import importlib\nmod = importlib.import_module({module_name!r})\n"
-        f"assert mod is not None, {module_name!r} + ' imported as None'\n"
-        f"print({module_name!r} + ' OK')\n"
-    )
+    # Force re-import so the patched sys.modules takes effect.
+    if module_name in sys.modules:
+        del sys.modules[module_name]
+    mod = importlib.import_module(module_name)
+    assert mod is not None, f"{module_name} imported as None"
 
 
-def test_predict_imports_without_torch() -> None:
+def test_predict_imports_without_torch(monkeypatch: pytest.MonkeyPatch):
     """AC1: importing sentinel.predict must not fail when torch is absent."""
-    out = _run_without_optional_deps(
-        "from sentinel.predict import ForecastArtifacts\nprint(ForecastArtifacts.__name__)\n",
-        blocked=("torch",),
-    )
-    assert "ForecastArtifacts" in out
+    saved_modules = dict(sys.modules)
+    saved_meta_path = list(sys.meta_path)
+    try:
+        finder = _HideOptionalImporter(("torch",))
+        sys.meta_path.insert(0, finder)
+        for k in list(sys.modules):
+            if k == "torch" or k.startswith("torch."):
+                sys.modules.pop(k, None)
+        if "sentinel.predict" in sys.modules:
+            del sys.modules["sentinel.predict"]
+        mod = importlib.import_module("sentinel.predict")
+        assert hasattr(mod, "ForecastArtifacts")
+    finally:
+        sys.modules.clear()
+        sys.modules.update(saved_modules)
+        sys.meta_path[:] = saved_meta_path
 
 
-def test_temporal_raises_runtime_error_not_import_error() -> None:
+def test_temporal_raises_runtime_error_not_import_error(
+    monkeypatch: pytest.MonkeyPatch,
+):
     """AC2: torch-requiring tests must raise RuntimeError, not ImportError."""
-    _run_without_optional_deps(
-        "from sentinel import temporal\n"
-        "try:\n"
-        "    temporal._require_torch()\n"
-        "except RuntimeError as exc:\n"
-        "    assert 'PyTorch' in str(exc), str(exc)\n"
-        "    print('RuntimeError OK')\n"
-        "else:\n"
-        "    raise SystemExit('expected RuntimeError from _require_torch()')\n",
-        blocked=("torch",),
-    )
+    saved_modules = dict(sys.modules)
+    saved_meta_path = list(sys.meta_path)
+    try:
+        finder = _HideOptionalImporter(("torch",))
+        sys.meta_path.insert(0, finder)
+        for k in list(sys.modules):
+            if k == "torch" or k.startswith("torch."):
+                sys.modules.pop(k, None)
+        if "sentinel.temporal" in sys.modules:
+            del sys.modules["sentinel.temporal"]
+        mod = importlib.import_module("sentinel.temporal")
+        with pytest.raises(RuntimeError, match="PyTorch"):
+            mod._require_torch()
+    finally:
+        sys.modules.clear()
+        sys.modules.update(saved_modules)
+        sys.meta_path[:] = saved_meta_path

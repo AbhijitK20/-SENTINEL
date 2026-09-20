@@ -6,7 +6,7 @@ live engine's windowing, so REST consumers get results identical to the UI.
 Scale level 2 per docs/ROADMAP.md: single-process inference, no auth or
 multi-tenancy yet — limitations are stated here, not hidden.
 
-Run: ``uv run uvicorn sentinel.api:create_app --factory --port 8100``
+Run: ``uv run uvicorn sentinel.api:create_app --factory --port 8000``
 """
 
 from __future__ import annotations
@@ -231,7 +231,7 @@ def create_app(
     latency_count = 0
 
     app = FastAPI(
-        title="SENTINEL API",
+        title="SENTINEL Trajectory API",
         version="0.1.0",
         description="Attack-progression forecasting and attack-type detection over unified events.",
     )

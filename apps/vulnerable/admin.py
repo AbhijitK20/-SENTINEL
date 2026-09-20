@@ -17,13 +17,11 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template_string, request
 
-from paths import ACCESS_LOG, BLOCKLIST
-
 app = Flask(__name__)
 
 SENTINEL_API = "http://api:8000"
 API_KEY = os.environ.get("SENTINEL_BOOTSTRAP_KEY", "sent_demo_key_2026")
-BLOCKLIST_PATH = BLOCKLIST
+BLOCKLIST_PATH = Path("apps/vulnerable/blocklist.jsonl")
 
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -547,7 +545,7 @@ def _read_blocklist() -> list[dict]:
 
 
 def _read_log_tail(n: int = 20) -> list[str]:
-    log_path = ACCESS_LOG
+    log_path = Path("apps/vulnerable/access.log")
     if not log_path.exists():
         return []
     lines = log_path.read_text().splitlines()
@@ -629,7 +627,7 @@ def api_unblock():
 @app.route("/admin/api/block_all", methods=["POST"])
 def api_block_all():
     """Block every IP that has appeared in the access log."""
-    log_path = ACCESS_LOG
+    log_path = Path("apps/vulnerable/access.log")
     blocked: set[str] = set()
     if log_path.exists():
         ips: set[str] = set()

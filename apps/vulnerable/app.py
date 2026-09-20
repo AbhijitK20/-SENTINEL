@@ -19,11 +19,8 @@ from pathlib import Path
 
 from flask import Flask, g, jsonify, redirect, request, session, url_for
 
-from blocklist import is_blocked
-from paths import ACCESS_LOG
-
 # ── Logging — one syslog line per request ────────────────────────────
-LOG_PATH = ACCESS_LOG
+LOG_PATH = Path("/logs/access.log")
 
 
 def _log(msg: str) -> None:
@@ -226,10 +223,6 @@ def close_db(exc):
 @app.before_request
 def before_request():
     g.start = time.time()
-    ip = request.remote_addr or ""
-    if is_blocked(ip):
-        return jsonify({"error": "blocked by SENTINEL", "ip": ip}), 403
-    return None
 
 
 @app.after_request

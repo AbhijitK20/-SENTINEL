@@ -14,7 +14,7 @@ Final benchmark, README, architecture document, demo script, presentation outlin
   command (`benchmark.json` + `BENCHMARK.md`); results recorded in
   `RESULTS.md` per `RESULTS_TEMPLATE.md`.
 - Offline operation verified by test (`tests/test_offline.py`: offline config
-  pinned, no network clients or cloud endpoints in `src/sentinel`).
+  pinned, no network clients or cloud endpoints in `src/trajectory`).
 - Claim audit: every UI label, report, and document distinguishes observed
   from forecast, and no real-traffic claim is made anywhere (see Claim Status
   in `RESULTS.md` and `BENCHMARK.md`).

@@ -10,7 +10,7 @@ attack-type detection all happen live on the server.
 Usage (inside the sensor container; see docker-compose `realtime` profile):
 
     tcpdump -l -n -tttt -i eth0 'ip' 2>/dev/null | \
-        uv run python scripts/packet_sensor.py --api http://api:8100 --api-key $KEY
+        uv run python scripts/packet_sensor.py --api http://api:8000 --api-key $KEY
 
 The script is streaming: lines in, HTTP batches out, no intermediate files.
 Offline-first contract is preserved — this is a sensor process, not runtime
@@ -116,7 +116,7 @@ def push_events(api_url: str, api_key: str, events: list[UnifiedEvent]) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--api", default=os.environ.get("SENTINEL_API_URL", "http://api:8100"))
+    parser.add_argument("--api", default=os.environ.get("SENTINEL_API_URL", "http://api:8000"))
     parser.add_argument("--api-key", default=os.environ.get("SENTINEL_API_KEY", ""))
     parser.add_argument("--batch", type=int, default=BATCH_SIZE)
     args = parser.parse_args(argv)
