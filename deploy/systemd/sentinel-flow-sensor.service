@@ -1,0 +1,27 @@
+[Unit]
+Description=SENTINEL Flow Sensor — captures network events and pushes to API
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sentinel
+Group=sentinel
+WorkingDirectory=/opt/sentinel
+Environment=SENTINEL_API_URL=http://127.0.0.1:8100
+Environment=SENTINEL_API_KEY=sentinel_flows_key
+ExecStart=/opt/sentinel/.venv/bin/python scripts/flow_sensor.py --interface eth0 --api http://127.0.0.1:8100 --api-key sentinel_flows_key
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sentinel-flow-sensor
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sentinel /var/log/sentinel
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

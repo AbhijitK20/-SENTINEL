@@ -421,6 +421,30 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"unknown or already-revoked key: {key_id}")
         return {"revoked": key_id}
 
+    @app.post("/admin/keys/{key_id}/rotate", dependencies=[require("POST", "/admin/keys")])
+    def admin_keys_rotate(key_id: str) -> dict[str, Any]:
+        """Rotate a key: create a new one with the same role, revoke the old."""
+        if keys is None:
+            raise HTTPException(status_code=409, detail="auth is disabled on this instance")
+        old_record = None
+        for record in keys.list_active():
+            if record.key_id == key_id:
+                old_record = record
+                break
+        if old_record is None:
+            raise HTTPException(status_code=404, detail=f"unknown or revoked key: {key_id}")
+        new_key, new_record = keys.create(
+            old_record.role,
+            label=f"{old_record.label} (rotated)",
+            org_id=old_record.org_id,
+        )
+        keys.revoke(key_id)
+        return {
+            "rotated": key_id,
+            "new_key_id": new_record.key_id,
+            "new_key": new_key,
+        }
+
     @app.get("/v1/cases", dependencies=[require("GET", "/v1/cases")])
     def cases_list() -> dict[str, Any]:
         return {
