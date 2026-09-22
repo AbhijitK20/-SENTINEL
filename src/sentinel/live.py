@@ -586,6 +586,17 @@ class LiveEngine:
             threat_feed=self._threat_feed,
         )
         self._findings.extend(findings)
+
+        # Send webhook alerts for findings above threshold
+        for finding in findings:
+            if finding.is_alert:
+                try:
+                    from sentinel.alerts import notify_alert
+
+                    notify_alert(finding.model_dump(mode="json"))
+                except Exception:
+                    pass  # Never crash the engine on notification failure
+
         self._history.append(
             LiveWindow(
                 window_start=start,
