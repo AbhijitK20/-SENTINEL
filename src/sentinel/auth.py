@@ -110,13 +110,37 @@ def _expired(expires_at: datetime | None) -> bool:
 
 
 class ApiKeyStore:
-    """JSONL-backed API key store with hashed keys and revocation."""
+    """API key store with hashed keys and revocation.
 
-    def __init__(self, path: Path) -> None:
+    Supports both JSONL (default, for backward compatibility) and SQLite
+    persistence. Set ``db_path`` to enable SQLite mode.
+    """
+
+    def __init__(self, path: Path, *, db_path: str | None = None) -> None:
         self.path = Path(path)
+        self._db = None
+        if db_path:
+            from sentinel.db import Database
+
+            self._db = Database(db_path)
 
     # ── persistence ──────────────────────────────────────────────────
     def _read_all(self) -> list[ApiKeyRecord]:
+        if self._db:
+            rows = self._db.fetchall("SELECT * FROM api_keys ORDER BY id")
+            return [
+                ApiKeyRecord(
+                    key_id=r["key_id"],
+                    key_hash=r["key_hash"],
+                    role=r["role"],
+                    label=r.get("label", ""),
+                    org_id=r.get("org_id", "default"),
+                    created_at=r["created_at"],
+                    expires_at=r.get("expires_at"),
+                    revoked=bool(r.get("revoked")),
+                )
+                for r in rows
+            ]
         if not self.path.exists():
             return []
         records = []
@@ -126,6 +150,24 @@ class ApiKeyStore:
         return records
 
     def _append(self, record: ApiKeyRecord) -> None:
+        if self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO api_keys "
+                "(key_id, role, key_hash, label, org_id, created_at, expires_at, revoked) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record.key_id,
+                    record.role,
+                    record.key_hash,
+                    record.label,
+                    record.org_id,
+                    record.created_at,
+                    record.expires_at,
+                    int(record.revoked),
+                ),
+            )
+            self._db.commit()
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record.model_dump(mode="json")) + "\n")
@@ -236,10 +278,18 @@ def role_can(role: str, method: str, path: str) -> bool:
 
 
 class AuditLog:
-    """Append-only JSONL audit trail for authenticated API actions."""
+    """Append-only audit trail for authenticated API actions.
 
-    def __init__(self, path: Path) -> None:
+    Supports both JSONL (default) and SQLite persistence.
+    """
+
+    def __init__(self, path: Path, *, db_path: str | None = None) -> None:
         self.path = Path(path)
+        self._db = None
+        if db_path:
+            from sentinel.db import Database
+
+            self._db = Database(db_path)
 
     def record(
         self,
@@ -262,12 +312,44 @@ class AuditLog:
             status_code=status_code,
             client=client,
         )
+        if self._db:
+            self._db.execute(
+                "INSERT INTO audit_log "
+                "(timestamp, key_id, role, action, resource, status, client_ip, org_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    entry.timestamp,
+                    entry.key_id,
+                    entry.role,
+                    entry.method,
+                    entry.path,
+                    str(entry.status_code),
+                    entry.client,
+                    entry.org_id,
+                ),
+            )
+            self._db.commit()
+            return entry
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry.model_dump(mode="json")) + "\n")
         return entry
 
     def load(self) -> list[AuditRecord]:
+        if self._db:
+            return [
+                AuditRecord(
+                    timestamp=r["timestamp"],
+                    key_id=r["key_id"],
+                    role=r["role"],
+                    org_id=r.get("org_id", "-"),
+                    method=r["action"],
+                    path=r["resource"],
+                    status_code=int(r.get("status", 0)),
+                    client=r.get("client_ip", ""),
+                )
+                for r in self._db.fetchall("SELECT * FROM audit_log ORDER BY id")
+            ]
         if not self.path.exists():
             return []
         return [

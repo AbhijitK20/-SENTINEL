@@ -203,14 +203,15 @@ def create_app(
         else (artifacts.calibrated_threshold or DECISION_THRESHOLD)
     )
     resolved_auth_dir = Path(auth_dir or os.environ.get("SENTINEL_AUTH_DIR") or DEFAULT_AUTH_DIR)
-    keys = ApiKeyStore(resolved_auth_dir / "keys.jsonl") if auth_enabled else None
+    db_path = os.environ.get("SENTINEL_DB_PATH")
+    keys = ApiKeyStore(resolved_auth_dir / "keys.jsonl", db_path=db_path) if auth_enabled else None
     bootstrap_key = os.environ.get("SENTINEL_BOOTSTRAP_KEY")
     if keys is not None and bootstrap_key:
         # Operator-provisioned first admin key (deployment bootstrap).
         # Idempotent: re-registration is harmless because authenticate() folds
         # to the latest record per key id.
         keys.register_raw(bootstrap_key, "admin", label="bootstrap")
-    audit = AuditLog(resolved_auth_dir / "audit.jsonl") if auth_enabled else None
+    audit = AuditLog(resolved_auth_dir / "audit.jsonl", db_path=db_path) if auth_enabled else None
     ledger = AlertLedger(resolved_auth_dir / "alerts.jsonl")
     cases = CaseStore(resolved_auth_dir / "cases.jsonl")
     registry = ModelRegistry(resolved_auth_dir / "registry.jsonl")
