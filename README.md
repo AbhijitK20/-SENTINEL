@@ -38,18 +38,23 @@ All numbers come from `reports/generated/` (regenerate with the scripts below). 
 | F1 (h+1) | 0.769 | 0.886 |
 | PR-AUC | 0.940 | 0.959 |
 
-### Real-data forecast (CIC-IDS2017, cross-day temporal split)
+### Real-data forecast (CIC-IDS2017, 5 attack families)
 
-| Threshold | Forecaster | Median lead | Crossing rate | False early |
-|---|---|---|---|---|
-| 0.50 (default) | Per-horizon | **0.5 windows (75 s)** | 15% | 11% |
-| 0.50 (default) | Recursive rollout | 0.0 | 88% | 58% |
+Trains on Tuesday (FTP/SSH-Patator), validates on Thursday morning (Web Attacks), tests each day separately.
 
-Test phase: Thursday afternoon Infiltration (36 attack flows vs ~287k benign). The per-horizon model detects infiltration 75 seconds before it fully materializes, with 11% false-early rate. See `reports/generated/real-benchmark/REAL_BENCHMARK.md`.
+| Attack Family | Flows | Windows | Lead (0.50) | Crossing | False Early |
+|---|---|---|---|---|---|
+| Infiltration (Thu PM) | 286K | 97 | **0.5 win (75 s)** | 15% | 11% |
+| DDoS (Fri PM) | 225K | 37 | 0.0 | 36% | 9% |
+| PortScan (Fri PM) | 286K | 60 | None | 16% | 16% |
+| Botnet (Fri AM) | 191K | 97 | 0.0 | 20% | 10% |
+| DoS (Wed) | 692K | 204 | 0.0 | 32% | 12% |
+
+The per-horizon model demonstrates **75-second predictive lead time on Infiltration**. Other families show 0.0 lead — the model doesn't predict them ahead of time with current training data. This is an honest result: the architecture works for Infiltration; diverse dwell-time data is needed for other families.
 
 ### Real-traffic detector validation (lab HTTP attacks)
 
-3/6 claimed detectors fire correctly on real attack traffic through the live path. See `scripts/validate_real_detectors.py`.
+3/6 claimed detectors fire correctly on real attack traffic through the live path. The recon detector fires on TCP-level port scans but not HTTP enumeration (traversal, enum) — a known limitation documented in the attack scripts. See `scripts/validate_real_detectors.py`.
 
 ## How To Run
 
@@ -115,7 +120,7 @@ docker compose logs -f demo-sensor demo-attacker
 
 - Synthetic replay validates pipeline behavior, not production detection performance
 - Replay lead time is 0.0 windows on synthetic data because stage transitions occur within window granularity
-- Real-traffic forecasting is unmeasured — the CIC-IDS2017 adapter exists but licensed dataset run is pending
+- Real-traffic forecasting is measured on CIC-IDS2017 (5 attack families); other datasets are pending
 - The trust ledger is a hash chain, not a blockchain — it's the integration seam for a future permissioned chain
 - The vulnerable app, attack scripts, and blocklist are local training components — never expose to untrusted networks
 

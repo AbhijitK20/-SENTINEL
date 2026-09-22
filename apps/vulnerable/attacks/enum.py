@@ -1,8 +1,9 @@
 """API enumeration attack against the demo app.
 
 Probes API endpoints, extracts user data, and tests for information
-disclosure. Generates real traffic the scanner pushes into SENTINEL,
-triggering the reconnaissance and exfiltration detectors.
+disclosure. Generates real traffic the scanner pushes into SENTINEL.
+Note: the recon detector fires on TCP-level probes (SYN/RST),
+not HTTP enumeration — this attack will not trigger it.
 
 Usage: python -m attacks.enum [--target http://demo-app:5000]
 """

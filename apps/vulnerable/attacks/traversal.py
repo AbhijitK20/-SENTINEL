@@ -2,7 +2,8 @@
 
 Sends HTTP requests with path traversal payloads to extract sensitive
 files like /etc/passwd. Generates real traffic the scanner pushes into
-SENTINEL, triggering the reconnaissance detector.
+SENTINEL. Note: the recon detector fires on TCP-level probes (SYN/RST),
+not HTTP enumeration — this attack will not trigger it.
 
 Usage: python -m attacks.traversal [--target http://demo-app:5000]
 """

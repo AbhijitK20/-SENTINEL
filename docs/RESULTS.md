@@ -74,12 +74,8 @@ What these experiments establish:
 
 What they do **not** establish:
 
-- **Lead time > 0.** The synthetic generator switches stage features abruptly
-  and reconnaissance is labelled non-infiltration, so a correctly trained
-  classifier can only fire once infiltration is observable. This is a data
-  property, not an architecture property; real datasets with attack dwell
-  time (CIC-IDS2017 adapter implemented, licensed run pending) are required.
-- Real-traffic performance of any kind.
+- **Lead time > 0 on all families.** The synthetic generator switches stage features abruptly and reconnaissance is labelled non-infiltration, so a correctly trained classifier can only fire once infiltration is observable. This is a data property, not an architecture property.
+- **Universal detection.** The multi-day benchmark shows 75-second lead time on Infiltration but 0.0 lead on DDoS, PortScan, Botnet, and DoS. Diverse attack dwell times are needed for other families.
 - Causal explanation: attributions are model evidence, never proof.
 
 Failure modes observed: rollout false-early rate rises to 0.11 when the

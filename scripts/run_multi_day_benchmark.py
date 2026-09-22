@@ -16,7 +16,7 @@ from pathlib import Path
 
 from sentinel.baseline import BaselineConfig, save_baseline_artifacts, train_baseline
 from sentinel.calibration import calibrate_threshold
-from sentinel.cic_ids2017 import AdapterStats, build_labelled_states
+from sentinel.cic_ids2017 import build_labelled_states
 from sentinel.cic_ids2017 import load_flow_csv_with_stats as _load_flow
 from sentinel.evaluation import evaluate_replay
 from sentinel.features import vectorize_states
@@ -38,8 +38,10 @@ def _load_day(csv_path, scenario_id, time_window, window_seconds, stride_seconds
         raise SystemExit(f"no flows loaded from {csv_path}")
     flow_labels = [(event.timestamp, _label_of(event)) for event in events]
     labelled = build_labelled_states(
-        events, flow_labels,
-        window_seconds=window_seconds, stride_seconds=stride_seconds,
+        events,
+        flow_labels,
+        window_seconds=window_seconds,
+        stride_seconds=stride_seconds,
         scenario_id=scenario_id,
     )
     return labelled, stats
@@ -63,16 +65,22 @@ def main() -> None:
     # --- Train on Tuesday ---
     train_path = data_dir / "Tuesday-WorkingHours.pcap_ISCX.csv"
     labelled_train, _ = _load_day(
-        train_path, "tuesday-train", None,
-        args.window_seconds, args.stride_seconds,
+        train_path,
+        "tuesday-train",
+        None,
+        args.window_seconds,
+        args.stride_seconds,
     )
     print(f"Train: {len(labelled_train)} windows")
 
     # --- Validate on Thursday morning ---
     val_path = data_dir / "Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv"
     labelled_validation, _ = _load_day(
-        val_path, "thursday-morning-validation", None,
-        args.window_seconds, args.stride_seconds,
+        val_path,
+        "thursday-morning-validation",
+        None,
+        args.window_seconds,
+        args.stride_seconds,
     )
     print(f"Validation: {len(labelled_validation)} windows")
 
@@ -91,7 +99,9 @@ def main() -> None:
         horizon=args.horizon,
     )
     run = train_baseline(
-        labelled_all, samples, manifest,
+        labelled_all,
+        samples,
+        manifest,
         config=BaselineConfig(decision_threshold=DECISION_THRESHOLD),
         seed=SEED,
     )
@@ -127,21 +137,23 @@ def main() -> None:
 
     # --- Test days ---
     test_days = [
-        ("Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
-         "thursday-afternoon-infiltration",
-         (datetime(2017, 7, 6, 13, 0, tzinfo=UTC), datetime(2017, 7, 6, 17, 0, tzinfo=UTC))),
-        ("Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
-         "friday-afternoon-ddos",
-         (datetime(2017, 7, 7, 13, 0, tzinfo=UTC), datetime(2017, 7, 7, 17, 0, tzinfo=UTC))),
-        ("Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
-         "friday-afternoon-portscan",
-         (datetime(2017, 7, 7, 13, 0, tzinfo=UTC), datetime(2017, 7, 7, 17, 0, tzinfo=UTC))),
-        ("Friday-WorkingHours-Morning.pcap_ISCX.csv",
-         "friday-morning-botnet",
-         None),
-        ("Wednesday-workingHours.pcap_ISCX.csv",
-         "wednesday-dos",
-         None),
+        (
+            "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
+            "thursday-afternoon-infiltration",
+            (datetime(2017, 7, 6, 13, 0, tzinfo=UTC), datetime(2017, 7, 6, 17, 0, tzinfo=UTC)),
+        ),
+        (
+            "Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
+            "friday-afternoon-ddos",
+            (datetime(2017, 7, 7, 13, 0, tzinfo=UTC), datetime(2017, 7, 7, 17, 0, tzinfo=UTC)),
+        ),
+        (
+            "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+            "friday-afternoon-portscan",
+            (datetime(2017, 7, 7, 13, 0, tzinfo=UTC), datetime(2017, 7, 7, 17, 0, tzinfo=UTC)),
+        ),
+        ("Friday-WorkingHours-Morning.pcap_ISCX.csv", "friday-morning-botnet", None),
+        ("Wednesday-workingHours.pcap_ISCX.csv", "wednesday-dos", None),
     ]
 
     loaded = load_artifacts(out / "baseline")
@@ -155,8 +167,11 @@ def main() -> None:
 
         print(f"\n--- Testing {test_id} ---")
         labelled_test, stats = _load_day(
-            csv_path, test_id, test_window,
-            args.window_seconds, args.stride_seconds,
+            csv_path,
+            test_id,
+            test_window,
+            args.window_seconds,
+            args.stride_seconds,
         )
         print(f"  {stats.rows_converted} flows -> {len(labelled_test)} windows")
 
@@ -164,9 +179,12 @@ def main() -> None:
 
         def _rollout(states, _a, *, max_horizon, threshold):
             result = rollout_forecast(
-                states, transition, loaded.baseline_model,
+                states,
+                transition,
+                loaded.baseline_model,
                 loaded.baseline_result.feature_schema,
-                max_horizon=max_horizon, threshold=threshold,
+                max_horizon=max_horizon,
+                threshold=threshold,
             )
             return result[0] if isinstance(result, tuple) else result
 
@@ -174,13 +192,15 @@ def main() -> None:
         evaluations = {}
         for t_name, t_val in thresholds.items():
             per = evaluate_replay(
-                labelled_test, loaded,
+                labelled_test,
+                loaded,
                 horizon=args.horizon,
                 threshold=t_val,
                 split_filter=None,
             )
             roll = evaluate_replay(
-                labelled_test, loaded,
+                labelled_test,
+                loaded,
                 horizon=args.horizon,
                 threshold=t_val,
                 split_filter=None,
@@ -209,12 +229,18 @@ def main() -> None:
         results.append(result)
 
         per = evaluations["default_0.50"]["per_horizon"]
-        print(f"  Per-horizon (0.50): lead={per['median_lead']}, crossing={per['crossing_rate']:.0%}, false_early={per['false_early']:.0%}")
+        print(
+            f"  Per-horizon (0.50): lead={per['median_lead']}, "
+            f"crossing={per['crossing_rate']:.0%}, false_early={per['false_early']:.0%}"
+        )
 
     # --- Save ---
     report = {
         "generated_at": datetime.now(tz=UTC).isoformat(),
-        "protocol": "Train Tuesday (FTP/SSH-Patator), validate Thursday-morning (Web Attacks), test each day",
+        "protocol": (
+            "Train Tuesday (FTP/SSH-Patator), "
+            "validate Thursday-morning (Web Attacks), test each day"
+        ),
         "train_windows": len(labelled_train),
         "validation_windows": len(labelled_validation),
         "results": results,

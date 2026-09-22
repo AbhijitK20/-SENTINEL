@@ -3,6 +3,8 @@
 Runs multiple attack types in sequence to simulate a real-world
 attack chain: reconnaissance → credential abuse → data exfiltration.
 Generates diverse traffic patterns for SENTINEL detection.
+Note: the scan module triggers the recon detector (TCP-level probes),
+while HTTP-level attacks (traversal, enum) do not.
 
 Usage: python -m attacks.full_chain [--target http://demo-app:5000]
 """
