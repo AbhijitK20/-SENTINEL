@@ -24,18 +24,18 @@ sudo -u sentinel bash -c '
 cd /home/sentinel
 git clone https://github.com/AbhijitK20/-SENTINEL.git sentinel
 cd sentinel
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[all]"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source "$HOME/.local/bin/env"
+uv sync --all-extras
 '
 
-# 4. Train models
+# 4. Train models (use the project training script for your dataset)
 sudo -u sentinel bash -c '
 cd /home/sentinel/sentinel
 source .venv/bin/activate
 python -c "
 from sentinel.baseline import train_baseline, BaselineConfig
-from sentinel.cic_ids2017 import build_labelled_states, load_flow_csv
+    from sentinel.cic_ids2017 import build_labelled_states, load_flow_csv
 # ... train on your data
 "
 '
@@ -57,7 +57,7 @@ sudo -u sentinel bash -c '
 cat > /home/sentinel/sentinel/.env << EOF
 SENTINEL_DB_PATH=/home/sentinel/sentinel/data/sentinel.db
 SENTINEL_BOOTSTRAP_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-SENTINEL_API_KEY=$SENTINEL_BOOTSTRAP_KEY
+SENTINEL_API_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 SENTINEL_ALERT_THRESHOLD=medium
 EOF
 chmod 600 /home/sentinel/sentinel/.env

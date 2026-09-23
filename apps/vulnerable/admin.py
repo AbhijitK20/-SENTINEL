@@ -21,7 +21,7 @@ from paths import ACCESS_LOG, BLOCKLIST
 
 app = Flask(__name__)
 
-SENTINEL_API = "http://api:8000"
+SENTINEL_API = os.environ.get("SENTINEL_API_URL", "http://api:8100")
 API_KEY = os.environ.get("SENTINEL_BOOTSTRAP_KEY", "sent_demo_key_2026")
 BLOCKLIST_PATH = BLOCKLIST
 

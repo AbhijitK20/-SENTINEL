@@ -531,7 +531,7 @@ def create_app(
             "incidents": [incident.model_dump(mode="json") for incident in status.incidents],
         }
 
-    @app.get("/v1/live")
+    @app.get("/v1/live", dependencies=[require("GET", "/v1/live")])
     def live_status() -> dict[str, Any]:
         """Live push-engine state: findings, incidents, and recent windows.
 
@@ -563,7 +563,7 @@ def create_app(
             ],
         }
 
-    @app.post("/v1/live/reset")
+    @app.post("/v1/live/reset", dependencies=[require("POST", "/v1/live/reset")])
     def live_reset() -> dict[str, Any]:
         """Reset the push engine state (clear findings, incidents, history).
 

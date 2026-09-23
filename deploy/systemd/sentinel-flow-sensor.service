@@ -7,10 +7,9 @@ Wants=network-online.target
 Type=simple
 User=sentinel
 Group=sentinel
-WorkingDirectory=/opt/sentinel
-Environment=SENTINEL_API_URL=http://127.0.0.1:8100
-Environment=SENTINEL_API_KEY=sentinel_flows_key
-ExecStart=/opt/sentinel/.venv/bin/python scripts/flow_sensor.py --interface eth0 --api http://127.0.0.1:8100 --api-key sentinel_flows_key
+WorkingDirectory=/home/sentinel/sentinel
+EnvironmentFile=/home/sentinel/sentinel/.env
+ExecStart=/home/sentinel/sentinel/.venv/bin/python scripts/flow_sensor.py --interface eth0 --api http://127.0.0.1:8100
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -19,8 +18,8 @@ SyslogIdentifier=sentinel-flow-sensor
 # Security hardening
 NoNewPrivileges=false
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/sentinel /var/log/sentinel
+ProtectHome=read-only
+ReadWritePaths=/home/sentinel/sentinel /var/log/sentinel
 PrivateTmp=true
 
 [Install]
