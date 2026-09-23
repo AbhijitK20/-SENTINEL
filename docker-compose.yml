@@ -52,6 +52,33 @@ services:
       - ./reports:/app/reports
     restart: "no"
 
+  lab-scenario-runner:
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
+    build: .
+    pull_policy: build
+    command:
+      - uv
+      - run
+      - --no-sync
+      - python
+      - scripts/run_lab_scenario.py
+      - --scenario
+      - recon-auth-progression
+      - --manifest
+      - /app/configs/lab/scenarios.json
+      - --target
+      - http://idurar-target:8888
+      - --api
+      - http://api:8100
+    environment:
+      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
+    volumes:
+      - ./configs/lab/scenarios.json:/app/configs/lab/scenarios.json:ro
+    depends_on:
+      - api
+    restart: "no"
+    profiles: ["lab"]
+
   prometheus:
     image: prom/prometheus:latest
     volumes:
