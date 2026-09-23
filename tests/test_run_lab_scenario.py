@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import URLError
 
 import pytest
 
@@ -56,6 +57,98 @@ def test_rejects_external_and_host_targets(target: str) -> None:
 )
 def test_allows_loopback_and_compose_target(target: str) -> None:
     assert runner.validate_target(target) == target.rstrip("/")
+
+
+@pytest.mark.parametrize("api", ["https://example.com", "http://host.docker.internal:8100"])
+def test_rejects_external_and_host_api_targets(api: str) -> None:
+    with pytest.raises(ValueError, match="API host is not allowlisted"):
+        runner.validate_api(api)
+
+
+def test_rejects_scenarios_over_maximum_step_count(tmp_path: Path) -> None:
+    step = {"stage": "reconnaissance", "method": "GET", "path": "/api/health"}
+    payload = {"scenarios": {"recon-auth-progression": {"steps": [step] * (runner.MAX_STEPS + 1)}}}
+    path = tmp_path / "scenarios.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="maximum"):
+        runner.load_bounded_scenario(path, "recon-auth-progression")
+
+
+def test_custom_manifest_is_dry_run_only(tmp_path: Path) -> None:
+    path = tmp_path / "scenarios.json"
+    path.write_text(
+        json.dumps(
+            {
+                "scenarios": {
+                    "recon-auth-progression": {
+                        "steps": [
+                            {
+                                "stage": "reconnaissance",
+                                "method": "GET",
+                                "path": "/api/health",
+                            }
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with patch.object(runner.urllib.request, "urlopen") as urlopen:
+        assert (
+            runner.main(
+                [
+                    "--scenario",
+                    "recon-auth-progression",
+                    "--manifest",
+                    str(path),
+                    "--target",
+                    "idurar-target",
+                    "--api-key",
+                    "test-key",
+                ]
+            )
+            == 2
+        )
+    urlopen.assert_not_called()
+
+    assert (
+        runner.main(
+            [
+                "--scenario",
+                "recon-auth-progression",
+                "--manifest",
+                str(path),
+                "--target",
+                "idurar-target",
+                "--api-key",
+                "test-key",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+
+
+def test_network_failure_returns_controlled_error(capsys: pytest.CaptureFixture[str]) -> None:
+    with patch.object(runner.urllib.request, "urlopen", side_effect=URLError("offline")):
+        code = runner.main(
+            [
+                "--scenario",
+                "recon-auth-progression",
+                "--target",
+                "idurar-target",
+                "--api",
+                "api",
+                "--api-key",
+                "test-key",
+            ]
+        )
+
+    assert code == 1
+    assert "network/API request failed" in capsys.readouterr().err
 
 
 def test_builds_unified_event_from_step() -> None:

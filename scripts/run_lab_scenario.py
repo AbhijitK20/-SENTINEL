@@ -10,6 +10,7 @@ import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from sentinel.lab_scenarios import LabStep, load_scenario  # noqa: E402
@@ -19,8 +20,11 @@ DEFAULT_MANIFEST = Path(__file__).resolve().parent.parent / "configs" / "lab" / 
 DEFAULT_TARGET = "http://idurar-target:8888"
 DEFAULT_API = "http://api:8100"
 BATCH_SIZE = 2
+MAX_STEPS = 16
 ALLOWED_TARGET_HOSTS = {"localhost", "idurar-target"}
 ALLOWED_TARGET_IPS = {"127.0.0.1", "::1"}
+ALLOWED_API_HOSTS = {"api"}
+ALLOWED_SCENARIOS = {"recon-auth-progression"}
 ALLOWED_STEPS = {
     ("GET", "/api/health"),
     ("POST", "/api/auth/login"),
@@ -56,6 +60,28 @@ def validate_target(target: str) -> str:
     if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
         raise ValueError("target must not include a path or query")
     return target.rstrip("/")
+
+
+def validate_api(api: str) -> str:
+    if api == "api":
+        return DEFAULT_API
+    parsed = urllib.parse.urlparse(api)
+    if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password:
+        raise ValueError("API must be an HTTP URL")
+    if parsed.hostname not in ALLOWED_API_HOSTS | ALLOWED_TARGET_IPS:
+        raise ValueError("API host is not allowlisted")
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise ValueError("API must not include a path or query")
+    return api.rstrip("/")
+
+
+def load_bounded_scenario(path: Path, scenario_id: str):
+    if scenario_id not in ALLOWED_SCENARIOS:
+        raise ValueError(f"scenario is not allowlisted: {scenario_id}")
+    scenario = load_scenario(path, scenario_id)
+    if len(scenario.steps) > MAX_STEPS:
+        raise ValueError(f"scenario exceeds maximum of {MAX_STEPS} steps")
+    return scenario
 
 
 def validate_step(step: LabStep) -> None:
@@ -124,7 +150,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         target = validate_target(args.target)
-        scenario = load_scenario(args.manifest, args.scenario)
+        api = validate_api(args.api)
+        if not args.dry_run and args.manifest.resolve() != DEFAULT_MANIFEST.resolve():
+            raise ValueError("custom manifests are allowed only with --dry-run")
+        scenario = load_bounded_scenario(args.manifest, args.scenario)
         for step in scenario.steps:
             validate_step(step)
     except (OSError, ValueError) as exc:
@@ -132,14 +161,22 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     events = []
-    for index, step in enumerate(scenario.steps):
-        print(f"{step.stage} {step.method} {step.path}")
-        events.append(event_for_step(args.scenario, target, step, index))
-        if not args.dry_run:
-            request_step(target, step)
+    try:
+        for index, step in enumerate(scenario.steps):
+            print(f"{step.stage} {step.method} {step.path}")
+            events.append(event_for_step(args.scenario, target, step, index))
+            if not args.dry_run:
+                request_step(target, step)
+    except (HTTPError, OSError, TimeoutError, URLError) as exc:
+        print(f"network/API request failed: {exc}", file=sys.stderr)
+        return 1
 
     if not args.dry_run:
-        post_batches(args.api, args.api_key, events)
+        try:
+            post_batches(api, args.api_key, events)
+        except (HTTPError, OSError, TimeoutError, URLError) as exc:
+            print(f"network/API request failed: {exc}", file=sys.stderr)
+            return 1
     print(f"scenario={args.scenario} steps={len(events)} dry_run={args.dry_run}")
     return 0
 
