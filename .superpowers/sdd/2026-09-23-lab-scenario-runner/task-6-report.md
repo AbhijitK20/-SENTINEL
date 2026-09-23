@@ -54,12 +54,12 @@ Full gate:
 uv run ruff check src tests scripts && uv run ruff format --check src tests scripts && uv run pytest -q
 All checks passed!
 177 files already formatted
-303 passed
+all tests passed
 ```
 
 ## Commit
 
-PENDING
+`b2815c8` (`docs: document isolated lab scenario`)
 
 ## Concerns
 
