@@ -21,9 +21,11 @@ DEFAULT_TARGET = "http://idurar-target:8888"
 DEFAULT_API = "http://api:8100"
 BATCH_SIZE = 2
 MAX_STEPS = 16
+TARGET_PORT = 8888
+API_PORT = 8100
 ALLOWED_TARGET_HOSTS = {"localhost", "idurar-target"}
 ALLOWED_TARGET_IPS = {"127.0.0.1", "::1"}
-ALLOWED_API_HOSTS = {"api"}
+ALLOWED_API_HOSTS = {"api", "localhost"}
 ALLOWED_SCENARIOS = {"recon-auth-progression"}
 ALLOWED_STEPS = {
     ("GET", "/api/health"),
@@ -57,6 +59,8 @@ def validate_target(target: str) -> str:
         raise ValueError("target must be an HTTP URL")
     if parsed.hostname not in ALLOWED_TARGET_HOSTS | ALLOWED_TARGET_IPS:
         raise ValueError("target host is not allowlisted")
+    if parsed.port != TARGET_PORT:
+        raise ValueError(f"target port must be {TARGET_PORT}")
     if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
         raise ValueError("target must not include a path or query")
     return target.rstrip("/")
@@ -70,6 +74,8 @@ def validate_api(api: str) -> str:
         raise ValueError("API must be an HTTP URL")
     if parsed.hostname not in ALLOWED_API_HOSTS | ALLOWED_TARGET_IPS:
         raise ValueError("API host is not allowlisted")
+    if parsed.port != API_PORT:
+        raise ValueError(f"API port must be {API_PORT}")
     if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
         raise ValueError("API must not include a path or query")
     return api.rstrip("/")

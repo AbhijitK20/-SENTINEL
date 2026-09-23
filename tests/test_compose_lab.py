@@ -30,6 +30,15 @@ def test_lab_scenario_runner_is_isolated_and_profile_gated() -> None:
         "http://api:8100",
     ]
     assert "./configs/lab/scenarios.json:/app/configs/lab/scenarios.json:ro" in service["volumes"]
+    assert service["networks"] == ["lab-net"]
+
+
+def test_lab_network_contains_only_api_and_runner() -> None:
+    compose = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+    assert "lab-net" in compose["services"]["api"]["networks"]
+    assert compose["services"]["lab-scenario-runner"]["networks"] == ["lab-net"]
+    assert compose["networks"]["lab-net"] == {}
+    assert "ports" not in compose["services"]["lab-scenario-runner"]
 
 
 def test_existing_profiles_are_unchanged() -> None:

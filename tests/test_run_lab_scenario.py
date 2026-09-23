@@ -59,9 +59,23 @@ def test_allows_loopback_and_compose_target(target: str) -> None:
     assert runner.validate_target(target) == target.rstrip("/")
 
 
+@pytest.mark.parametrize(
+    "target", ["http://127.0.0.1:80", "http://localhost:8080", "http://idurar-target:9999"]
+)
+def test_rejects_alternate_target_ports(target: str) -> None:
+    with pytest.raises(ValueError, match="target port must be 8888"):
+        runner.validate_target(target)
+
+
 @pytest.mark.parametrize("api", ["https://example.com", "http://host.docker.internal:8100"])
 def test_rejects_external_and_host_api_targets(api: str) -> None:
     with pytest.raises(ValueError, match="API host is not allowlisted"):
+        runner.validate_api(api)
+
+
+@pytest.mark.parametrize("api", ["http://127.0.0.1:80", "http://localhost:8888", "http://api:9000"])
+def test_rejects_alternate_api_ports(api: str) -> None:
+    with pytest.raises(ValueError, match="API port must be 8100"):
         runner.validate_api(api)
 
 

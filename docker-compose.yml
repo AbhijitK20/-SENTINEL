@@ -34,7 +34,7 @@ services:
       - "8100:8100"
     volumes:
       - ./reports:/app/reports
-    networks: [default, demo-net]
+    networks: [lab-net, default, demo-net]
     depends_on:
       feed-refresher:
         condition: service_completed_successfully
@@ -78,6 +78,7 @@ services:
       - api
     restart: "no"
     profiles: ["lab"]
+    networks: [lab-net]
 
   prometheus:
     image: prom/prometheus:latest
@@ -228,6 +229,7 @@ services:
     #   docker compose run --rm demo-attack attacks.scan
 
 networks:
+  lab-net: {}
   demo-net:
 
 volumes:
