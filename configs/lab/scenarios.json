@@ -1,0 +1,46 @@
+{
+  "scenarios": {
+    "recon-auth-progression": {
+      "steps": [
+        {
+          "stage": "reconnaissance",
+          "method": "GET",
+          "path": "/api/health",
+          "features": {
+            "request_count": 1.0,
+            "destination_port": 8888.0
+          }
+        },
+        {
+          "stage": "failed-login",
+          "method": "POST",
+          "path": "/api/auth/login",
+          "features": {
+            "request_count": 3.0,
+            "failed_auth": 3.0,
+            "destination_port": 8888.0
+          }
+        },
+        {
+          "stage": "api-probe",
+          "method": "GET",
+          "path": "/api/users?search=sentinel-test",
+          "features": {
+            "request_count": 2.0,
+            "destination_port": 8888.0
+          }
+        },
+        {
+          "stage": "synthetic-upload",
+          "method": "POST",
+          "path": "/api/uploads/synthetic.txt",
+          "features": {
+            "request_count": 1.0,
+            "bytes": 128.0,
+            "destination_port": 8888.0
+          }
+        }
+      ]
+    }
+  }
+}

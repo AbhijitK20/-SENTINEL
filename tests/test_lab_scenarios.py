@@ -61,3 +61,16 @@ def test_rejects_unknown_scenario(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="unknown scenario"):
         load_scenario(path, "missing")
+
+
+def test_checked_in_manifest_preserves_stage_order() -> None:
+    path = Path(__file__).parents[1] / "configs" / "lab" / "scenarios.json"
+
+    scenario = load_scenario(path, "recon-auth-progression")
+
+    assert [step.stage for step in scenario.steps] == [
+        "reconnaissance",
+        "failed-login",
+        "api-probe",
+        "synthetic-upload",
+    ]
