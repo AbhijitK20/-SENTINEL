@@ -2,19 +2,31 @@
 
 from __future__ import annotations
 
+import importlib.util
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from sentinel.api import create_app
+from sentinel.auth import ApiKeyStore
 from sentinel.baseline import save_baseline_artifacts, train_baseline
 from sentinel.config import BaselineConfig
+from sentinel.lab_scenarios import load_scenario
 from sentinel.predict import DECISION_THRESHOLD
 from sentinel.synthetic import generate_labelled_states
 from sentinel.targets import build_sequence_samples, make_split_manifest
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
+MANIFEST = Path(__file__).parents[1] / "configs" / "lab" / "scenarios.json"
+
+_RUNNER_SPEC = importlib.util.spec_from_file_location(
+    "run_lab_scenario", Path(__file__).parents[1] / "scripts" / "run_lab_scenario.py"
+)
+assert _RUNNER_SPEC and _RUNNER_SPEC.loader
+_RUNNER = importlib.util.module_from_spec(_RUNNER_SPEC)
+_RUNNER_SPEC.loader.exec_module(_RUNNER)
 
 
 def _event(offset: float, index: int, **features) -> dict:
@@ -50,6 +62,28 @@ def client(tmp_path_factory) -> TestClient:
     # (401/403, roles, key lifecycle, audit) is covered in tests/test_auth.py.
     app = create_app(tmp / "baseline", auth_enabled=False)
     return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def authenticated_client(tmp_path_factory) -> tuple[TestClient, dict[str, str]]:
+    tmp = tmp_path_factory.mktemp("api-authenticated")
+    labelled = generate_labelled_states(
+        [f"api-auth{i}" for i in range(5)], seed=22, window_seconds=60, stride_seconds=60
+    )
+    samples = build_sequence_samples(labelled, sequence_length=2, horizon=1)
+    manifest = make_split_manifest([f"api-auth{i}" for i in range(5)], seed=22)
+    run = train_baseline(
+        labelled,
+        samples,
+        manifest,
+        config=BaselineConfig(decision_threshold=DECISION_THRESHOLD),
+        seed=22,
+    )
+    save_baseline_artifacts(run, tmp / "baseline")
+    auth_dir = tmp / "auth"
+    app = create_app(tmp / "baseline", auth_dir=auth_dir)
+    raw_key, _ = ApiKeyStore(auth_dir / "keys.jsonl").create("analyst", label="api-contract")
+    return TestClient(app), {"X-API-Key": raw_key}
 
 
 def test_health_reports_loaded_model(client: TestClient) -> None:
@@ -104,6 +138,32 @@ def test_detect_correlates_attack_into_incident(client: TestClient) -> None:
     incident = body["incidents"][0]
     assert incident["progression"][0] == "Reconnaissance"
     assert incident["risk"]["level"] in {"medium", "high", "critical"}
+
+
+def test_events_accepts_generated_scenario_with_authenticated_client(
+    authenticated_client: tuple[TestClient, dict[str, str]],
+) -> None:
+    client, headers = authenticated_client
+    scenario_id = "recon-auth-progression"
+    scenario = load_scenario(MANIFEST, scenario_id)
+    events = [
+        _RUNNER.event_for_step(scenario_id, "http://idurar-target:8888", step, index)
+        for index, step in enumerate(scenario.steps)
+    ]
+
+    response = client.post(
+        "/v1/events",
+        json={"events": [event.model_dump(mode="json") for event in events]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["events_seen"] == len(events)
+    assert isinstance(body["windows_emitted"], int)
+    assert body["alert_status"] in {"monitoring", "alert"}
+    assert body["peak_probability"] is None or 0.0 <= body["peak_probability"] <= 1.0
+    assert isinstance(body["incidents"], list)
 
 
 def test_forecast_rejects_bad_stride(client: TestClient) -> None:
