@@ -89,8 +89,13 @@ def evidence_hash(forecast: Forecast) -> str:
 class AlertLedger:
     """Append-only JSONL ledger with a hash chain suitable for later anchoring."""
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, db_path: str | None = None):
         self.path = Path(path)
+        self._db = None
+        if db_path:
+            from sentinel.db import Database
+
+            self._db = Database(db_path)
 
     def append_forecast(self, forecast: Forecast, *, status: str = "created") -> AlertRecord:
         """Register a forecast and return the resulting tamper-evident record."""
@@ -116,19 +121,27 @@ class AlertLedger:
         record = draft.model_copy(
             update={"record_hash": _sha256(draft.model_dump(mode="json", exclude={"record_hash"}))}
         )
+        if self._db:
+            self._db.log_append("ledger", record.model_dump_json())
+            return record
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(record.model_dump_json() + "\n")
         return record
 
-    def verify(self) -> LedgerVerification:
-        """Verify every JSONL record and every link to its predecessor."""
+    def _lines(self) -> list[str]:
+        if self._db:
+            return self._db.log_all("ledger")
         if not self.path.exists():
-            return LedgerVerification(valid=True, records_checked=0)
+            return []
+        return self.path.read_text(encoding="utf-8").splitlines()
 
+    def verify(self) -> LedgerVerification:
+        """Verify every record and every link to its predecessor."""
+        lines = self._lines()
         errors: list[str] = []
         records: list[AlertRecord] = []
-        for line_number, line in enumerate(self.path.read_text(encoding="utf-8").splitlines(), 1):
+        for line_number, line in enumerate(lines, 1):
             if not line.strip():
                 continue
             try:
@@ -158,34 +171,33 @@ class AlertLedger:
         signed payload. It is a demo-only operation and returns ``False`` when
         there is no record to tamper with.
         """
-        if not self.path.exists():
+        lines = [line for line in self._lines() if line.strip()]
+        if not lines:
             return False
-        lines = self.path.read_text(encoding="utf-8").splitlines()
-        for index in range(len(lines) - 1, -1, -1):
-            if not lines[index].strip():
-                continue
-            try:
-                payload = json.loads(lines[index])
-            except json.JSONDecodeError:
-                return False
-            current_hash = str(payload.get("record_hash", ""))
-            replacement_hash = "f" * 64 if current_hash != "f" * 64 else "e" * 64
-            payload["record_hash"] = replacement_hash
-            lines[index] = _canonical_json(payload)
-            self.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            return True
-        return False
+        try:
+            payload = json.loads(lines[-1])
+        except json.JSONDecodeError:
+            return False
+        current_hash = str(payload.get("record_hash", ""))
+        replacement_hash = "f" * 64 if current_hash != "f" * 64 else "e" * 64
+        payload["record_hash"] = replacement_hash
+        lines[-1] = _canonical_json(payload)
+        if self._db:
+            return self._db.log_update_latest("ledger", lines[-1])
+        self.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return True
 
     def reset(self) -> None:
         """Clear the local demo ledger so a new integrity demonstration can start."""
+        if self._db:
+            self._db.log_clear("ledger")
+            return
         self.path.unlink(missing_ok=True)
 
     def records(self) -> list[AlertRecord]:
         """Read validly-shaped records for display; use verify() for integrity."""
-        if not self.path.exists():
-            return []
         records: list[AlertRecord] = []
-        for line in self.path.read_text(encoding="utf-8").splitlines():
+        for line in self._lines():
             if not line.strip():
                 continue
             try:

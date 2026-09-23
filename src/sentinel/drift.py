@@ -95,20 +95,33 @@ def compare_feature(feature: str, reference: list[float], current: list[float]) 
 
 
 class DriftSnapshot:
-    """Reference distributions captured from training states, JSON-persisted."""
+    """Reference distributions captured from training states; one JSON doc.
 
-    def __init__(self, path: Path) -> None:
+    Dual-mode: set ``db_path`` to persist in SQLite instead of JSONL.
+    """
+
+    def __init__(self, path: Path, *, db_path: str | None = None) -> None:
         self.path = path
+        self._db = None
+        if db_path:
+            from sentinel.db import Database
+
+            self._db = Database(db_path)
 
     def capture(self, states_feature_columns: dict[str, list[float]]) -> None:
         """Persist per-feature reference samples (one JSON document)."""
+        doc = json.dumps({k: list(v) for k, v in states_feature_columns.items()})
+        if self._db:
+            self._db.log_clear("drift_snapshot")
+            self._db.log_append("drift_snapshot", doc)
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps({k: list(v) for k, v in states_feature_columns.items()}),
-            encoding="utf-8",
-        )
+        self.path.write_text(doc, encoding="utf-8")
 
     def load(self) -> dict[str, list[float]]:
+        if self._db:
+            rows = self._db.log_all("drift_snapshot")
+            return json.loads(rows[-1]) if rows else {}
         if not self.path.exists():
             return {}
         return {k: list(v) for k, v in json.loads(self.path.read_text(encoding="utf-8")).items()}

@@ -26,10 +26,15 @@ VERDICTS = {
 
 
 class FeedbackStore:
-    """JSONL-backed store; every record is timestamped and append-only."""
+    """Append-only feedback store; JSONL by default, SQLite when ``db_path`` set."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, db_path: str | None = None) -> None:
         self.path = path
+        self._db = None
+        if db_path:
+            from sentinel.db import Database
+
+            self._db = Database(db_path)
 
     def record(
         self,
@@ -53,12 +58,19 @@ class FeedbackStore:
             recorded_at=recorded_at,
             comment=comment,
         )
+        if self._db:
+            self._db.log_append("feedback", feedback.model_dump_json())
+            return feedback
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(feedback.model_dump(mode="json")) + "\n")
         return feedback
 
     def load(self) -> list[AnalystFeedback]:
+        if self._db:
+            return [
+                AnalystFeedback.model_validate_json(line) for line in self._db.log_all("feedback")
+            ]  # noqa: E501
         if not self.path.exists():
             return []
         return [

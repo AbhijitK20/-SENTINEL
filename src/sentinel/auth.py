@@ -127,7 +127,7 @@ class ApiKeyStore:
     # ── persistence ──────────────────────────────────────────────────
     def _read_all(self) -> list[ApiKeyRecord]:
         if self._db:
-            rows = self._db.fetchall("SELECT * FROM api_keys ORDER BY id")
+            rows = self._db.fetchall("SELECT * FROM api_keys ORDER BY rowid")
             return [
                 ApiKeyRecord(
                     key_id=r["key_id"],
@@ -161,8 +161,8 @@ class ApiKeyStore:
                     record.key_hash,
                     record.label,
                     record.org_id,
-                    record.created_at,
-                    record.expires_at,
+                    record.created_at.isoformat(),
+                    record.expires_at.isoformat() if record.expires_at else None,
                     int(record.revoked),
                 ),
             )

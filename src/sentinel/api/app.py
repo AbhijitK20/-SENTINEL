@@ -212,8 +212,8 @@ def create_app(
         # to the latest record per key id.
         keys.register_raw(bootstrap_key, "admin", label="bootstrap")
     audit = AuditLog(resolved_auth_dir / "audit.jsonl", db_path=db_path) if auth_enabled else None
-    ledger = AlertLedger(resolved_auth_dir / "alerts.jsonl")
-    cases = CaseStore(resolved_auth_dir / "cases.jsonl")
+    ledger = AlertLedger(resolved_auth_dir / "alerts.jsonl", db_path=db_path)
+    cases = CaseStore(resolved_auth_dir / "cases.jsonl", db_path=db_path)
     registry = ModelRegistry(resolved_auth_dir / "registry.jsonl")
     feed_path = threat_feed_file or os.environ.get("SENTINEL_THREAT_FEED_FILE")
     threat_feed = _load_threat_feed(feed_path)

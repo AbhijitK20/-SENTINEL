@@ -45,18 +45,31 @@ class Case(BaseModel):
 
 
 class CaseStore:
-    """Append-only JSONL case log; the latest record per case_id is current."""
+    """Append-only case log; the latest record per case_id is current.
 
-    def __init__(self, path: Path) -> None:
+    Dual-mode: set ``db_path`` to persist in SQLite instead of JSONL.
+    """
+
+    def __init__(self, path: Path, *, db_path: str | None = None) -> None:
         self.path = path
+        self._db = None
+        if db_path:
+            from sentinel.db import Database
+
+            self._db = Database(db_path)
 
     def _append(self, case: Case) -> Case:
+        if self._db:
+            self._db.log_append("cases", case.model_dump_json())
+            return case
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(case.model_dump(mode="json")) + "\n")
         return case
 
     def _load(self) -> list[Case]:
+        if self._db:
+            return [Case.model_validate_json(line) for line in self._db.log_all("cases")]
         if not self.path.exists():
             return []
         return [
