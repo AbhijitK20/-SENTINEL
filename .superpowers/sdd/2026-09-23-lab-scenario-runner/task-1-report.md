@@ -55,4 +55,17 @@ $ uv run ruff format --check src/sentinel/lab_scenarios.py tests/test_lab_scenar
 ## Concerns
 
 - The loader currently supports the Task 1 JSON manifest shape with a top-level `scenarios` mapping. The checked-in manifest fixture is intentionally deferred to Task 2.
-- Full-project tests and the repository-wide gate were not run because the requested Task 1 verification scope was focused tests and Ruff.
+- Full project gate:
+
+  ```text
+  $ uv run ruff check src tests scripts && uv run ruff format --check src tests scripts && uv run pytest -q
+  All checks passed!
+  174 files already formatted
+  ........................................................................ [ 23%]
+  ........................................................................ [ 46%]
+  ........................................................................ [ 69%]
+  ........................................................................ [ 92%]
+  .........................                                                [100%]
+  ```
+
+  Result: PASS. Ruff lint, Ruff format, and the full pytest suite completed successfully. Pytest emitted two existing dependency deprecation warnings from FastAPI/Starlette test-client imports.

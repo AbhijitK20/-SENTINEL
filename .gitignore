@@ -60,3 +60,6 @@ DUAL_DASHBOARD_PORTS.md
 PLUGIN_MEMORY.md
 PORT_AUDIT.md
 UI_INTERACTION_AUDIT.md
+
+# Local research clones; never ship third-party repositories
+research/repos/

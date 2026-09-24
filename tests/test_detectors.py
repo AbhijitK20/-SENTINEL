@@ -10,6 +10,7 @@ from sentinel.detectors import (
     detect_c2_beacon,
     detect_credential,
     detect_ddos,
+    detect_entropy_anomaly,
     detect_exfil,
     detect_lateral,
     detect_recon,
@@ -119,10 +120,39 @@ def test_ddos_and_c2_are_honest_stubs(labelled) -> None:
     assert "DNS" in c2.warnings[0] or "dns" in c2.warnings[0]
 
 
+def test_entropy_detector_uses_byte_entropy_not_hash_proxy() -> None:
+    """Entropy detector should compute byte-size distribution entropy,
+    not hash(endpoint) % 100. The hash proxy is process-randomized
+    and unrelated to DNS-label Shannon entropy."""
+    from datetime import UTC, datetime, timedelta
+
+    from sentinel.schemas import NetworkState
+
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    # Two edges with distinct byte sizes → entropy should reflect actual bytes
+    state = NetworkState(
+        window_start=start,
+        window_end=start + timedelta(seconds=30),
+        features={"bytes": 100.0},
+        entities=["src", "dst1", "dst2"],
+        edge_summary=[
+            {"source": "src", "destination": "dst1", "count": 1.0, "bytes": 100.0},
+            {"source": "src", "destination": "dst2", "count": 1.0, "bytes": 200.0},
+        ],
+        coverage={"flow": True},
+        source_ids=[],
+    )
+    finding = detect_entropy_anomaly(_ctx(state, ()), DetectorSet())
+    # Byte entropy should be non-zero (two distinct values)
+    byte_ev = [e for e in finding.evidence if e.name == "byte_entropy"]
+    assert byte_ev, "entropy detector must report byte_entropy"
+    assert byte_ev[0].observed_value > 0.0
+
+
 def test_every_detector_emits_all_contract_fields(labelled) -> None:
     item = labelled[-1]
     findings = run_all_detectors(item.state, ())
-    assert len(findings) == 9
+    assert len(findings) == 10  # 9 attack-type + 1 entropy anomaly
     for finding in findings:
         assert finding.model_version.startswith("detectors-")
         assert finding.severity in {"info", "low", "medium", "high", "critical"}

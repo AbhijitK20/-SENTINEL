@@ -8,7 +8,7 @@ import os
 import sys
 import urllib.parse
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
@@ -21,6 +21,7 @@ DEFAULT_TARGET = "http://idurar-target:8888"
 DEFAULT_API = "http://api:8100"
 BATCH_SIZE = 2
 MAX_STEPS = 16
+STRIDE_SPACING_SECONDS = 31  # must exceed engine stride (30s) to cross boundaries
 TARGET_PORT = 8888
 API_PORT = 8100
 ALLOWED_TARGET_HOSTS = {"localhost", "idurar-target"}
@@ -95,11 +96,19 @@ def validate_step(step: LabStep) -> None:
         raise ValueError(f"scenario step is not allowlisted: {step.method} {step.path}")
 
 
-def event_for_step(scenario_id: str, target: str, step: LabStep, index: int) -> UnifiedEvent:
+def event_for_step(
+    scenario_id: str,
+    target: str,
+    step: LabStep,
+    index: int,
+    base_time: datetime | None = None,
+) -> UnifiedEvent:
     validate_step(step)
+    if base_time is None:
+        base_time = datetime.now(UTC)
     return UnifiedEvent(
         event_id=f"lab:{scenario_id}:{index}",
-        timestamp=datetime.now(UTC),
+        timestamp=base_time + timedelta(seconds=index * STRIDE_SPACING_SECONDS),
         source_entity=target,
         destination_entity="sentinel-api",
         event_type="other",
@@ -120,8 +129,12 @@ def request_step(target: str, step: LabStep) -> None:
         headers={"Content-Type": "application/json"},
         method=step.method,
     )
-    with urllib.request.urlopen(request, timeout=10):
-        pass
+    try:
+        with urllib.request.urlopen(request, timeout=10):
+            pass
+    except HTTPError as error:
+        if error.code not in {401, 403, 404}:
+            raise
 
 
 def post_batches(
@@ -167,10 +180,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     events = []
+    base_time = datetime.now(UTC)
     try:
         for index, step in enumerate(scenario.steps):
             print(f"{step.stage} {step.method} {step.path}")
-            events.append(event_for_step(args.scenario, target, step, index))
+            events.append(event_for_step(args.scenario, target, step, index, base_time))
             if not args.dry_run:
                 request_step(target, step)
     except (HTTPError, OSError, TimeoutError, URLError) as exc:

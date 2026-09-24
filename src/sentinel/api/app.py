@@ -617,6 +617,139 @@ def create_app(
         ]
         return Response(content="\n".join(lines) + "\n", media_type="text/plain")
 
+    @app.get("/v1/attack-coverage", dependencies=[require("GET", "/v1/attack-coverage")])
+    def attack_coverage() -> dict[str, Any]:
+        """MITRE ATT&CK technique coverage from recent detection history.
+
+        Coverage is scoped to SENTINEL's internal detector categories.
+        Three dimensions:
+          - detector_implemented: SENTINEL has a detector for this technique
+          - telemetry_available: required telemetry sources are present
+          - alert_observed: at least one finding with probability > 0
+
+        Zero-probability findings (detector executed but no alert) do not
+        count as observed coverage.
+        """
+        push_engine.poll()
+        from sentinel.detectors import MITRE
+
+        # Count findings per technique; track max probability
+        technique_counts: dict[str, int] = {}
+        technique_max_prob: dict[str, float] = {}
+        for finding in push_engine._findings:
+            tech = finding.mitre_technique or "unknown"
+            technique_counts[tech] = technique_counts.get(tech, 0) + 1
+            technique_max_prob[tech] = max(technique_max_prob.get(tech, 0.0), finding.probability)
+
+        # All known ATT&CK techniques we can detect
+        all_techniques = set(MITRE.values())
+
+        # Observed = technique has at least one finding with probability > 0
+        observed = {t for t, p in technique_max_prob.items() if p > 0}
+
+        coverage = len(observed) / len(all_techniques) if all_techniques else 0.0
+
+        return {
+            "coverage_score": round(coverage, 3),
+            "observed_techniques": len(observed),
+            "total_techniques": len(all_techniques),
+            "techniques": {
+                tech: {
+                    "count": technique_counts.get(tech, 0),
+                    "max_probability": round(technique_max_prob.get(tech, 0.0), 3),
+                    "alert_observed": technique_max_prob.get(tech, 0.0) > 0,
+                }
+                for tech in sorted(all_techniques)
+            },
+            "attack_type_mapping": MITRE,
+        }
+
+    @app.get(
+        "/v1/attack-coverage/navigator",
+        dependencies=[require("GET", "/v1/attack-coverage")],
+    )
+    def navigator_export() -> dict[str, Any]:
+        """Export ATT&CK coverage as a Navigator layer JSON.
+
+        Format compatible with MITRE ATT&CK Navigator v4.5.
+        Only techniques with alert_observed (max_probability > 0) are
+        included as enabled in the layer.
+        """
+        push_engine.poll()
+        from sentinel.detectors import MITRE
+
+        technique_counts: dict[str, int] = {}
+        technique_max_prob: dict[str, float] = {}
+        for finding in push_engine._findings:
+            tech = finding.mitre_technique or "unknown"
+            technique_counts[tech] = technique_counts.get(tech, 0) + 1
+            technique_max_prob[tech] = max(technique_max_prob.get(tech, 0.0), finding.probability)
+
+        techniques = []
+        for tid in sorted(MITRE.values()):
+            count = technique_counts.get(tid, 0)
+            max_prob = technique_max_prob.get(tid, 0.0)
+            if max_prob <= 0:
+                continue
+            score = min(10, count)
+            color = "#67000d" if max_prob >= 0.65 else "#fb6a4a" if max_prob >= 0.30 else "#fff5f0"
+            techniques.append(
+                {
+                    "techniqueID": tid,
+                    "score": score,
+                    "color": color,
+                    "comment": f"{count} detection(s) | max_prob={max_prob:.3f}",
+                    "enabled": True,
+                    "metadata": [
+                        {"name": "max_probability", "value": str(max_prob)},
+                        {"name": "detection_count", "value": str(count)},
+                    ],
+                }
+            )
+
+        return {
+            "name": "SENTINEL Coverage",
+            "versions": {"attack": "16", "navigator": "4.5", "layer": "4.5"},
+            "domain": "enterprise-attack",
+            "techniques": techniques,
+            "gradient": {
+                "colors": ["#fff5f0", "#fb6a4a", "#67000d"],
+                "minValue": 0,
+                "maxValue": 10,
+            },
+            "legendItems": [
+                {"label": "High confidence", "color": "#67000d"},
+                {"label": "Medium confidence", "color": "#fb6a4a"},
+                {"label": "Low confidence", "color": "#fff5f0"},
+            ],
+            "layout": {"layout": "side", "showID": True, "showName": True},
+        }
+
+    @app.get(
+        "/v1/predict/next",
+        dependencies=[require("GET", "/v1/live")],
+    )
+    def predict_next() -> dict[str, Any]:
+        """Predict next likely attack techniques using Markov model.
+
+        From attack-chain-prediction: first-order Markov transition
+        forecasting for next-step prediction.
+        """
+        from sentinel.threat_enrichment import predict_next_techniques
+
+        push_engine.poll()
+        # Extract observed attack types from recent findings
+        recent_types: list[str] = []
+        for finding in list(push_engine._findings)[-20:]:
+            if finding.is_alert and finding.attack_type not in recent_types:
+                recent_types.append(finding.attack_type)
+
+        predictions = predict_next_techniques(recent_types, top_k=5)
+        return {
+            "observed_sequence": recent_types,
+            "predictions": [{"technique": t, "probability": round(p, 3)} for t, p in predictions],
+        }
+
     @app.middleware("http")
     async def _timing(request: Request, call_next):  # noqa: ANN202 - starlette typing
         nonlocal latency_total_ms, latency_count

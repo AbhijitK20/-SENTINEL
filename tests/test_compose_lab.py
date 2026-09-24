@@ -49,4 +49,3 @@ def test_existing_profiles_are_unchanged() -> None:
     assert services["grafana"]["profiles"] == ["obs"]
     assert services["vulnerable-app"]["profiles"] == ["demo"]
     assert services["demo-sentinel"]["profiles"] == ["demo"]
-    assert services["demo-attack"]["profiles"] == ["demo"]

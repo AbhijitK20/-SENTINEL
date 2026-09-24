@@ -2,7 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 from unittest.mock import patch
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -163,6 +163,14 @@ def test_network_failure_returns_controlled_error(capsys: pytest.CaptureFixture[
 
     assert code == 1
     assert "network/API request failed" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_expected_application_errors_do_not_abort_step(status: int) -> None:
+    scenario = runner.load_scenario(MANIFEST, "recon-auth-progression")
+    error = HTTPError("http://idurar-target:8888/api/health", status, "expected", {}, None)
+    with patch.object(runner.urllib.request, "urlopen", side_effect=error):
+        runner.request_step("http://idurar-target:8888", scenario.steps[0])
 
 
 def test_builds_unified_event_from_step() -> None:

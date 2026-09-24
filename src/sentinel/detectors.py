@@ -543,6 +543,84 @@ def detect_malware(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFindi
     )
 
 
+def _shannon_entropy(data: list[float]) -> float:
+    """Shannon entropy of a value distribution (0.0 = uniform, log2(n) = max)."""
+    import math
+    from collections import Counter
+
+    if not data:
+        return 0.0
+    counts = Counter(data)
+    total = len(data)
+    entropy = 0.0
+    for count in counts.values():
+        p = count / total
+        if p > 0:
+            entropy -= p * math.log2(p)
+    return entropy
+
+
+def detect_entropy_anomaly(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
+    """Shannon entropy anomaly on byte-size distribution.
+
+    Flags unusual byte-size patterns that z-score detectors miss.
+    Endpoint-name entropy is not computed here because current
+    NetworkState.edge_summary does not contain DNS query labels;
+    byte-size distribution entropy is the only validated signal.
+    """
+    state, warnings = ctx.state, []
+
+    # Byte-size distribution entropy
+    byte_values = [
+        edge.get("bytes", 0.0) for edge in state.edge_summary if edge.get("bytes", 0) > 0
+    ]
+    byte_entropy = _shannon_entropy(byte_values)
+
+    # Baseline comparison
+    hist_byte_entropy = []
+    for prior in ctx.history:
+        prior_bytes = [e.get("bytes", 0.0) for e in prior.edge_summary if e.get("bytes", 0) > 0]
+        hist_byte_entropy.append(_shannon_entropy(prior_bytes))
+
+    byte_z = _zscore(byte_entropy, hist_byte_entropy)
+
+    # Anomaly = deviation from baseline
+    probability = min(0.9, abs(byte_z) / (Z_SCALE * 0.8))
+
+    evidence = [
+        _evidence(
+            "byte_entropy",
+            "Shannon entropy of byte size distribution",
+            round(byte_entropy, 3),
+        ),
+    ]
+
+    warnings_list = list(warnings)
+    if len(ctx.history) < MIN_HISTORY:
+        warnings_list.append(COLD_START_WARNING)
+
+    if abs(byte_z) > 1.5:
+        direction = "increasing" if byte_z > 0 else "decreasing"
+        evidence.append(
+            StageEvidence(
+                name="entropy_deviation",
+                description=f"Byte entropy z-score: {byte_z:.2f} ({direction})",
+                observed_value=round(byte_z, 2),
+                direction=direction,
+                confidence=0.8,
+            )
+        )
+
+    return _finding(
+        "reconnaissance",  # entropy anomaly is a recon/C2 indicator
+        ctx,
+        probability,
+        evidence,
+        warnings_list,
+        thresholds.recon,
+    )
+
+
 def run_all_detectors(
     state: NetworkState,
     history: tuple[NetworkState, ...],
@@ -572,6 +650,7 @@ def run_all_detectors(
         detect_insider(ctx, active),
         detect_phishing(ctx, active),
         detect_malware(ctx, active),
+        detect_entropy_anomaly(ctx, active),
     ]
 
     # Sequence prediction: fires based on detection history, not current window

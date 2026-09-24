@@ -10,15 +10,15 @@ services:
     ports:
       - "8501:8501"
     environment:
-      # Force Attack buttons run the attack modules from inside this container;
-      # the demo app is reachable by service name on the demo network.
-      SENTINEL_DEMO_TARGET: http://vulnerable-app:5000
+      # Force Attack buttons run attack scripts against Idurar ERP.
+      SENTINEL_DEMO_TARGET: http://idurar-target:8888
+      SENTINEL_API_URL: http://api:8100
     volumes:
       - ./reports:/app/reports
       # Read-only dataset mount: CIC-IDS2017 stays on the host (never baked
       # into the image) while the dashboard's real-data mode can load it.
       - ./data:/app/data:ro
-    networks: [default, demo-net]
+    networks: [default, lab-net]
     restart: unless-stopped
 
   api:
@@ -79,6 +79,98 @@ services:
     restart: "no"
     profiles: ["lab"]
     networks: [lab-net]
+
+  # Multi-phase attack: port scan → brute force → API enum → upload staging
+  # against Idurar.  Produces 50+ events across 4 attack phases so SENTINEL's
+  # detectors fire on real network telemetry.
+  lab-attack-idurar:
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
+    build: .
+    pull_policy: build
+    command:
+      - uv
+      - run
+      - --no-sync
+      - python
+      - scripts/attack_idurar.py
+      - --target
+      - http://idurar-target:8888
+      - --api
+      - http://api:8100
+      - --target-host
+      - idurar-target
+      - --target-port
+      - "8888"
+    environment:
+      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
+    depends_on:
+      - api
+      - idurar-target
+    restart: "no"
+    profiles: ["lab"]
+    networks: [lab-net]
+
+  # Full 9-phase attack suite: DDoS, recon, brute force, injection,
+  # lateral movement, exfiltration, C2 beaconing, insider threat,
+  # malware staging — 127+ events across all attack categories.
+  lab-full-attack:
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
+    build: .
+    pull_policy: build
+    command:
+      - uv
+      - run
+      - --no-sync
+      - python
+      - scripts/full_attack.py
+      - --target
+      - http://idurar-target:8888
+      - --api
+      - http://api:8100
+      - --target-host
+      - idurar-target
+      - --target-port
+      - "8888"
+    environment:
+      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
+    depends_on:
+      - api
+      - idurar-target
+    restart: "no"
+    profiles: ["lab"]
+    networks: [lab-net]
+
+  idurar-target:
+    build:
+      context: ../idurar-erp-crm/backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE: mongodb://host.docker.internal:27017/idurar
+      JWT_SECRET: ${IDURAR_JWT_SECRET:-sentinel-idurar-lab-secret}
+      NODE_ENV: development
+      OPENSSL_CONF: /dev/null
+      PUBLIC_SERVER_FILE: http://idurar-target:8888/
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    expose:
+      - "8888"
+    networks: [lab-net]
+    restart: unless-stopped
+    profiles: ["lab"]
+
+  idurar-frontend:
+    build:
+      context: ../idurar-erp-crm/frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_PROXY_TARGET: http://idurar-target:8888/
+    ports:
+      - "3002:3002"
+    depends_on:
+      - idurar-target
+    networks: [lab-net]
+    restart: unless-stopped
+    profiles: ["lab"]
 
   prometheus:
     image: prom/prometheus:latest
@@ -158,15 +250,9 @@ services:
     profiles: ["realtime"]
 
   # ── demo: vulnerable app + attacks + admin dashboard ────────────────
-  # A complete "attack → detect → respond" demo stack.  The vulnerable
-  # app writes HTTP logs; the scanner tail-copies them into the SENTINEL
-  # push engine (detectors fire on real traffic); the admin dashboard
-  # reads the live alerts and exposes one-click IP ban / unban.
-  #
-  # Start: docker compose --profile demo up -d
-  # Watch: docker compose logs -f demo-sentinel
-  # Admin: http://localhost:5001
-  # Attack: docker compose run --rm demo-attack attacks.brute_force
+  # REMOVED: demo-admin (port 5001) — was attacking vulnerable-app.
+  # Use lab-full-attack or lab-attack-idurar to attack Idurar instead.
+  # Run: docker compose --profile lab run --rm lab-full-attack
   vulnerable-app:
     build: apps/vulnerable
     image: sentinel-demo-app:local
@@ -198,35 +284,6 @@ services:
     depends_on: [api]
     restart: unless-stopped
     profiles: ["demo"]
-
-  demo-admin:
-    build: apps/vulnerable
-    image: sentinel-demo-app:local
-    command: python admin.py
-    ports:
-      - "5001:5001"
-    volumes:
-      - demo-logs:/logs
-    environment:
-      ATTACK_TARGET: http://vulnerable-app:5000
-      SENTINEL_ACCESS_LOG: /logs/access.log
-      SENTINEL_BLOCKLIST: /logs/blocklist.jsonl
-    depends_on: [api, vulnerable-app]
-    restart: unless-stopped
-    profiles: ["demo-admin"]
-
-  demo-attack:
-    image: python:3.12-slim
-    working_dir: /src
-    volumes:
-      - .:/src
-    entrypoint: ["python", "-m"]
-    command: ["apps.vulnerable.attacks.brute_force"]
-    profiles: ["demo"]
-    # Run different attacks:
-    #   docker compose run --rm demo-attack attacks.brute_force
-    #   docker compose run --rm demo-attack attacks.sqli
-    #   docker compose run --rm demo-attack attacks.scan
 
 networks:
   lab-net: {}

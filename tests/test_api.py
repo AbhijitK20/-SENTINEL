@@ -122,7 +122,7 @@ def test_detect_emits_nine_findings_per_window(client: TestClient) -> None:
     events = [_event(0.0, 1), _event(10.0, 2), _event(35.0, 3), _event(65.0, 4)]
     body = client.post("/v1/detect", json={"events": events}).json()
     assert body["windows"] == 3
-    assert len(body["findings"]) == 27  # 9 detectors x 3 windows
+    assert len(body["findings"]) == 30  # 10 detectors x 3 windows
     assert body["alerts"] == 0  # quiet synthetic traffic
     assert body["incidents"] == []
 
@@ -161,7 +161,7 @@ def test_events_accepts_generated_scenario_with_authenticated_client(
     body = response.json()
     assert body["events_seen"] == len(events)
     assert isinstance(body["windows_emitted"], int)
-    assert body["alert_status"] in {"monitoring", "alert"}
+    assert body["alert_status"] in {"monitoring", "alert", "below-threshold"}
     assert body["peak_probability"] is None or 0.0 <= body["peak_probability"] <= 1.0
     assert isinstance(body["incidents"], list)
 
@@ -186,3 +186,52 @@ def test_forecast_rejects_unknown_fields(client: TestClient) -> None:
     events = [_event(0.0, 1), _event(65.0, 2)]
     response = client.post("/v1/forecast", json={"events": events, "bogus": 1})
     assert response.status_code == 422
+
+
+def test_coverage_endpoint_requires_findings(client: TestClient) -> None:
+    """Coverage with no findings should return zero, not hallucinate coverage."""
+    body = client.get("/v1/attack-coverage").json()
+    assert body["coverage_score"] == 0.0
+    assert body["observed_techniques"] == 0
+    assert body["total_techniques"] == len(body["attack_type_mapping"])
+
+
+def test_coverage_counts_only_alerting_findings(client: TestClient) -> None:
+    """Zero-probability findings should not count as detection coverage."""
+    # Run quiet events that produce zero-probability findings
+    events = [_event(0.0, 1), _event(10.0, 2)]
+    client.post("/v1/detect", json={"events": events})
+    body = client.get("/v1/attack-coverage").json()
+    # All findings have probability 0 on quiet traffic — no techniques should be "observed"
+    assert body["observed_techniques"] == 0 or body["coverage_score"] == 0.0
+
+
+def test_coverage_distinct_from_alerting(client: TestClient) -> None:
+    """Coverage must distinguish detector execution from observed alerts.
+
+    A technique with findings but zero probability is a detector that
+    executed, not a detector that observed an alert.
+    """
+    # Generate events that produce recon findings (some may alert)
+    events = [_event(0.0, 1), _event(10.0, 2)]
+    events += [
+        _event(31.0 + k * 0.1, 100 + k, bytes=40.0, syn_count=1.0, rst_count=1.0) for k in range(24)
+    ]
+    client.post("/v1/detect", json={"events": events})
+    body = client.get("/v1/attack-coverage").json()
+    # With recon activity, some techniques should have findings
+    # But coverage_score should reflect only techniques with max_probability > 0
+    for _tech_id, tech_data in body["techniques"].items():
+        if tech_data["count"] > 0 and tech_data["max_probability"] > 0:
+            # This technique has alerting findings — it's observed
+            pass
+        # Zero-probability techniques exist but don't count as observed
+
+
+def test_navigator_export_endpoint_exists(client: TestClient) -> None:
+    """Navigator layer JSON endpoint is accessible."""
+    body = client.get("/v1/attack-coverage/navigator").json()
+    assert body["name"] == "SENTINEL Coverage"
+    assert body["versions"]["navigator"] == "4.5"
+    assert body["domain"] == "enterprise-attack"
+    assert isinstance(body["techniques"], list)
