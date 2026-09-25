@@ -21,9 +21,11 @@ from sentinel.case_studies import (
     packet_flow_steps,
     replay_topology,
 )
+from sentinel.cic_ids2017 import DATASET_ID as CIC_DATASET_ID
 from sentinel.cic_ids2017 import build_labelled_states, load_flow_csv
 from sentinel.config import BaselineConfig
 from sentinel.dashboard.network_graphs import kill_chain_figure, topology_figure
+from sentinel.dashboard.release import load_release_runs, release_dataset_id
 from sentinel.dashboard.state import LEDGER_PATH
 from sentinel.dashboard.tabs import live as _live_tab
 from sentinel.evaluation import evaluate_replay
@@ -32,7 +34,7 @@ from sentinel.ledger import AlertLedger
 from sentinel.predict import DECISION_THRESHOLD, artifacts_from_runs, forecast
 from sentinel.report import render_report
 from sentinel.schemas import SPLIT_NAMES
-from sentinel.synthetic import generate_labelled_states
+from sentinel.synthetic import DATASET_ID, generate_labelled_states
 from sentinel.targets import (
     build_sequence_samples,
     make_split_manifest,
@@ -108,7 +110,9 @@ with st.sidebar:
     selected_cic_days: list[str] = []
     if data_mode == "Real CIC-IDS2017 attacks":
         if not available_days:
-            st.warning("CIC-IDS2017 CSVs not found under data/raw; falling back to synthetic.")
+            st.warning(
+                f"{CIC_DATASET_ID} CSVs not found under data/raw; falling back to {DATASET_ID}."
+            )
             data_mode = "Synthetic replay"
         else:
             day_labels = {stem: label for stem, label in available_days}
@@ -122,7 +126,7 @@ with st.sidebar:
                 "Pick at least 3 days so every split can hold an attack class.",
             )
             if not selected_cic_days:
-                st.warning("Select at least one attack day (or switch back to synthetic).")
+                st.warning(f"Select at least one attack day (or switch back to {DATASET_ID}).")
     st.divider()
     st.subheader("Settings")
     scenario_count = st.slider("Scenarios", min_value=3, max_value=15, value=6)
@@ -313,7 +317,7 @@ if data_mode == "Real CIC-IDS2017 attacks" and selected_cic_days:
         int(sequence_length),
         int(forecast_horizon),
     )
-    dataset_id = "CIC-IDS2017 (TrafficLabelling, attack days)"
+    dataset_id = f"{CIC_DATASET_ID} (TrafficLabelling, attack days)"
 else:
     labelled, samples, manifest = generate_data(
         scenario_count,
@@ -323,7 +327,7 @@ else:
         int(sequence_length),
         int(forecast_horizon),
     )
-    dataset_id = "synthetic-recon-lateral-v2"
+    dataset_id = DATASET_ID
 
 # Invalidate stale trained models when the underlying dataset changes:
 # the hash covers the mode, day subset, seed, and windowing, so switching
@@ -351,15 +355,27 @@ if train_btn:
     st.session_state["baseline_run"] = baseline_run
     st.session_state["temporal_run"] = temporal_run
     st.session_state["schema"] = schema
+    st.session_state["from_release"] = False
     st.success(
         f"Training complete in {baseline_run.result.training_seconds * 1000:.1f}ms (baseline)"
     )
     st.rerun()
 
-# Check if trained
+# Check if trained. The committed release bundle is preferred so a fresh
+# session never retrains: it is checksummed and self-contained. Training stays
+# available in the sidebar and overrides this on click.
 if "baseline_run" not in st.session_state:
-    st.info("Click **Train / Retrain** in the sidebar to start.")
-    st.stop()
+    _release_runs = load_release_runs()
+    if _release_runs is not None:
+        (
+            st.session_state["baseline_run"],
+            st.session_state["temporal_run"],
+            st.session_state["schema"],
+        ) = _release_runs
+        st.session_state["from_release"] = True
+    else:
+        st.info("Click **Train / Retrain** in the sidebar to start.")
+        st.stop()
 
 baseline_run = st.session_state.get("baseline_run")
 temporal_run = st.session_state.get("temporal_run")
@@ -368,6 +384,22 @@ schema = st.session_state.get("schema")
 # In-memory artifacts for the inference layer, including the trained
 # per-horizon temporal weights when available.
 loaded = artifacts_from_runs(baseline_run, temporal_run=temporal_run)
+
+# Provenance, stated once. The dataset name comes from the run that produced
+# the weights actually in use — not from whichever radio button is selected.
+if st.session_state.get("from_release"):
+    _recorded = release_dataset_id()
+    _origin = (
+        f"Training dataset: `{_recorded}`."
+        if _recorded
+        else "This bundle does not record its training dataset id."
+    )
+    st.caption(f"Model: committed release bundle (`models/release/v1`) — no retraining. {_origin}")
+else:
+    st.caption(
+        f"Model: trained this session on `{dataset_id}`. "
+        "Results validate the pipeline; they are not a real-traffic benchmark."
+    )
 
 # ── Tabs ──────────────────────────────────────────────────────────────
 (
@@ -1180,7 +1212,7 @@ with tab_demo:
         data=render_report(
             forecast(demo_states[:recon_cut], loaded, max_horizon=forecast_horizon),
             scenario_id=demo_scenario,
-            dataset_id="synthetic-recon-lateral-v1",
+            dataset_id=dataset_id,
         ),
         file_name=f"demo_report_{demo_scenario}.md",
         mime="text/markdown",

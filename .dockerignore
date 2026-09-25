@@ -20,3 +20,9 @@ reports/live
 *.onnx
 deliverables
 tools/wheels
+
+# The release bundle is the shipped deliverable: predict.load_artifacts() must
+# work from a fresh clone or container with no training step. Re-include it
+# after the broad artifact exclusions above.
+!models/release
+!models/release/**

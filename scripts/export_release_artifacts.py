@@ -57,6 +57,12 @@ def _copy_file(src: Path, dst: Path, files: dict[str, Path], base: Path) -> None
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--dataset-id",
+        required=True,
+        help="Dataset these artifacts were trained on. Recorded once in "
+        "MANIFEST.json and PROVENANCE.md so the bundle states its own origin.",
+    )
+    parser.add_argument(
         "--baseline",
         default="reports/generated/baseline",
         help="Directory containing baseline_result.json, baseline_model.joblib",
@@ -134,6 +140,7 @@ def main() -> None:
         f"# Provenance\n\n"
         f"- Exported: {datetime.now(UTC).isoformat()}\n"
         f"- Git SHA: `{git_sha}`\n"
+        f"- Dataset: `{args.dataset_id}`\n"
         f"- Python: {platform.python_version()}\n"
         f"- Platform: {platform.platform()}\n"
         f"- Config: `{config_src}`\n"
@@ -154,6 +161,7 @@ def main() -> None:
         "version": "release-v1",
         "created_at": datetime.now(UTC).isoformat(),
         "git_sha": git_sha,
+        "dataset_id": args.dataset_id,
         "python": platform.python_version(),
         "platform": platform.platform(),
         "config": str(config_src),
