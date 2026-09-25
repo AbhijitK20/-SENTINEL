@@ -1,8 +1,16 @@
 """Comprehensive attack suite against Idurar ERP — all attack types.
 
-Runs 9 distinct attack phases that produce real HTTP traffic detectable by
-SENTINEL's attack-type detectors.  Each phase generates UnifiedEvents pushed
-to /v1/events.
+Runs 9 distinct attack phases that produce real HTTP/socket traffic against
+the target and push the resulting UnifiedEvents to /v1/events.
+
+Honesty note: the phases issue genuine requests and the response bytes/statuses
+recorded here are real, but in isolation none of them currently trip their
+intended SENTINEL detector. The detectors read window aggregates such as
+``bytes``, ``failed_auth`` and ``tcp_flags``; these events carry
+``bytes_sent``/``bytes_received``/``failed_auth_per_min`` instead, so the
+aggregate the detector reads stays 0.  See ``src/sentinel/attack_phases.py``
+for the per-phase target detector and technique.  Coverage must be measured
+from /v1/attack-coverage, not assumed from this script.
 
 Attack types covered:
   1. DDoS simulation       — rapid-fire requests (flow rate spike)
@@ -27,9 +35,16 @@ import time
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from urllib.error import HTTPError, URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from sentinel.attack_phases import (  # noqa: E402
+    PHASE_NAMES,
+    PHASES,
+    SUMMARY_MARKER,
+    phase_summary,
+)
 from sentinel.schemas import UnifiedEvent  # noqa: E402
 
 EVENT_SPACING = 31  # seconds between events (must exceed stride)
@@ -598,8 +613,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--phases",
         nargs="*",
-        help="Run only these phases: ddos, recon, brute_force, injection, "
-        "lateral, exfil, c2, insider, malware",
+        choices=PHASE_NAMES,
+        help=f"Run only these phases: {', '.join(PHASE_NAMES)}",
+    )
+    parser.add_argument(
+        "--summary-json",
+        action="store_true",
+        help="Print a machine-readable per-phase extraction summary",
     )
     args = parser.parse_args(argv)
 
@@ -610,75 +630,30 @@ def main(argv: list[str] | None = None) -> int:
 
     base = datetime.now(UTC)
     all_events: list[UnifiedEvent] = []
+    per_phase: list[dict[str, Any]] = []
 
-    all_phases = [
-        (
-            "ddos",
-            lambda: phase_ddos(
-                args.target, base + timedelta(seconds=len(all_events) * EVENT_SPACING)
-            ),
+    runners = {
+        "ddos": lambda offset: phase_ddos(args.target, base + timedelta(seconds=offset)),
+        "recon": lambda offset: phase_recon(
+            args.target_host, args.target_port, base + timedelta(seconds=offset)
         ),
-        (
-            "recon",
-            lambda: phase_recon(
-                args.target_host,
-                args.target_port,
-                base + timedelta(seconds=len(all_events) * EVENT_SPACING),
-            ),
+        "brute_force": lambda offset: phase_brute_force(
+            args.target, base + timedelta(seconds=offset)
         ),
-        (
-            "brute_force",
-            lambda: phase_brute_force(
-                args.target, base + timedelta(seconds=len(all_events) * EVENT_SPACING)
-            ),
-        ),
-        (
-            "injection",
-            lambda: phase_injection(
-                args.target, base + timedelta(seconds=len(all_events) * EVENT_SPACING)
-            ),
-        ),
-        (
-            "lateral",
-            lambda: phase_lateral(
-                args.target, base + timedelta(seconds=len(all_events) * EVENT_SPACING)
-            ),
-        ),
-        (
-            "exfil",
-            lambda: phase_exfil(
-                args.target, base + timedelta(seconds=len(all_events) * EVENT_SPACING)
-            ),
-        ),
-        (
-            "c2",
-            lambda: phase_c2(
-                args.target, base + timedelta(seconds=len(all_events) * EVENT_SPACING)
-            ),
-        ),
-        (
-            "insider",
-            lambda: phase_insider(
-                args.target, base + timedelta(seconds=len(all_events) * EVENT_SPACING)
-            ),
-        ),
-        (
-            "malware",
-            lambda: phase_malware(
-                args.target, base + timedelta(seconds=len(all_events) * EVENT_SPACING)
-            ),
-        ),
-    ]
+        "injection": lambda offset: phase_injection(args.target, base + timedelta(seconds=offset)),
+        "lateral": lambda offset: phase_lateral(args.target, base + timedelta(seconds=offset)),
+        "exfil": lambda offset: phase_exfil(args.target, base + timedelta(seconds=offset)),
+        "c2": lambda offset: phase_c2(args.target, base + timedelta(seconds=offset)),
+        "insider": lambda offset: phase_insider(args.target, base + timedelta(seconds=offset)),
+        "malware": lambda offset: phase_malware(args.target, base + timedelta(seconds=offset)),
+    }
+    selected = [p["name"] for p in PHASES if not args.phases or p["name"] in args.phases]
 
-    if args.phases:
-        phases = [(n, fn) for n, fn in all_phases if n in args.phases]
-    else:
-        phases = all_phases
-
-    for _name, phase_fn in phases:
+    for name in selected:
         if not args.dry_run:
-            events = phase_fn()
+            events = runners[name](len(all_events) * EVENT_SPACING)
             all_events.extend(events)
+            per_phase.append(phase_summary(name, events))
         time.sleep(0.5)
 
     print(f"\n{'=' * 60}")
@@ -688,19 +663,24 @@ def main(argv: list[str] | None = None) -> int:
         print("[DRY RUN] No events pushed")
         return 0
 
+    push_result: dict[str, Any] = {}
     if all_events:
         print("Pushing to SENTINEL...")
-        result = push(args.api, args.api_key, all_events)
-        print(f"  events_seen:      {result['events_seen']}")
-        print(f"  windows_emitted:  {result['windows_emitted']}")
-        print(f"  alert_status:     {result['alert_status']}")
-        print(f"  peak_probability: {result.get('peak_probability')}")
-        if result.get("incidents"):
-            print(f"  incidents:        {len(result['incidents'])}")
-            for inc in result["incidents"]:
+        push_result = push(args.api, args.api_key, all_events)
+        print(f"  events_seen:      {push_result['events_seen']}")
+        print(f"  windows_emitted:  {push_result['windows_emitted']}")
+        print(f"  alert_status:     {push_result['alert_status']}")
+        print(f"  peak_probability: {push_result.get('peak_probability')}")
+        if push_result.get("incidents"):
+            print(f"  incidents:        {len(push_result['incidents'])}")
+            for inc in push_result["incidents"]:
                 level = inc.get("risk", {}).get("level", "N/A")
                 score = inc.get("risk", {}).get("score", "N/A")
                 print(f"    - risk={level} ({score})")
+
+    if args.summary_json:
+        print(SUMMARY_MARKER)
+        print(json.dumps({"phases": per_phase, "push": push_result}, default=str))
 
     print("\nDone.")
     return 0

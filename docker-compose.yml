@@ -13,6 +13,10 @@ services:
       # Force Attack buttons run attack scripts against Idurar ERP.
       SENTINEL_DEMO_TARGET: http://idurar-target:8888
       SENTINEL_API_URL: http://api:8100
+      # The recon phase opens real TCP sockets, so it needs the container
+      # hostname — not the dashboard's own localhost.
+      SENTINEL_TARGET_HOST: idurar-target
+      SENTINEL_TARGET_PORT: "8888"
     volumes:
       - ./reports:/app/reports
       # Read-only dataset mount: CIC-IDS2017 stays on the host (never baked
