@@ -31,12 +31,20 @@ Two properties of that fit are recorded on the model rather than hidden:
 
 - Inputs are standardized before the ridge penalty, because raw flow counters
   span three orders of magnitude and would otherwise let one column own the fit.
-- The fitted map is projected to a non-expansive spectral norm. A one-step
-  least-squares optimum is expansive (its spectral norm is orders of magnitude
-  above 1 on replay data), so rolling it out diverges; the projection keeps the
-  recursion bounded at the cost of one-step accuracy, and ``stability_clip``
-  records how much had to be scaled away. ``transition-rollout-v2`` added both
-  fields, so a v1 artifact fails to load rather than being silently mis-applied.
+- The fitted map is projected to a non-expansive spectral norm, and
+  ``stability_clip`` records how much had to be scaled away.
+
+``transition-rollout-v3`` replaced the one-step fit with a genuine multi-step
+one. v2 fitted the one-step least-squares optimum and stabilised it afterwards,
+on the stated grounds that a K-step objective "is not a linear least-squares
+problem". That reasoning was wrong in the way that mattered: unrolling is
+polynomial in the weights, but for a *linear* map the K-step prediction is a
+fixed linear function of the concatenated history, so the joint objective is
+smooth and differentiable in the parameters. v3 minimises it directly, by Adam on
+the exact gradient, and records ``multistep_objective`` alongside the
+``one_step_objective`` of the fit it started from - so the improvement is a
+stored measurement rather than a claim. Because those fields are load-bearing,
+a v2 artifact fails to load rather than being silently mis-applied.
 """
 
 from __future__ import annotations
@@ -44,7 +52,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from sentinel.features import FeatureSchema, vectorize_states
 from sentinel.predict import (
@@ -57,7 +65,7 @@ from sentinel.predict import (
 from sentinel.schemas import Forecast, NetworkState, ProbabilityPoint
 from sentinel.world_model.imagine import OpenLoopError
 
-ROLLOUT_MODEL_VERSION = "transition-rollout-v2"
+ROLLOUT_MODEL_VERSION = "transition-rollout-v3"
 
 
 class RolloutTransitionModel(BaseModel):
@@ -73,7 +81,10 @@ class RolloutTransitionModel(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    model_version: str = ROLLOUT_MODEL_VERSION
+    # Required, not defaulted: a v2 artifact carries no multi-step fields, and
+    # silently filling in the new version would ship it as a v3 map. Load-bearing
+    # strings fail loudly instead.
+    model_version: str
     history_length: int = Field(ge=1)
     feature_names: list[str] = Field(min_length=1)
     coefficients: list[list[float]]  # [history_length * width, width]
@@ -84,6 +95,28 @@ class RolloutTransitionModel(BaseModel):
     training_windows: int = Field(ge=1)
     spectral_norm: float = Field(ge=0.0)
     stability_clip: float = Field(default=1.0, gt=0.0)
+    # The multi-step fit is scored against the one-step optimum it replaced,
+    # both measured after the stability projection, so "this is better than the
+    # obvious fit" is a stored measurement about the maps that actually ship.
+    fit_steps: int = Field(default=1, ge=1)
+    multistep_objective: float = Field(default=0.0, ge=0.0)
+    one_step_objective: float = Field(default=0.0, ge=0.0)
+    # Spectral norm *before* the projection. `spectral_norm` is always the limit
+    # after projection, so it says nothing; these two are what reveal how
+    # expansive the least-squares fit wanted to be, and therefore how much of it
+    # the projection had to throw away.
+    fitted_spectral_norm: float = Field(default=0.0, ge=0.0)
+    one_step_fitted_spectral_norm: float = Field(default=0.0, ge=0.0)
+
+    @model_validator(mode="after")
+    def _check_version(self) -> RolloutTransitionModel:
+        if self.model_version != ROLLOUT_MODEL_VERSION:
+            raise ValueError(
+                f"transition model version {self.model_version!r} cannot be loaded by "
+                f"{ROLLOUT_MODEL_VERSION!r}: the multi-step fit fields are absent, so "
+                "the artifact would be silently mis-applied. Refit it."
+            )
+        return self
 
 
 class RolloutDiagnostics(BaseModel):
@@ -128,22 +161,34 @@ def fit_transition_model(
         if item.scenario_id in allowed:
             by_scenario.setdefault(item.scenario_id, []).append(item)
 
-    X_rows: list[np.ndarray] = []
-    Y_rows: list[np.ndarray] = []
     feature_names: list[str] | None = None
     for scenario_id in sorted(by_scenario):
         states = sorted(by_scenario[scenario_id], key=lambda item: item.state.window_start)
-        for index in range(history_length - 1, len(states) - 1):
-            history = states[index - history_length + 1 : index + 1]
-            target = states[index + 1]
-            names = sorted(history[-1].state.features)
+        for history in states:
+            names = sorted(history.state.features)
             if feature_names is None:
                 feature_names = names
             elif names != feature_names:
                 raise ValueError(
                     "inconsistent feature sets across states; refit the feature schema first"
                 )
-            X_rows.append(
+
+    if feature_names is None:
+        raise ValueError("not enough contiguous history to fit the transition model")
+    names = feature_names
+
+    if fit_steps < 1:
+        raise ValueError("fit_steps must be positive")
+
+    # Multi-step targets: each sample needs `fit_steps` real future windows, so
+    # only the interior of each scenario contributes. Still training data only.
+    step_targets: list[list[np.ndarray]] = [[] for _ in range(fit_steps)]
+    kept_rows: list[np.ndarray] = []
+    for scenario_id in sorted(by_scenario):
+        states = sorted(by_scenario[scenario_id], key=lambda item: item.state.window_start)
+        for index in range(history_length - 1, len(states) - fit_steps):
+            history = states[index - history_length + 1 : index + 1]
+            kept_rows.append(
                 np.concatenate(
                     [
                         np.fromiter(
@@ -153,46 +198,55 @@ def fit_transition_model(
                     ]
                 )
             )
-            Y_rows.append(np.fromiter((target.state.features[n] for n in names), dtype=float))
+            for step in range(fit_steps):
+                step_targets[step].append(
+                    np.fromiter(
+                        (states[index + 1 + step].state.features[n] for n in names), dtype=float
+                    )
+                )
+    if not kept_rows:
+        raise ValueError(
+            f"not enough contiguous history to fit a {fit_steps}-step transition model"
+        )
+    Xm = np.stack(kept_rows)
+    Ym = [np.stack(rows) for rows in step_targets]
 
-    if feature_names is None or not X_rows:
-        raise ValueError("not enough contiguous history to fit the transition model")
-
-    X = np.stack(X_rows)
-    Y = np.stack(Y_rows)
-
-    # Standardize inputs; every fit below is on the standardized problem.
-    x_mean = X.mean(axis=0)
-    x_scale = X.std(axis=0)
+    x_mean = Xm.mean(axis=0)
+    x_scale = Xm.std(axis=0)
     x_scale[x_scale == 0.0] = 1.0
-    Xs = (X - x_mean) / x_scale
-    y_mean = Y.mean(axis=0)
-    Yc = Y - y_mean
+    Xs = (Xm - x_mean) / x_scale
+    y_mean = np.mean([y.mean(axis=0) for y in Ym], axis=0)
+    Ys = [(y - y_mean) for y in Ym]
 
-    if fit_steps < 1:
-        raise ValueError("fit_steps must be positive")
-    coefficients = _solve_multi_step(Xs, Yc, ridge, fit_steps)
+    # Two candidates, both fitted in the standardized space:
+    #   one  - the v2 fit: the one-step ridge optimum
+    #   multi- the v3 fit: the K-step objective minimised directly
+    one_weights = _ridge(Xs, Ys[0], ridge).T.astype(float)
+    one_bias = np.zeros(len(names), dtype=float)
+    multi_weights, multi_bias = _multistep_ridge(Xs, Ys, ridge, fit_steps)
 
-    # Stability projection. A one-step least-squares fit is minimised, not
-    # stable: the map from a flattened history to the next window is routinely
-    # expansive, and rolling an expansive map out is a divergence, not a
-    # simulation. The map is rectangular (history*width -> width), so the
-    # governing quantity is its largest singular value: scaling that to
-    # <= stability_limit makes the recursion non-expansive, at the cost of some
-    # one-step accuracy. Both numbers are recorded so the cost is visible.
-    norm = float(np.linalg.norm(coefficients, 2))
-    clip = 1.0
-    if stability_limit > 0 and norm > stability_limit:
-        clip = stability_limit / norm
-        coefficients = coefficients * clip
-        norm = stability_limit
+    # Stability projection, applied to both so the comparison is like-for-like.
+    # Minimising error at +1..+K does not make a map safe to recurse: the
+    # objective is only evaluated up to K, and the fitted map can still be
+    # expansive past that. `stability_clip` records what the projection cost.
+    one_weights, one_bias, one_fitted, one_clip = _project(one_weights, one_bias, stability_limit)
+    multi_weights, multi_bias, multi_fitted, clip = _project(
+        multi_weights, multi_bias, stability_limit
+    )
 
-    intercept = y_mean - (x_mean / x_scale) @ coefficients
-    residuals = Y - (Xs @ coefficients + intercept)
+    # Costs are measured *after* projection, on the maps that actually ship.
+    one_step_cost = _multistep_cost(Xs, Ys, fit_steps, one_weights, one_bias)
+    final_cost = _multistep_cost(Xs, Ys, fit_steps, multi_weights, multi_bias)
+
+    coefficients = multi_weights.T  # (d, width)
+    intercept = y_mean - (x_mean / x_scale) @ coefficients + multi_bias
+
+    residuals = Ym[0] - (Xm @ coefficients + intercept)
     residual_scale = residuals.std(axis=0)
     residual_scale[residual_scale == 0.0] = 1.0
 
     return RolloutTransitionModel(
+        model_version=ROLLOUT_MODEL_VERSION,
         history_length=history_length,
         feature_names=feature_names,
         coefficients=coefficients.tolist(),
@@ -200,25 +254,133 @@ def fit_transition_model(
         residual_scale=residual_scale.tolist(),
         input_means=x_mean.tolist(),
         input_scales=x_scale.tolist(),
-        training_windows=len(X_rows),
-        spectral_norm=norm,
+        training_windows=len(kept_rows),
+        spectral_norm=float(np.linalg.norm(multi_weights, 2)),
         stability_clip=clip,
+        fit_steps=fit_steps,
+        multistep_objective=final_cost,
+        one_step_objective=one_step_cost,
+        fitted_spectral_norm=multi_fitted,
+        one_step_fitted_spectral_norm=one_fitted,
     )
 
 
-def _solve_multi_step(
-    standardized_history: np.ndarray, targets: np.ndarray, ridge: float, fit_steps: int
-) -> np.ndarray:
-    """Ridge fit of the next-window map, with the rollout steps left to the caller.
+def _project(
+    weights: np.ndarray, bias: np.ndarray, stability_limit: float
+) -> tuple[np.ndarray, np.ndarray, float, float]:
+    """Scale a map to a non-expansive spectral norm.
 
-    A genuinely multi-step objective (minimise the error at +1..+K) is *not* a
-    linear least-squares problem: unrolling a linear map is linear in the
-    observation but polynomial in the weights, so it needs iterative
-    optimisation. This prototype therefore fits the one-step optimum and reports
-    the consequence honestly — see the spectral norm recorded on the model, which
-    is the number that shows the one-step optimum is not a usable simulator.
+    Returns the projected weights, bias, the *pre*-projection norm, and the
+    clip factor. The pre-projection norm is the informative number: it is how
+    expansive the fit wanted to be, and ``limit / pre_norm`` is how much of the
+    fit the projection had to discard.
     """
-    return _ridge(standardized_history, targets, ridge)
+    fitted = float(np.linalg.norm(weights, 2))
+    if stability_limit > 0 and fitted > stability_limit:
+        clip = stability_limit / fitted
+        return weights * clip, bias * clip, fitted, clip
+    return weights, bias, fitted, 1.0
+
+
+def _multistep_cost(
+    history: np.ndarray,
+    targets: list[np.ndarray],
+    steps: int,
+    weights: np.ndarray,
+    bias: np.ndarray,
+) -> float:
+    """Sum of squared error at steps 1..K for a candidate map."""
+    width = targets[0].shape[1]
+    current = history
+    total = 0.0
+    for step in range(steps):
+        state = current @ weights.T + bias
+        total += float(np.sum((state - targets[step]) ** 2))
+        current = np.concatenate([current[:, width:], state], axis=1)
+    return total
+
+
+def _multistep_ridge(
+    history: np.ndarray,
+    targets: list[np.ndarray],
+    ridge: float,
+    steps: int,
+    iterations: int = 400,
+) -> tuple[np.ndarray, np.ndarray, float, float]:
+    """Fit the transition map to minimise error at steps 1..K jointly.
+
+    The previous version of this module claimed a multi-step objective was not a
+    linear least-squares problem, because unrolling a map is polynomial in the
+    weights. That is true of the weights and irrelevant to the solve: for a
+    *linear* map, ``S(t+k) = A^k S(t) + (I + A + ... + A^{k-1})b`` is a fixed
+    linear function of the concatenated history, so the joint objective is smooth
+    and differentiable in ``(A, b)``. It is therefore minimised directly, by
+    Adam on the exact gradient, instead of approximating it with the one-step
+    optimum and stabilising afterwards.
+
+    Returns ``(coefficients, intercept)`` in the standardized space.
+    """
+    n, d = history.shape
+    width = targets[0].shape[1]
+    weight = 1.0 / (n * width * steps)
+
+    def unroll(weights: np.ndarray, bias: np.ndarray) -> tuple[list[np.ndarray], list[np.ndarray]]:
+        """Simulate K steps, returning the per-step inputs and predictions.
+
+        The flattened history is ``history_length`` windows wide. After one step
+        the prediction is a *single* window, so the next step's history is the
+        old history with its oldest window dropped and the predicted window
+        appended - not another shift of a single window.
+        """
+        sources: list[np.ndarray] = []
+        simulated: list[np.ndarray] = []
+        current_history = history
+        for _ in range(steps):
+            sources.append(current_history)
+            state = current_history @ weights.T + bias
+            simulated.append(state)
+            current_history = np.concatenate([current_history[:, width:], state], axis=1)
+        return sources, simulated
+
+    # Start from the one-step optimum: a sane point, and the map the caller
+    # fits separately as the like-for-like comparison.
+    a = _ridge(history, targets[0], ridge).T.astype(float)  # (width, d)
+    b = np.zeros(width, dtype=float)
+
+    m_a, v_a = np.zeros_like(a), np.zeros_like(a)
+    m_b, v_b = np.zeros_like(b), np.zeros_like(b)
+    beta1, beta2, eps = 0.9, 0.999, 1e-8
+    for iteration in range(1, iterations + 1):
+        sources, simulated = unroll(a, b)
+        grad_a = np.zeros_like(a)
+        grad_b = np.zeros_like(b)
+        grad_history_next = np.zeros((n, d))
+        for index in range(steps - 1, -1, -1):
+            grad_state = 2.0 * (simulated[index] - targets[index])
+            if index + 1 < steps:
+                # The next step's history is [old[..., width:], this state].
+                grad_state = grad_state + grad_history_next[:, -width:]
+            grad_history = grad_state @ a
+            if index + 1 < steps:
+                # H[k+1] = concat(H[k][:, width:], state): the surviving columns
+                # of H[k] land in H[k+1]'s leading columns.
+                grad_history[:, width:] += grad_history_next[:, : d - width]
+            grad_a += grad_state.T @ sources[index]
+            grad_b += grad_state.sum(axis=0)
+            grad_history_next = grad_history
+        grad_a = grad_a * weight + 2.0 * ridge * a
+        grad_b = grad_b * weight
+        m_a = beta1 * m_a + (1 - beta1) * grad_a
+        v_a = beta2 * v_a + (1 - beta2) * grad_a * grad_a
+        m_b = beta1 * m_b + (1 - beta1) * grad_b
+        v_b = beta2 * v_b + (1 - beta2) * grad_b * grad_b
+        step_size = 0.01 / (1.0 + 0.005 * iteration)
+        correction1 = 1 - beta1**iteration
+        correction2 = 1 - beta2**iteration
+        a = a - step_size * (m_a / correction1) / (np.sqrt(v_a / correction2) + eps)
+        b = b - step_size * (m_b / correction1) / (np.sqrt(v_b / correction2) + eps)
+
+    return a, b
 
 
 def _ridge(design: np.ndarray, targets: np.ndarray, ridge: float) -> np.ndarray:
@@ -343,6 +505,7 @@ def rollout_forecast(
         warnings=[
             "Timeline produced by recursive state rollout (transition-rollout); "
             "probabilities are classifier scores on simulated states, not observed windows.",
+            *_stability_warnings(transition_model),
         ],
     )
     # Attach lead time and threshold-aware warnings.
@@ -418,6 +581,28 @@ class _WarningsStub:
     """Minimal artifacts-like view for shared warning logic (no temporal result)."""
 
     temporal_result = None
+
+
+# A clip below this means the stability projection discarded essentially the
+# whole fitted map, and the "simulation" is close to a constant predictor. That
+# is a real, measured property of the linear transition model on this data, and
+# it has to travel with the forecast: a reader comparing this against the world
+# model needs to know the linear side is not a like-for-like competitor.
+CRUSHED_CLIP = 1e-3
+
+
+def _stability_warnings(transition_model: RolloutTransitionModel) -> list[str]:
+    if transition_model.stability_clip >= CRUSHED_CLIP:
+        return []
+    return [
+        f"Stability projection discarded {1.0 / transition_model.stability_clip:.3g}x of "
+        f"the fitted transition map (pre-projection spectral norm "
+        f"{transition_model.fitted_spectral_norm:.4g} against a limit of "
+        f"{transition_model.spectral_norm:.2g}), so this rollout is close to a "
+        f"constant predictor. Treat it as a stability reference, not a working "
+        f"simulator, and do not read a comparison against the world model as "
+        f"like-for-like."
+    ]
 
 
 __all__ = [
