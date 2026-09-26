@@ -36,6 +36,9 @@ class Explanation:
     risk_score: float
     stage_probs: dict[str, float]
     feature_attributions: list[FeatureAttribution]
+    # Retained for contract compatibility and never populated: the temporal
+    # model is a GRU (no attention weights) and no graph encoder is trained or
+    # shipped. Read these as absence, not as a claim about attention.
     temporal_attention: np.ndarray | None = None
     graph_attention: np.ndarray | None = None
     counterfactual: Counterfactual | None = None
