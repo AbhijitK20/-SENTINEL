@@ -209,7 +209,7 @@ docker compose logs -f demo-sensor demo-attacker
 - Synthetic replay validates pipeline behavior, not production detection performance
 - World-model open-loop skill is measured on synthetic replay only. It degrades with horizon and no horizon is free
 - Imagination does not add lead time on the synthetic set: it matches during-attack detection with a zero false-early rate, but never fires before the attack starts — the per-horizon nowcast is what warns early
-- The linear transition baseline cannot simulate: its one-step map is expansive, and stabilizing it degenerates to a constant. A multi-step fit is not implemented
+- The linear transition baseline cannot simulate: both the one-step and the new multi-step fits are wildly expansive, and the stability projection discards ~99.999% of either, so the shipped linear map is close to a constant predictor. **The world model's +0.189 open-loop skill is therefore not a like-for-like comparison** — it beats a broken reference, and `rollout_forecast` now emits that caveat on the forecast itself. See `docs/KNOWN_LIMITATIONS.md`
 - Packet-level features only reach the model when the input actually contains packet events; a flow CSV produces flow features only and the forecast says so
 - **The CIC-IDS2017 dataset is not in this repository and is not downloaded by it.** `data/raw/` is gitignored. The real-data protocol is implemented and exercised on a generated CIC-schema fixture, which proves the code path but measures nothing. Real numbers require the licensed CSVs, and `run_real_benchmark.py` derives its claim status from the input so a fixture run can never be quoted as a result
 - The trust ledger is a hash chain, not a blockchain — it's the integration seam for a future permissioned chain

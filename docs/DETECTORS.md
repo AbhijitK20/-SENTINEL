@@ -96,12 +96,18 @@ not a detection.
 
 ## Known limitations
 
-- Trained on/validated against synthetic replay only; real-traffic detector
-  evaluation is future work (the CIC-trained forecaster benchmarks live in
-  `REAL_BENCHMARK.md`). The Phase 4 detectors are validated quiet-on-benign
-  and by unit tests only — no attack scenario exercises them yet.
+- Trained on/validated against synthetic replay only. **No real-traffic detector
+  evaluation exists for this repository** — the CIC-IDS2017 CSVs are not present,
+  so there is no real-benchmark report to point at; see `docs/CLAIMS.md`. What
+  exists is `make bench-detectors`, which scores the two rules the synthetic
+  generator can ground-truth, and it is unflattering: the lateral-movement rule
+  has precision 0.194 (7 true positives against 29 false ones).
+  `scripts/validate_real_detectors.py` exercises all nine against a real local
+  target, but that is a single-host plumbing check, not a field measurement.
 - DDoS remains an honest stub (no volumetric scenario to validate against);
   C2 and phishing score only from sensor-supplied telemetry that no bundled
-  scenario produces.
+  scenario produces. The benchmark reports both as **not evaluable** rather than
+  printing a precision of 0.00, which would read as "this rule is bad" rather
+  than "this dataset cannot judge it".
 - Windows are 30–60 s; DDoS tempo and long-horizon insider behaviour need
   parallel window scales (roadmap item 7).

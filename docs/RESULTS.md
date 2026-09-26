@@ -239,46 +239,59 @@ missed and unexpected firings per scenario; quote numbers only from a report
 produced by the script. It says nothing about forecast-model performance on
 real data, which remains unmeasured.
 
-## Real-Data Forecast (CIC-IDS2017)
+## Real-Data Forecast (CIC-IDS2017) — NOT CURRENTLY REPRODUCIBLE
 
-> **Claim status.** Numbers below come from
-> `reports/generated/real-benchmark/REAL_BENCHMARK.md`
-> (regenerate with `uv run python scripts/run_real_benchmark.py
-> --data-dir data/raw/cic-ids2017/TrafficLabelling`).
-> These are real-traffic results on CIC-IDS2017 with cross-day temporal splits.
-> The test phase contains a single attack family (36 Infiltration flows);
-> this is NOT a general performance claim.
+> **Claim status: unverified.** The table previously published here cannot be
+> regenerated from this repository as it stands. `reports/generated/real-benchmark/`
+> does not exist here, and no CIC-IDS2017 CSV is present — `data/raw/` contains
+> only `fixture-lab/`, a synthetic file this project generates to exercise the
+> adapter's column handling. Those numbers are therefore **not presented as a
+> result**. They are not asserted to be false; they are asserted to be unbacked,
+> which for a results table is the same thing.
+>
+> See `docs/CLAIMS.md`, which tracks this as an open item.
+>
+> **To make this real:** obtain the licensed CSVs, place them in
+> `data/raw/cic-ids2017/TrafficLabelling/`, then
+> `make bench-real`. Commit the generated report and this section can be restored
+> with numbers that someone else can reproduce.
+>
+> Until then, the only forecast numbers this repository supports are the
+> synthetic ones above, and `scripts/validate_real_detectors.py`'s single-host
+> plumbing check, which says nothing about forecast accuracy.
 
-### Protocol (strict temporal order)
+### Protocol (as designed; not yet executed here)
 
 - TRAIN: Tuesday 2017-07-04 full day (FTP/SSH-Patator)
 - VALIDATION: Thursday 2017-07-06 morning (Web Attacks)
 - TEST: Thursday 2017-07-06 afternoon (Infiltration 14:19-15:45)
 
-### Results
+### Results — WITHDRAWN, PENDING
+
+<!--
+The table that used to be here was removed. It was not produced by a script that
+ran against data present in this repository, so it failed the project's own rule:
+a number does not go in a Markdown file unless a script printed it and the output
+is committed or one command away. It is recorded in docs/CLAIMS.md as an open
+item. Restore it with `make bench-real` and real CSVs in place.
+-->
 
 | Threshold | Forecaster | Median lead (win) | Crossing rate | False early |
 |---|---|---|---|---|
-| 0.50 (default) | Per-horizon | **0.5** | 0.15 | 0.11 |
-| 0.50 (default) | Recursive rollout | 0.0 | 0.88 | 0.58 |
-| 0.05 (calibrated) | Per-horizon | 0.0 | 1.00 | 0.63 |
-| 0.05 (calibrated) | Recursive rollout | 0.0 | 0.88 | 0.58 |
+| PENDING | PENDING | PENDING | PENDING | PENDING |
 
-### Interpretation
+### Interpretation — PENDING
 
-At the default 0.50 threshold, the per-horizon model detects the Infiltration
-attack 0.5 windows (75 seconds) before it fully materializes, with 11% false-early
-rate. The calibrated threshold (0.05) is too aggressive — 100% crossing but 63%
-false early. The recursive rollout does not improve lead time on this dataset.
+No interpretation is offered, because there is no result to interpret.
 
-### Limitations
+### Limitations that will apply when it is run
 
 - Two days of one capture week; the test attack family (Infiltration) never
   appears in training, which is realistic for zero-day-style evaluation but
   limits score comparability.
-- Extreme class imbalance: 36 attack flows vs ~287k benign on the test day;
-  window-level positives are a handful of windows.
+- Extreme class imbalance is expected (~36 attack flows against ~287k benign on
+  the test day); window-level positives will be a handful of windows.
 - CICFlowMeter timestamps carry the documented 12-hour defect; the adapter's
-  correction was validated against the published UNB schedule.
+  correction should be validated against the published UNB schedule.
 - Window labels derive from flow labels via documented precedence; no
   independent stage ground truth exists.
