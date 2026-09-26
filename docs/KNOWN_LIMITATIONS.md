@@ -12,7 +12,72 @@
 ## Measured, not assumed
 
 These were measured by a script in this repository. The commands are given so
-each number can be reproduced rather than believed.
+each number can be reproduced rather than believed. Run `make bench-calibration`
+for the calibration table below.
+
+### The baseline is well calibrated; the world model's risk head is not
+
+`scripts/run_calibration_report.py`, ten synthetic scenarios, test split:
+
+| model | n | base rate | mean p | bias | ECE | Brier | skill |
+|---|---|---|---|---|---|---|---|
+| baseline | 68 | 0.265 | 0.297 | +0.028 | 0.043 | 0.029 | +0.853 |
+| world model | 264 | 0.227 | 0.359 | +0.097 | 0.097 | 0.070 | +0.600 |
+
+The baseline is fine, and the report says so rather than manufacturing a problem.
+The world model's head is not, and its reliability table shows where it fails:
+
+| predicted | observed | gap |
+|---|---|---|
+| 0.50-0.60 | 0.000 | -0.554 |
+| 0.70-0.80 | 0.000 | -0.752 |
+| 0.80-0.90 | 0.091 | -0.775 |
+| 0.90-1.00 | 0.843 | -0.144 |
+
+The ranking is good - observed frequency rises monotonically with predicted
+probability. The *scale* is wrong: whenever the head said 0.5-0.9, the event
+essentially never happened, so a consumer reading "65% likely" was being told
+that about events with a 0% observed rate.
+
+### Isotonic recalibration helps the error rate, but not reliably the Brier score
+
+`src/sentinel/isotonic.py` fixes that failure mode: a monotone map from score to
+observed frequency, which is exactly what a well-ranked, badly-scaled classifier
+needs. Temperature scaling would not - one parameter cannot turn a sigmoid into a
+step. It also cannot change which window outranks which, which is checked rather
+than assumed.
+
+Tried on two fixtures. It improved **ECE on both** and **Brier on only one**:
+
+| fixture | Brier | ECE | shipped? |
+|---|---|---|---|
+| `w0`-`w9`, seed 23 | 0.0432 -> 0.0382 | 0.083 -> 0.035 | yes |
+| `cal00`-`cal09`, seed 23 | 0.0420 -> **0.0568** | 0.059 -> 0.050 | **no** |
+
+So it is **gated**. `_risk_recalibration` fits on validation, measures on test,
+and ships the curve only if held-out Brier improved *and* the ranking is
+unchanged. Otherwise the head ships as trained, and
+`risk_recalibration_outcome` records that it was tried and rejected. The current
+release bundle carries the rejected case, which is the honest one to publish.
+
+### The head is saturated, so recalibration cannot be fine-grained
+
+The head is trained by binary cross-entropy on a separable problem, so it emits
+only a handful of distinct values. The fitted curve has 253 blocks over 264 points
+but only about three *levels*: it maps 0.55, 0.65 and 0.75 all to 0.50. No amount
+of calibration data invents gradation the head never learned. The fix for that
+belongs in the loss - label smoothing, or accepting that the head is a classifier
+rather than a probability estimate - not in post-hoc scaling.
+`tests/test_recalibration_gate.py` pins the saturation so the explanation cannot
+quietly become wrong.
+
+### A step in the true rate is not reliably recovered
+
+If the calibration target jumps, isotonic places the jump only where a block
+boundary happens to land. Across six seeds on a step at 0.80, fits were equally
+likely to straddle it at 2 000 points per fit. More data helps on average; it does
+not make the step reliable. That is why adoption is decided by held-out gain and
+never by whether the curve "looks right".
 
 ### The risk head over-predicts, and the imagined-state fix makes that worse
 

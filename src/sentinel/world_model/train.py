@@ -23,7 +23,7 @@ import platform
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
@@ -138,6 +138,14 @@ class WorldModelResult(BaseModel):
     training_seconds: float
     model_sha256: str
     runtime: dict[str, str]
+    # Isotonic recalibration of the risk head, fitted on the validation split.
+    # Measured, held out: Brier 0.064 -> 0.034, ECE 0.104 -> 0.040, bias
+    # +0.104 -> +0.040. The head ranked well and scaled badly - it reported 0.55
+    # to 0.87 on windows where the observed rate was 0.00 to 0.09. Absent when the
+    # validation split is too small to fit, in which case the head ships as-is and
+    # the miscalibration is documented rather than hidden.
+    risk_recalibration: dict[str, Any] | None = None
+    risk_recalibration_outcome: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -375,6 +383,7 @@ def train_world_model(
             "numpy": np.__version__,
             "platform": platform.platform(),
         },
+        **_risk_recalibration(core, tensors, vocabulary),
     )
     return WorldModelRun(core=core, result=result)
 
@@ -509,6 +518,58 @@ def _stage_scores(
         )
     macro = float(np.mean(f1s)) if f1s else 0.0
     return accuracy, macro
+
+
+def _split_scores(core, batch, vocabulary: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """Raw risk probabilities and their labels for one split, teacher-forced."""
+    core.eval()
+    with torch.no_grad():
+        _states, _recon, risk_logits, _stage = core.forward_sequence(batch[0])
+    probabilities = torch.sigmoid(risk_logits).numpy().reshape(-1)
+    return probabilities, batch[1].numpy().reshape(-1).astype(float)
+
+
+def _risk_recalibration(core, tensors: dict, vocabulary: list[str]) -> dict[str, Any]:
+    """Fit isotonic recalibration on validation; report the held-out effect.
+
+    The head is trained by binary cross-entropy on a separable problem, so it
+    pushes probabilities to the extremes and reports mid-range values - 0.55 to
+    0.87 - on windows where the observed rate is 0.00 to 0.09. That is measured,
+    not suspected: see docs/KNOWN_LIMITATIONS.md.
+
+    Fitting on validation and reporting the gain on test is the only arrangement
+    that makes the correction falsifiable. If the test gain is not positive the
+    payload is dropped rather than shipped, because a recalibration that does not
+    help on held-out data is pure complexity - and the outcome is still recorded,
+    so a reader can see it was tried and rejected.
+    """
+    from sentinel.isotonic import (
+        InsufficientRecalibrationData,
+        IsotonicCalibrator,
+        recalibration_outcome,
+    )
+
+    empty: dict[str, Any] = {}
+    validation = tensors.get("validation")
+    test = tensors.get("test")
+    if validation is None or test is None:
+        return empty
+    try:
+        validation_scores, validation_labels = _split_scores(core, validation, vocabulary)
+        test_scores, test_labels = _split_scores(core, test, vocabulary)
+        if validation_scores.size < 20 or test_scores.size < 20:
+            return empty
+        calibrator = IsotonicCalibrator.fit(validation_scores, validation_labels)
+    except InsufficientRecalibrationData:
+        return empty
+
+    outcome = recalibration_outcome(test_scores, test_labels, calibrator)
+    if not outcome.improved or not outcome.ranking_unchanged:
+        return {"risk_recalibration_outcome": outcome.as_dict()}
+    return {
+        "risk_recalibration": calibrator.to_payload(),
+        "risk_recalibration_outcome": outcome.as_dict(),
+    }
 
 
 def _checksum(core: RSSMCore) -> str:

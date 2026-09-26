@@ -34,6 +34,9 @@ echo "== per-detector precision/recall =="
 uv run python scripts/run_detector_benchmark.py \
     --output reports/generated/benchmark/detectors
 
+echo "== calibration report (reliability, ECE, Brier) =="
+uv run python scripts/run_calibration_report.py --output reports/generated/benchmark/calibration
+
 echo "== world model open-loop skill =="
 uv run python scripts/run_world_model.py \
     --output reports/generated/benchmark/world_model \
@@ -58,6 +61,7 @@ All done. Reports:
   reports/generated/benchmark/BENCHMARK.md
   reports/generated/benchmark/backtest/backtest.md
   reports/generated/benchmark/detectors/detector_benchmark.md
+  reports/generated/benchmark/calibration/calibration.md
   reports/generated/benchmark/world_model/WORLD_MODEL.md
   reports/generated/benchmark/demo_script/demo.json
   reports/generated/burndown.html
