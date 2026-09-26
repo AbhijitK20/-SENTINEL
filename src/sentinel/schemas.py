@@ -100,6 +100,54 @@ def split_assignment(manifest: SplitManifest) -> dict[str, str]:
     return assignment
 
 
+class ProbabilityInterval(BaseModel):
+    """A coverage-guaranteed band around one probability estimate.
+
+    Produced by split conformal prediction. ``nominal_coverage`` is a promise with
+    a finite-sample guarantee on exchangeable data - not a score, and not a
+    posterior interval. The guarantee is marginal: it holds averaged over the data
+    distribution, not for any particular window, and not under distribution shift.
+    ``width`` and ``clipped`` are carried so a consumer can tell an informative
+    band from one that has been trimmed against the [0, 1] bounds.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    lower: float = Field(ge=0.0, le=1.0)
+    upper: float = Field(ge=0.0, le=1.0)
+    nominal_coverage: float = Field(gt=0.0, lt=1.0)
+    method: str = Field(min_length=1)
+    calibration_size: int = Field(ge=1)
+    quantile: float = Field(ge=0.0)
+    clipped: bool = False
+    caveat: str = Field(
+        min_length=1,
+        default=(
+            "Marginal coverage on exchangeable data. Not conditional on this window, "
+            "and not valid under distribution shift."
+        ),
+    )
+
+
+class StagePredictionSet(BaseModel):
+    """The stages that cannot be ruled out, with a coverage guarantee.
+
+    The honest alternative to a single stage name when the model is uncertain. A
+    one-element set is a decision; a three-element set is the method declining to
+    make one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stages: list[str] = Field(min_length=1)
+    nominal_coverage: float = Field(gt=0.0, lt=1.0)
+    method: str = Field(min_length=1)
+
+    @property
+    def is_decision(self) -> bool:
+        return len(self.stages) == 1
+
+
 class ProbabilityPoint(BaseModel):
     """One point in a future infiltration probability timeline.
 
@@ -108,11 +156,17 @@ class ProbabilityPoint(BaseModel):
     how far the probability sits from the decision boundary. It is a score, not
     a posterior interval - nothing here is sampled. ``0.0`` means there was no
     measurement to stand on.
+
+    ``interval`` is the stronger object: a split-conformal band whose
+    ``nominal_coverage`` is a finite-sample guarantee. It is ``None`` when no
+    calibration split is available, which is the normal case for a freshly
+    trained model and is stated rather than papered over.
     """
 
     window: int = Field(ge=1)
     infiltration_probability: float = Field(ge=0, le=1)
     confidence: float = Field(ge=0, le=1)
+    interval: ProbabilityInterval | None = None
 
 
 class PredictedStage(BaseModel):
@@ -324,6 +378,9 @@ class ForecastExplanation(BaseModel):
     horizon: list[HorizonAttribution] = Field(default_factory=list)
     current_window: list[DrivingFeature] = Field(default_factory=list)
     counterfactual: str | None = None
+    # The stage set is the set-valued answer: when it holds more than one stage,
+    # the model is declining to name a single one and the caller should say so.
+    stage_set: StagePredictionSet | None = None
     caveat: str = (
         "Model evidence, not causation: these attributions explain this model, "
         "not the attacker's intent."

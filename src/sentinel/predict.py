@@ -43,13 +43,14 @@ from sentinel.schemas import (
     LeadTimeEstimate,
     NetworkState,
     PredictedStage,
+    ProbabilityInterval,
     ProbabilityPoint,
     SplitManifest,
 )
 from sentinel.stage_mapping import map_stage
 from sentinel.temporal import TemporalResult
 
-FORECAST_VERSION = "forecast-inference-v1"
+FORECAST_VERSION = "forecast-inference-v2"
 DECISION_THRESHOLD = 0.5
 LEAD_TIME_DEFINITION = (
     "lead_windows is the first forecast window (1-indexed) whose infiltration "
@@ -298,9 +299,53 @@ def _build_timeline(
                         force_baseline=True,
                     ),
                 ),
+                interval=_conformal_interval(artifacts, window, proba),
             )
         )
     return points
+
+
+def _conformal_interval(
+    artifacts: LoadedArtifacts, horizon: int, proba: float
+) -> ProbabilityInterval | None:
+    """The guaranteed band for this window, when a calibration split exists.
+
+    ``None`` is the honest answer for a model that was never calibrated against
+    realised outcomes - a fresh in-session training run, or a bundle exported
+    before conformal calibration existed. The field is left ``None`` and the
+    caller is expected to say so rather than substitute the ``confidence`` score,
+    which is not the same kind of object.
+    """
+    calibrator = _calibrator(artifacts)
+    if calibrator is None:
+        return None
+    try:
+        interval = calibrator.predict_for_horizon(horizon, proba)
+    except Exception:  # noqa: BLE001 - a missing interval must not break a forecast
+        return None
+    return ProbabilityInterval(
+        lower=interval.lower,
+        upper=interval.upper,
+        nominal_coverage=interval.nominal_coverage,
+        method=interval.method,
+        calibration_size=interval.calibration_size,
+        quantile=interval.quantile,
+        clipped=interval.clipped,
+    )
+
+
+def _calibrator(artifacts: LoadedArtifacts):
+    """Rebuild the stored conformal calibrator, or ``None`` if there isn't one."""
+    from sentinel.conformal import HorizonCalibrator
+
+    payload = getattr(artifacts.baseline_result, "conformal", None)
+    if not payload:
+        return None
+    try:
+        return HorizonCalibrator.from_payload(payload)
+    except (ValueError, KeyError, TypeError):
+        # A payload from an incompatible version must not be silently applied.
+        return None
 
 
 def _window_confidence(
