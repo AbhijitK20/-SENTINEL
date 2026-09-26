@@ -12,6 +12,7 @@ colour or a radius.
 
 from __future__ import annotations
 
+import os
 import platform
 import sys
 from pathlib import Path
@@ -38,6 +39,70 @@ from sentinel.temporal import TemporalConfig, train_temporal
 ROOT = Path(__file__).resolve().parents[3]
 SCENARIO_COUNT_DEFAULT = 6
 TRAINABLE_HORIZONS = 5
+
+# The committed release bundle, and the last real-data run, in preference order.
+# Opening the console should not require training anything: if a verified bundle
+# is on disk, the console uses it and says so. Training in-app stays available
+# for exploring a different dataset, but it is no longer the default path.
+RELEASE_BUNDLE = ROOT / "models" / "release" / "v1"
+FALLBACK_ARTIFACT_DIRS = (
+    ROOT / "reports" / "generated" / "real-benchmark" / "baseline",
+    ROOT / "reports" / "generated" / "benchmark" / "pipeline" / "baseline",
+)
+
+
+def resolve_artifact_dir(argv: list[str] | None = None) -> Path | None:
+    """Where to load artifacts from, or ``None`` to train in-app.
+
+    Precedence, highest first:
+
+    1. ``--artifacts <dir>`` on the command line (what ``make demo`` passes)
+    2. ``SENTINEL_ARTIFACTS_DIR`` in the environment
+    3. the committed release bundle, when it verifies
+    4. the most recent generated run, if one exists
+
+    A directory that was named explicitly but does not load raises, rather than
+    silently falling through to a different bundle - being told "these are your
+    artifacts" and getting something else is worse than an error.
+    """
+    args = list(sys.argv[1:] if argv is None else argv)
+    explicit: str | None = None
+    if "--artifacts" in args:
+        index = args.index("--artifacts")
+        if index + 1 < len(args):
+            explicit = args[index + 1]
+    if explicit is None:
+        explicit = os.environ.get("SENTINEL_ARTIFACTS_DIR")
+
+    if explicit:
+        candidate = Path(explicit)
+        if not candidate.is_dir():
+            raise FileNotFoundError(
+                f"artifacts directory not found: {candidate}. Check the path; the "
+                "console will not substitute a different bundle."
+            )
+        return candidate
+
+    from sentinel.predict import load_artifacts
+
+    for candidate in (RELEASE_BUNDLE, *FALLBACK_ARTIFACT_DIRS):
+        if not candidate.is_dir():
+            continue
+        try:
+            load_artifacts(candidate)
+        except Exception:  # noqa: BLE001 - a stale bundle must not block startup
+            continue
+        return candidate
+    return None
+
+
+try:
+    artifact_dir = resolve_artifact_dir()
+except FileNotFoundError as error:
+    ui.header("SENTINEL", "analyst console")
+    ui.banner("Artifacts not found", str(error), tone="error", icon="✕")
+    st.stop()
+
 
 apply_theme("SENTINEL — attack forecasting")
 
@@ -261,7 +326,6 @@ if st.session_state.get("fingerprint") != fingerprint:
     for stale in ("baseline_run", "temporal_run", "replay_eval"):
         st.session_state.pop(stale, None)
     st.session_state["fingerprint"] = fingerprint
-
 try:
     if use_real:
         labelled, samples, manifest, dataset_id = cic_dataset(
@@ -293,8 +357,18 @@ except Exception as error:  # a bad dataset must not take the app down
 
 # ── Models ──────────────────────────────────────────────────────────────
 
-needs_training = "baseline_run" not in st.session_state
-if train_clicked or needs_training:
+# A verified artifact directory short-circuits in-app training, so opening the
+# console shows the shipped model rather than retraining one first.
+if artifact_dir is not None:
+    from sentinel.predict import load_artifacts
+
+    st.session_state["loaded_artifacts"] = load_artifacts(artifact_dir)
+    st.session_state["artifact_dir"] = str(artifact_dir)
+    needs_training = False
+else:
+    needs_training = "baseline_run" not in st.session_state
+
+if needs_training and (train_clicked or "baseline_run" not in st.session_state):
     with st.spinner("Training models on this dataset…"):
         try:
             baseline_run, temporal_run = train_models(
@@ -318,16 +392,24 @@ if train_clicked or needs_training:
     st.session_state["baseline_run"] = baseline_run
     st.session_state["temporal_run"] = temporal_run
 
-baseline_run = st.session_state["baseline_run"]
-temporal_run = st.session_state["temporal_run"]
-loaded = artifacts_from_runs(baseline_run, temporal_run=temporal_run)
+if "loaded_artifacts" in st.session_state:
+    loaded = st.session_state["loaded_artifacts"]
+    baseline_run = None
+    temporal_run = None
+else:
+    baseline_run = st.session_state["baseline_run"]
+    temporal_run = st.session_state["temporal_run"]
+    loaded = artifacts_from_runs(baseline_run, temporal_run=temporal_run)
+
+# The feature schema always comes from the loaded artifacts, so the console
+# behaves identically whether the model was trained in-session or loaded from the
+# release bundle.
+schema = loaded.baseline_result.feature_schema
 
 ctx = ScreenContext(
     labelled=labelled,
     samples=samples,
     manifest=manifest,
-    baseline_run=baseline_run,
-    temporal_run=temporal_run,
     loaded=loaded,
     dataset_id=dataset_id,
     dataset_fingerprint=fingerprint,
@@ -344,7 +426,8 @@ ui.header(
     "network attack forecasting",
     meta=(
         f"{dataset_id} · {len(labelled):,} windows · "
-        f"{baseline_run.result.feature_schema.width} features · seed {seed}"
+        f"{schema.width} features · seed {seed}"
+        + (f" · artifacts {st.session_state['artifact_dir']}" if artifact_dir else "")
     ),
 )
 
@@ -371,7 +454,7 @@ with tabs[2]:
     world_model_tab.render(
         labelled=labelled,
         manifest=manifest,
-        schema=baseline_run.result.feature_schema,
+        schema=schema,
         loaded=loaded,
         sequence_length=sequence_length,
         forecast_horizon=forecast_horizon,

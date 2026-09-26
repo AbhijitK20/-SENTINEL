@@ -37,7 +37,7 @@ web-app:  ## analyst console (Streamlit)
 	uv run streamlit run src/sentinel/dashboard/app.py
 
 demo:  ## analyst console preloaded with the committed release artifacts
-	uv run streamlit run src/sentinel/dashboard/app.py -- --artifacts $(BUNDLE)
+	SENTINEL_ARTIFACTS_DIR=$(BUNDLE) uv run streamlit run src/sentinel/dashboard/app.py -- --artifacts $(BUNDLE)
 
 demo-live:  ## console + API + vulnerable target + sensors (docker)
 	docker compose --profile demo up -d

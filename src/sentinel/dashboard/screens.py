@@ -33,13 +33,16 @@ from sentinel.schemas import SPLIT_NAMES
 
 @dataclass
 class ScreenContext:
-    """Everything a screen may read. Screens never mutate the model."""
+    """Everything a screen may read. Screens never mutate the model.
+
+    ``loaded`` is the only model handle. The console either trains in-session or
+    loads a release bundle, and both end up as ``LoadedArtifacts``, so screens
+    read one shape rather than branching on where the model came from.
+    """
 
     labelled: list
     samples: list
     manifest: Any
-    baseline_run: Any
-    temporal_run: Any
     loaded: Any
     dataset_id: str
     dataset_fingerprint: str
@@ -50,7 +53,30 @@ class ScreenContext:
 
     @property
     def schema(self):
-        return self.baseline_run.result.feature_schema
+        """The feature schema, from whichever source supplied the model.
+
+        The console can either train in-session or load a release bundle, so
+        everything below is read from ``loaded``, which is populated either way.
+        """
+        return self.loaded.baseline_result.feature_schema
+
+    def score_state(self, state) -> float:
+        """Infiltration probability for one window from the shipped baseline."""
+        return float(
+            self.loaded.baseline_model.predict_proba(vectorize_states([state], self.schema))[:, 1][
+                0
+            ]
+        )
+
+    @property
+    def baseline_test_metrics(self):
+        return self.loaded.baseline_result.metrics.get("test")
+
+    @property
+    def temporal_horizons(self) -> list:
+        """Per-horizon temporal results, or an empty list when none are loaded."""
+        result = self.loaded.temporal_result
+        return list(result.horizons) if result is not None else []
 
     def states(self, scenario_id: str) -> list:
         return [item.state for item in self.labelled if item.scenario_id == scenario_id]
@@ -321,12 +347,7 @@ def _walk_forward(ctx: ScreenContext, scenario: str, states: list, cut: int) -> 
         "The same baseline scored at each earlier cut. The dotted line is where you are now.",
     )
     with st.spinner("Scoring prior windows…"):
-        scores = [
-            float(
-                ctx.baseline_run.model.predict_proba(vectorize_states([state], ctx.schema))[:, 1][0]
-            )
-            for state in states
-        ]
+        scores = [ctx.score_state(state) for state in states]
     figure = go.Figure(
         go.Scatter(
             x=list(range(1, len(states) + 1)),
@@ -436,9 +457,7 @@ def states_screen(ctx: ScreenContext) -> None:
         help="Every index change re-renders the panel from that window's data.",
     )
     state = states[index]
-    probability = float(
-        ctx.baseline_run.model.predict_proba(vectorize_states([state], ctx.schema))[:, 1][0]
-    )
+    probability = ctx.score_state(state)
 
     ui.lede(
         "A window is the unit of state: aggregated flow counters and packet "
@@ -548,12 +567,8 @@ def _series_color(offset: int) -> str:
 
 def comparison_screen(ctx: ScreenContext) -> None:
     """Baseline vs temporal, test split only."""
-    baseline_test = ctx.baseline_run.result.metrics.get("test")
-    temporal_test = (
-        ctx.temporal_run.result.horizons[-1].metrics.get("test")
-        if ctx.temporal_run.result.horizons
-        else None
-    )
+    baseline_test = ctx.baseline_test_metrics
+    temporal_test = ctx.temporal_horizons[-1].metrics.get("test") if ctx.temporal_horizons else None
     ui.lede(
         "Both models are trained on the same windows with the same feature "
         "schema and scored on the same held-out scenarios. The only difference "
@@ -574,7 +589,7 @@ def comparison_screen(ctx: ScreenContext) -> None:
         ],
     }
     if temporal_test is not None:
-        horizon = ctx.temporal_run.result.horizons[-1].horizon
+        horizon = ctx.temporal_horizons[-1].horizon
         series[f"Temporal GRU h+{horizon}"] = [
             temporal_test.precision,
             temporal_test.recall,
@@ -585,7 +600,7 @@ def comparison_screen(ctx: ScreenContext) -> None:
     ui.grouped_bars(labels, series, height=340, y_title="score")
     ui.method_note("Decision threshold as recorded in the run; PR-AUC is threshold-free.")
 
-    if ctx.temporal_run.result.horizons:
+    if ctx.temporal_horizons:
         ui.panel("Per-horizon behaviour", "Each horizon is an independent model.")
         rows = [
             {
@@ -596,7 +611,7 @@ def comparison_screen(ctx: ScreenContext) -> None:
                 "FPR": h.metrics["test"].false_positive_rate if "test" in h.metrics else None,
                 "Best epoch": h.best_epoch,
             }
-            for h in ctx.temporal_run.result.horizons
+            for h in ctx.temporal_horizons
         ]
         st.dataframe(rows, width="stretch", hide_index=True)
         figure = go.Figure()
@@ -818,7 +833,7 @@ def demo_screen(ctx: ScreenContext) -> None:
 
 def metrics_screen(ctx: ScreenContext) -> None:
     """Model internals: what it learned, and the audit that says it is honest."""
-    test = ctx.baseline_run.result.metrics.get("test")
+    test = ctx.baseline_test_metrics
     if test is not None:
         ui.stats(
             [
@@ -832,7 +847,7 @@ def metrics_screen(ctx: ScreenContext) -> None:
         ui.method_note("Test split only. Threshold as recorded in the run.")
 
     ui.panel("Feature weights", "Standardized coefficient; sign is the direction of risk.")
-    weights = ctx.baseline_run.result.feature_weights
+    weights = ctx.loaded.baseline_result.feature_weights
     figure = go.Figure(
         go.Bar(
             x=[w.coefficient for w in weights],
@@ -853,7 +868,7 @@ def metrics_screen(ctx: ScreenContext) -> None:
     ui.end_panel()
 
     ui.panel("Split audit", "The mechanical check that the holdout is a holdout.")
-    audit = ctx.baseline_run.result.split_audit
+    audit = ctx.loaded.baseline_result.split_audit
     ui.stats(
         [
             ui.Stat(
@@ -879,7 +894,7 @@ def metrics_screen(ctx: ScreenContext) -> None:
     ui.end_panel()
 
     with st.expander("Model configuration"):
-        st.json(ctx.baseline_run.result.config.model_dump())
+        st.json(ctx.loaded.baseline_result.config.model_dump())
 
 
 # ── Attack story ────────────────────────────────────────────────────────
