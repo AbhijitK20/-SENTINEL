@@ -209,6 +209,22 @@ def run_report(seed: int = 23) -> dict:
         "recalibration_outcome": world.result.risk_recalibration_outcome,
         "recalibration_fitted": calibrator is not None,
     }
+
+    # ── time to detection, with censoring ───────────────────────────────
+    from sentinel.evaluation import evaluate_detection_survival, evaluate_replay
+    from sentinel.predict import artifacts_from_runs
+
+    replay = evaluate_replay(
+        labelled, artifacts_from_runs(baseline), horizon=4, split_filter="test"
+    )
+    payload["time_to_detection"] = {
+        "replay_median_lead_windows": replay.measured_median_lead_windows,
+        "replay_rows_with_lead_credit": sum(
+            1 for row in replay.rows if row.lead_windows is not None
+        ),
+        "replay_rows_total": len(replay.rows),
+        "survival": evaluate_detection_survival(replay),
+    }
     return payload
 
 
@@ -286,6 +302,31 @@ def _render(payload: dict) -> str:
                 "which. It corrects the mapping from score to frequency and nothing",
                 "else.",
             ]
+        lines.append("")
+
+    ttd = payload.get("time_to_detection", {})
+    survival = ttd.get("survival", {}) if ttd else {}
+    if survival and survival.get("n_attacks"):
+        lines += [
+            "## Time to detection, with censoring",
+            "",
+            "An attack the system never warned about is **censored**, not dropped.",
+            "The existing `measured_median_lead_windows` averages only over rows that "
+            "earned lead credit, so it is blind to misses; that is visible below.",
+            "",
+            f"- attacks with a future: **{survival['n_attacks']}**",
+            f"- detected: **{survival['n_detected']}**, censored: **{survival['n_censored']}** "
+            f"(detected fraction {survival['detected_fraction']:.3f})",
+            f"- median time-to-detection: **{_fmt(survival['median_windows'])}** windows, "
+            f"95% CI [{_fmt(survival['ci_low_windows'])}, {_fmt(survival['ci_high_windows'])}]",
+            f"- the point estimate it replaces: "
+            f"**{_fmt(survival['naive_median_windows'])}** windows "
+            f"(computed from {ttd.get('replay_rows_with_lead_credit')} of "
+            f"{ttd.get('replay_rows_total')} replay rows)",
+            f"- usable as a result: **{survival['usable']}**",
+        ]
+        if survival.get("note"):
+            lines.append(f"- note: {survival['note']}")
         lines.append("")
 
     lines += ["## Warnings", ""]

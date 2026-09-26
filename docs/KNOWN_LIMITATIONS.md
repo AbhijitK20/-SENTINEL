@@ -15,6 +15,40 @@ These were measured by a script in this repository. The commands are given so
 each number can be reproduced rather than believed. Run `make bench-calibration`
 for the calibration table below.
 
+### The lead-time median dropped every miss from the denominator
+
+`evaluation._summarize` computed `measured_median_lead_windows` as the median
+over rows that *earned lead credit*:
+
+    leads = [r.lead_windows for r in rows if r.lead_windows is not None]
+
+Every attack the system never warned about was removed before the median was
+taken. That is survivorship bias wearing a statistic - the harder cases leave the
+sample, so the surviving number measures how fast the system is *when it works*
+while reading as how fast it is.
+
+`src/sentinel/survival.py` treats detection as the right-censored problem it is.
+Kaplan-Meier with Greenwood variance, a median with a Brookmeyer-Crowley
+pointwise interval, and a two-sample log-rank test, all in numpy plus
+`math.erfc`. `evaluate_detection_survival` reports it next to the old figure so
+the two can be compared rather than the better one being chosen.
+
+**Measured on current data, the fix does not change the headline - and that is
+the finding, not a disappointment.** On the test split, 18 attacks had a
+realised future and **all 18 were detected**, so there were zero censored units
+for Kaplan-Meier to account for. Both statistics read 0.0 windows.
+
+What did change is the *uncertainty*, which the point estimate never carried:
+the interval is reported, and it is what makes "0.0" interpretable. A median of 0
+means detection fires in the same window the attack becomes observable - the
+documented limitation - and a CI shows how little the data can distinguish that
+from being a window or two late. The structural fix matters the moment anything
+is missed, which the withdrawn real-data run and any harder dataset will do.
+
+So: the machinery is correct, tested against the closed-form identities, and
+currently confirms rather than corrects. That is worth saying plainly, because
+"we fixed the metric" would have been the more flattering and wrong summary.
+
 ### The baseline is well calibrated; the world model's risk head is not
 
 `scripts/run_calibration_report.py`, ten synthetic scenarios, test split:
