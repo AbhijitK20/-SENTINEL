@@ -506,10 +506,24 @@ def save_world_model_artifacts(run: WorldModelRun, output_dir: str | Path) -> di
     return {"result": result_path, "weights": weights_path, "report": report_path}
 
 
+def world_model_weights_path(model_dir: str | Path) -> Path:
+    """Where the weights live, in either bundle layout.
+
+    A release bundle keeps every set of weights under ``weights/`` (the same
+    place the per-horizon GRU files go); a raw training run writes them beside
+    the result JSON. Both are legitimate, so both resolve.
+    """
+    root = Path(model_dir)
+    for candidate in (root / "weights" / "world_model.pt", root / "world_model.pt"):
+        if candidate.is_file():
+            return candidate
+    return root / "weights" / "world_model.pt"
+
+
 def load_world_model(result: WorldModelResult, model_dir: str | Path) -> RSSMCore:
     """Rebuild a trained core from the result JSON and the saved weights."""
     _require_torch()
-    path = Path(model_dir) / "world_model.pt"
+    path = world_model_weights_path(model_dir)
     if not path.is_file():
         raise FileNotFoundError(f"World model weights not found: {path}")
     core = RSSMCore(

@@ -45,3 +45,31 @@ jobs:
           python-version: "3.11"
       - run: uv sync
       - run: uv run bandit -r src/sentinel --skip B101 --severity-level medium
+
+  release:
+    # The committed bundle is what a reviewer and a deployment both load. If it
+    # stops matching its own manifest, every claim in the README is unsupported,
+    # and that must fail the build rather than surface during a demo.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+      - run: uv sync --all-extras
+      - run: uv run python scripts/verify_release_artifacts.py models/release/v1
+
+  golden-path:
+    # The demo is also the smoke test: it loads the committed artifacts and runs
+    # the product's central path end to end, so a break in scoring, explaining,
+    # detection or imagination fails here instead of on stage.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+      - run: uv sync --all-extras
+      - run: uv run python scripts/demo_script.py
+      - name: smoke the backtest on a short scenario list
+        run: uv run python scripts/run_backtest.py --origins 2 --scenarios 10
