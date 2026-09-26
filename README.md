@@ -26,9 +26,37 @@ Network events (flow + packet) → UnifiedEvent → time-windowed NetworkState
     Dashboard / REST API / live sensors / trust ledger
 ```
 
+## The console
+
+Ten screens, one design system. `src/sentinel/frontend/` owns every colour,
+radius and type size; no screen or chart hardcodes one. The rules the system
+enforces, and the tests that hold it to them:
+
+- **Time is the spine.** Every trajectory screen renders the same axis in the
+  same place, and states the window it is reading.
+- **Only probability is bright.** Chrome is neutral; the one perceptually
+  uniform risk ramp carries all the meaning, and every value is labelled with
+  its band, so colour is never the only carrier.
+- **Observed ≠ forecast.** A reserved colour outside the risk ramp, plus a
+  persistent legend on every probability surface. A simulation always says it
+  is a simulation.
+- **Insufficient ≠ low risk.** Unmeasured telemetry renders in its own colour,
+  never on the risk ramp.
+- **Every number names its method.** A number without a stated method is not
+  actionable.
+- **Accessibility is tested, not assumed.** All body ink and every ramp step
+  clear WCAG AA on every surface they appear on; interactive elements define
+  hover, active, focus-visible and disabled; one `prefers-reduced-motion` guard
+  covers every transition.
+
+Run it with `uv run streamlit run src/sentinel/dashboard/app.py`. The dataset
+selector (synthetic replay, or CIC-IDS2017 attack days when present) sits in the
+sidebar, and the training gate is explicit — you see the split before you see a
+prediction.
+
 ## What's Measured
 
-All numbers come from `reports/generated/` (regenerate with the scripts below). Every number is reproducible.
+All numbers come from `reports/generated/` (regenerate with the scripts below). Every number is reproducible, and every number states whether it came from synthetic replay or a real capture.
 
 ### World model: open-loop state prediction (held-out scenarios)
 
@@ -119,6 +147,17 @@ uv run python scripts/predict_file.py \
 # Regenerate the demo capture
 uv run python scripts/make_demo_csv.py --output data/fixtures/attack_replay.csv --packet-events
 
+# Real-data protocol (needs the licensed CIC-IDS2017 TrafficLabelling CSVs)
+uv run python scripts/run_real_benchmark.py \
+    --data-dir data/raw/cic-ids2017/TrafficLabelling \
+    --output reports/generated/real-benchmark
+
+# No dataset? Exercise the same code path on a generated CIC-schema fixture.
+# The report labels itself SYNTHETIC, so its numbers can never be misquoted.
+uv run python scripts/make_cic_fixture.py --output data/raw/fixture-lab
+uv run python scripts/run_real_benchmark.py \
+    --data-dir data/raw/fixture-lab --output reports/generated/real-fixture
+
 # Tests
 uv run pytest -q                       # 300+ tests
 uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
@@ -172,7 +211,7 @@ docker compose logs -f demo-sensor demo-attacker
 - Imagination does not add lead time on the synthetic set: it matches during-attack detection with a zero false-early rate, but never fires before the attack starts — the per-horizon nowcast is what warns early
 - The linear transition baseline cannot simulate: its one-step map is expansive, and stabilizing it degenerates to a constant. A multi-step fit is not implemented
 - Packet-level features only reach the model when the input actually contains packet events; a flow CSV produces flow features only and the forecast says so
-- Real-traffic forecasting is measured on CIC-IDS2017 (5 attack families); other datasets are pending
+- **The CIC-IDS2017 dataset is not in this repository and is not downloaded by it.** `data/raw/` is gitignored. The real-data protocol is implemented and exercised on a generated CIC-schema fixture, which proves the code path but measures nothing. Real numbers require the licensed CSVs, and `run_real_benchmark.py` derives its claim status from the input so a fixture run can never be quoted as a result
 - The trust ledger is a hash chain, not a blockchain — it's the integration seam for a future permissioned chain
 - The vulnerable app, attack scripts, and blocklist are local training components — never expose to untrusted networks
 

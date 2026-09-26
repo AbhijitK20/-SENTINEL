@@ -18,6 +18,7 @@ from sentinel.assets import default_asset_registry
 from sentinel.dashboard.live_artifacts import select_live_artifacts
 from sentinel.feedback import VERDICTS as FEEDBACK_VERDICTS
 from sentinel.feedback import FeedbackStore
+from sentinel.frontend.tokens import color, plotly_layout
 from sentinel.live import (
     CsvReplaySource,
     EventReplaySource,
@@ -111,8 +112,8 @@ def _render_live_status(status: Any) -> None:
                     "Stage: %{customdata[0]}<br>"
                     "Events: %{customdata[1]}<extra></extra>"
                 ),
-                line=dict(color="#6dd3a8", width=3),
-                marker=dict(size=8),
+                line={"color": color("risk-elevated"), "width": 3},
+                marker={"size": 8},
             )
         )
         if peak is not None:
@@ -124,21 +125,20 @@ def _render_live_status(status: Any) -> None:
                     name="Peak observed",
                     text=[f"Peak {peak.probability:.2f}"],
                     textposition="bottom center",
-                    marker=dict(color="#ef6f6f", size=14, symbol="star"),
+                    marker={"color": color("confirmed"), "size": 14, "symbol": "star"},
                     hovertemplate="Peak observed: %{y:.3f}<extra></extra>",
                 )
             )
         fig.add_hline(y=status.threshold, line_dash="dot", annotation_text="threshold")
         fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0b0d12",
-            plot_bgcolor="#0b0d12",
-            title="Live probability timeline",
-            xaxis_title="Event time",
-            yaxis=dict(range=[0, 1], title="P(infiltration)"),
-            height=380,
+            **plotly_layout(
+                title="Live probability timeline",
+                xaxis={"title": {"text": "event time"}},
+                yaxis={"range": [0, 1], "title": {"text": "P(infiltration)"}},
+                height=380,
+            )
         )
-        st.plotly_chart(fig, use_container_width=True, key="live-timeline")
+        st.plotly_chart(fig, width="stretch", key="live-timeline")
 
         with st.expander("Stage evidence (latest window)", expanded=alert):
             if latest.stage_evidence:

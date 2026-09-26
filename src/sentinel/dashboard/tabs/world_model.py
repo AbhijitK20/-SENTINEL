@@ -20,11 +20,11 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import plotly.graph_objects as go
 import streamlit as st
 
 from sentinel.features import vectorize_states
 from sentinel.file_forecast import forecast_from_file
+from sentinel.frontend import ui
 from sentinel.predict import DECISION_THRESHOLD
 from sentinel.world_model.imagine import (
     aggregate_open_loop,
@@ -175,38 +175,14 @@ def render(
     )
 
     st.markdown("#### Imagined infiltration probability")
-    figure = go.Figure()
-    figure.add_trace(
-        go.Scatter(
-            x=[point.window for point in forecast.probability_timeline],
-            y=[point.infiltration_probability for point in forecast.probability_timeline],
-            name="P(infiltration) — imagined",
-            mode="lines+markers",
-            line={"color": "#6ea8ff"},
-        )
-    )
-    if realized:
-        figure.add_trace(
-            go.Scatter(
-                x=list(range(1, len(realized) + 1)),
-                y=[1.0 if item.label.infiltration else 0.0 for item in realized],
-                name="realized infiltration",
-                mode="lines+markers",
-                line={"color": "#f0c674", "dash": "dot"},
-            )
-        )
-    figure.add_hline(y=float(threshold), line_dash="dash", line_color="#6dd3a8")
-    figure.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0b0d12",
-        plot_bgcolor="#0b0d12",
+    ui.observed_forecast_legend("The imagined line is simulated; realised is measured.")
+    ui.probability_timeline(
+        [point.window for point in forecast.probability_timeline],
+        [point.infiltration_probability for point in forecast.probability_timeline],
+        threshold=float(threshold),
+        realized=[item.label.infiltration for item in realized] if realized else None,
         height=320,
-        xaxis_title="windows ahead",
-        yaxis_title="probability",
-        yaxis_range=[0, 1],
-        legend={"orientation": "h"},
     )
-    st.plotly_chart(figure, use_container_width=True)
     st.caption(
         f"Predicted stage **{forecast.predicted_stage.name}** "
         f"(p={forecast.predicted_stage.probability:.2f}, "
@@ -261,34 +237,15 @@ def render(
         int(seed),
     )
     if error is not None:
-        figure = go.Figure()
-        figure.add_trace(
-            go.Bar(
-                x=[f"+{step}" for step in error.steps],
-                y=error.model_mae,
-                name="world model",
-                marker_color="#6ea8ff",
-            )
-        )
-        figure.add_trace(
-            go.Bar(
-                x=[f"+{step}" for step in error.steps],
-                y=error.persistence_mae,
-                name="persistence",
-                marker_color="#6dd3a8",
-                opacity=0.6,
-            )
-        )
-        figure.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0b0d12",
-            plot_bgcolor="#0b0d12",
+        ui.grouped_bars(
+            [f"+{step}" for step in error.steps],
+            {
+                "world model": error.model_mae,
+                "persistence": error.persistence_mae,
+            },
             height=300,
-            barmode="group",
-            yaxis_title="mean absolute error",
-            legend={"orientation": "h"},
+            y_title="mean absolute error",
         )
-        st.plotly_chart(figure, use_container_width=True)
         verdict = "beats" if error.mean_skill > 0 else "does not beat"
         st.caption(
             f"{error.windows} windows · mean skill **{error.mean_skill:+.3f}** — "

@@ -30,19 +30,19 @@ class ColorToken:
 # Perceptually uniform sequential ramp: cool → warm → hot.
 # Maps monotonically to P(infiltration). Colour is never the sole carrier.
 RISK_RAMP: list[ColorToken] = [
-    ColorToken("risk-quiet", "#3E6C8E", "0.00–0.25 — cool, low bar"),
+    ColorToken("risk-quiet", "#45799F", "0.00–0.25 — cool, low bar"),
     ColorToken("risk-elevated", "#6FA0B8", "0.25–0.50 — cool-mid, bar height"),
     ColorToken("risk-concerning", "#C9B458", "0.50–0.75 — warm-mid, subtle border"),
     ColorToken("risk-critical", "#D98324", "0.75–0.90 — hot, border + icon"),
-    ColorToken("risk-severe", "#B33A3A", "0.90–1.00 — hottest"),
+    ColorToken("risk-severe", "#CE4343", "0.90–1.00 — hottest"),
 ]
 
 # Confirmed = ground truth / realised attack. Deliberately OUTSIDE the ramp
 # so observed and forecast are never confusable.
-CONFIRMED_COLOR = ColorToken("confirmed", "#7A2E2E", "Ground truth / observed attack")
+CONFIRMED_COLOR = ColorToken("confirmed", "#C64B4B", "Ground truth / observed attack")
 
 # Insufficient evidence = outside the ramp, hatched fill + reason text
-INSUFFICIENT_COLOR = ColorToken("insufficient", "#4A5568", "Insufficient telemetry — NOT low risk")
+INSUFFICIENT_COLOR = ColorToken("insufficient", "#667590", "Insufficient telemetry — NOT low risk")
 
 
 # ── Canvas layers (dark theme — the primary product theme) ──────────────
@@ -56,20 +56,24 @@ CANVAS_DARK: list[ColorToken] = [
 ]
 
 # ── Canvas layers (light theme) ─────────────────────────────────────────
+# Prefixed `light-` on purpose: the dark and light sets describe the same roles,
+# and sharing the names let the flattened palette silently overwrite dark values
+# with light ones. Distinct names make that collision impossible.
 CANVAS_LIGHT: list[ColorToken] = [
-    ColorToken("bg-base", "#FAFAF8", "Lightest background"),
-    ColorToken("bg-canvas", "#FFFFFF", "Main canvas"),
-    ColorToken("bg-panel", "#F0F1EE", "Panel / card surface"),
-    ColorToken("bg-raised", "#E8E9E6", "Raised element"),
-    ColorToken("bg-hover", "#DDDEDB", "Hover state"),
-    ColorToken("bg-active", "#D2D3D0", "Active / pressed state"),
+    ColorToken("light-bg-base", "#FAFAF8", "Lightest background"),
+    ColorToken("light-bg-canvas", "#FFFFFF", "Light canvas"),
+    ColorToken("light-bg-panel", "#F0F1EE", "Light panel / card surface"),
+    ColorToken("light-bg-raised", "#E8E9E6", "Light raised element"),
+    ColorToken("light-bg-hover", "#DDDEDB", "Light hover state"),
+    ColorToken("light-bg-active", "#D2D3D0", "Light active / pressed state"),
+    ColorToken("light-ink", "#14181E", "Primary text on light"),
 ]
 
 # ── Ink (text) ──────────────────────────────────────────────────────────
 INK: list[ColorToken] = [
     ColorToken("ink", "#E6E9EE", "Primary text (dark) / #14181E (light)"),
     ColorToken("ink-secondary", "#A0AAB8", "Secondary text"),
-    ColorToken("ink-muted", "#6B7A8D", "Muted / tertiary text"),
+    ColorToken("ink-muted", "#8194AB", "Muted / tertiary text — AA on every surface"),
     ColorToken("ink-disabled", "#4A5568", "Disabled text"),
 ]
 
@@ -82,9 +86,9 @@ STRUCTURE: list[ColorToken] = [
 
 # ── Semantic ────────────────────────────────────────────────────────────
 SEMANTIC: list[ColorToken] = [
-    ColorToken("success", "#3E6C8E", "Success — uses risk-quiet (cool)"),
+    ColorToken("success", "#45799F", "Success — uses risk-quiet (cool)"),
     ColorToken("warning", "#C9B458", "Warning — uses risk-concerning"),
-    ColorToken("error", "#B33A3A", "Error — uses risk-severe"),
+    ColorToken("error", "#CE4343", "Error — uses risk-severe"),
     ColorToken("info", "#6FA0B8", "Info — uses risk-elevated"),
 ]
 
@@ -183,25 +187,161 @@ DENSITY: dict[str, str] = {
 }
 
 
-def get_all_colors() -> dict[str, str]:
-    """Flatten all colour tokens into a name→value dict."""
+def get_all_colors(theme: str = "dark") -> dict[str, str]:
+    """Flatten the colour tokens into a name→value dict.
+
+    ``theme`` picks the canvas layer set. Token names are unique across themes
+    (light ones carry a ``light-`` prefix), so the result is unambiguous.
+    """
+    canvas = CANVAS_DARK if theme == "dark" else CANVAS_LIGHT
+    if theme not in ("dark", "light"):
+        raise ValueError(f"theme must be 'dark' or 'light', got {theme!r}")
     result: dict[str, str] = {}
-    for token_list in [RISK_RAMP, CANVAS_DARK, CANVAS_LIGHT, INK, STRUCTURE, SEMANTIC, ACCENT]:
-        for t in token_list:
-            result[t.name] = t.value
+    for token_list in [RISK_RAMP, canvas, INK, STRUCTURE, SEMANTIC, ACCENT]:
+        for token in token_list:
+            result[token.name] = token.value
     result["confirmed"] = CONFIRMED_COLOR.value
     result["insufficient"] = INSUFFICIENT_COLOR.value
     return result
 
 
+def _token(token_list: list[ColorToken], name: str) -> str:
+    for token in token_list:
+        if token.name == name:
+            return token.value
+    raise KeyError(f"unknown design token: {name}")
+
+
+# Band edges are the only place the ramp is interpreted. Colour bands match the
+# ramp documentation exactly; RISK_BANDS must stay in sync with it.
+RISK_BANDS: list[tuple[float, str]] = [
+    (0.25, _token(RISK_RAMP, "risk-quiet")),
+    (0.50, _token(RISK_RAMP, "risk-elevated")),
+    (0.75, _token(RISK_RAMP, "risk-concerning")),
+    (0.90, _token(RISK_RAMP, "risk-critical")),
+]
+
+
 def risk_color(probability: float) -> str:
     """Map a probability to the risk ramp colour. Colour is never the sole carrier."""
-    if probability < 0.25:
-        return "#3E6C8E"
-    if probability < 0.50:
-        return "#6FA0B8"
-    if probability < 0.75:
-        return "#C9B458"
-    if probability < 0.90:
-        return "#D98324"
-    return "#B33A3A"
+    value = min(max(float(probability), 0.0), 1.0)
+    for edge, color in RISK_BANDS:
+        if value < edge:
+            return color
+    return _token(RISK_RAMP, "risk-severe")
+
+
+def risk_band(probability: float) -> str:
+    """The ramp band *name* for a probability.
+
+    Returned alongside the colour so every surface can carry a text label —
+    colour is never the only carrier of meaning.
+    """
+    value = min(max(float(probability), 0.0), 1.0)
+    for edge, name in [
+        (0.25, "quiet"),
+        (0.50, "elevated"),
+        (0.75, "concerning"),
+        (0.90, "critical"),
+    ]:
+        if value < edge:
+            return name
+    return "severe"
+
+
+def color(name: str) -> str:
+    """Look up any colour token by name, dark theme."""
+    try:
+        return _token(CANVAS_DARK, name)
+    except KeyError:
+        pass
+    palette = get_all_colors()
+    if name in palette:
+        return palette[name]
+    raise KeyError(f"unknown colour token: {name}")
+
+
+def css_variables() -> dict[str, str]:
+    """Every token as a CSS custom property, for the stylesheet injection.
+
+    The values here are the *only* hex literals allowed in the frontend; the
+    stylesheet and every component reference these names.
+    """
+    variables: dict[str, str] = {}
+    for group in (RISK_RAMP, INK, STRUCTURE, SEMANTIC, ACCENT):
+        for token in group:
+            variables[f"--{token.name}"] = token.value
+    for token in CANVAS_DARK:
+        variables[f"--{token.name}"] = token.value
+    variables["--confirmed"] = CONFIRMED_COLOR.value
+    variables["--insufficient"] = INSUFFICIENT_COLOR.value
+    for name, value in RADIUS.items():
+        variables[f"--radius-{name}"] = value
+    for name, value in SPACING.items():
+        variables[f"--space-{name}"] = value
+    for name, spec in TYPE_SCALE.items():
+        variables[f"--type-{name}-size"] = spec["size"]
+        variables[f"--type-{name}-line"] = spec["line-height"]
+        variables[f"--type-{name}-weight"] = spec["weight"]
+        variables[f"--type-{name}-tracking"] = spec["tracking"]
+    for name, value in DENSITY.items():
+        variables[f"--density-{name}"] = value
+    for name, value in MOTION.items():
+        variables[f"--motion-{name}"] = value
+    return variables
+
+
+def plotly_layout(**overrides) -> dict:
+    """A Plotly layout that inherits the token palette.
+
+    Every chart in the app starts from this so no figure hardcodes a background
+    colour. Overrides win, which keeps per-chart tweaks local.
+    """
+    layout = {
+        "template": "plotly_dark",
+        "paper_bgcolor": color("bg-base"),
+        "plot_bgcolor": color("bg-panel"),
+        "font": {
+            "family": '"Inter", "Segoe UI", system-ui, sans-serif',
+            "size": 12,
+            "color": color("ink-secondary"),
+        },
+        "colorway": [t.value for t in RISK_RAMP],
+        "margin": {"l": 8, "r": 8, "t": 32, "b": 8},
+        "hoverlabel": {
+            "bgcolor": color("bg-raised"),
+            "bordercolor": color("hairline-strong"),
+            "font": {"color": color("ink"), "size": 12},
+        },
+        "xaxis": {
+            "gridcolor": color("hairline"),
+            "linecolor": color("hairline-strong"),
+            "zerolinecolor": color("hairline"),
+            "tickfont": {"color": color("ink-muted"), "size": 11},
+        },
+        "yaxis": {
+            "gridcolor": color("hairline"),
+            "linecolor": color("hairline-strong"),
+            "zerolinecolor": color("hairline"),
+            "tickfont": {"color": color("ink-muted"), "size": 11},
+        },
+        "legend": {
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.01,
+            "x": 0,
+            "font": {"color": color("ink-secondary"), "size": 11},
+        },
+    }
+    layout.update(overrides)
+    return layout
+
+
+def streamlit_theme() -> dict[str, str]:
+    """Token values for ``.streamlit/config.toml`` (Streamlit's own theme keys)."""
+    return {
+        "primaryColor": color("accent"),
+        "backgroundColor": color("bg-base"),
+        "secondaryBackgroundColor": color("bg-panel"),
+        "textColor": color("ink"),
+    }

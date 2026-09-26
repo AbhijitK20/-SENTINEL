@@ -1,10 +1,14 @@
 # Streamlit runtime configuration: analytics opt-out and brand theme.
+# Colours are generated from src/sentinel/frontend/tokens.py — change the tokens,
+# not this file, then re-run: uv run python -c "from sentinel.frontend.theme import
+# theme_config_toml; print(theme_config_toml())"
 [browser]
 gatherUsageStats = false
 
 [theme]
 base = "dark"
-primaryColor = "#6dd3a8"
-backgroundColor = "#0b0d12"
-secondaryBackgroundColor = "#151922"
-textColor = "#e8ecf1"
+primaryColor = "#6FA0B8"
+backgroundColor = "#0E1116"
+secondaryBackgroundColor = "#1E242D"
+textColor = "#E6E9EE"
+baseRadius = "4px"
