@@ -80,6 +80,18 @@ class WorldModelConfig(BaseModel):
     imagination_samples: int = Field(default=64, ge=1)
     rollout_steps: int = Field(default=3, ge=0)
     rollout_loss_weight: float = Field(default=1.0, ge=0)
+    # Calibrates the risk head on the states open-loop imagination produces,
+    # which are the only inputs it gets at inference. The mechanism is right -
+    # under teacher forcing the head is never trained on a state it generated -
+    # but it is OFF by default because it was measured to make the imagination
+    # *worse* on this data: over 56 pre-onset cuts in the test scenarios, the
+    # mean imagined risk is already 0.33 against a realized base rate of 0.232,
+    # and turning the term on raises the over-confidence (bias +0.099 -> +0.122,
+    # Brier 0.0815 -> 0.0854). The head over-predicts positives in general
+    # (test recall 0.98, precision 0.54), and training it harder on its own
+    # confident outputs amplifies that. Fix the base-rate bias first, then this
+    # term has something useful to add. See docs/KNOWN_LIMITATIONS.md.
+    imagined_risk_weight: float = Field(default=0.0, ge=0)
 
 
 class WorldModelMetrics(BaseModel):
@@ -279,9 +291,16 @@ def train_world_model(
         for batch_x, batch_risk, batch_stage in loader:
             optimizer.zero_grad()
             states, recon, risk_logits, stage_logits = core.forward_sequence(batch_x)
+            steps = config.rollout_steps
+            imagining = 0 < steps < batch_x.size(1)
             rollout_mse = (
-                dream_consistency(core, batch_x, config.rollout_steps)
-                if config.rollout_steps > 0 and config.rollout_loss_weight > 0
+                dream_consistency(core, batch_x, steps)
+                if imagining and config.rollout_loss_weight > 0
+                else None
+            )
+            imagined_risks = (
+                dream_trajectory(core, batch_x, steps)[1]
+                if imagining and config.imagined_risk_weight > 0
                 else None
             )
             loss, parts = rssm_loss(
@@ -298,6 +317,11 @@ def train_world_model(
                 pos_weight=pos_weight,
                 rollout_mse=rollout_mse,
                 gamma_rollout=config.rollout_loss_weight,
+                imagined_risks=imagined_risks,
+                imagined_risk_labels=(
+                    batch_risk[:, batch_x.size(1) - steps :] if imagined_risks is not None else None
+                ),
+                gamma_imagined=config.imagined_risk_weight,
             )
             loss.backward()
             torch.nn.utils.clip_grad_norm_(core.parameters(), config.grad_clip)
@@ -440,7 +464,7 @@ def _evaluate(core: RSSMCore, batch, vocabulary: list[str], steps: int) -> World
         model_mae: list[float] = []
         persistence_mae: list[float] = []
         if 0 < steps < batch[0].size(1):
-            imagined = dream_trajectory(core, batch[0], steps)
+            imagined, _imagined_risk = dream_trajectory(core, batch[0], steps)
             realized = batch[0][:, batch[0].size(1) - steps :]
             last = batch[0][:, batch[0].size(1) - steps - 1 : batch[0].size(1) - steps]
             model_mae = [float(v) for v in (imagined - realized).abs().mean(dim=(0, 2)).numpy()]

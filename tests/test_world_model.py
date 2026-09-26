@@ -163,13 +163,95 @@ def test_dream_trajectory_has_no_observation_beyond_the_burn_in() -> None:
     torch.manual_seed(0)
     core = _core()
     observations = torch.randn(2, SEQ_LEN, 5)
-    first = dream_trajectory(core, observations, steps=2)
+    first, first_risk = dream_trajectory(core, observations, steps=2)
     altered = observations.clone()
     altered[:, -1] += 100.0  # change only the last window
-    second = dream_trajectory(core, altered, steps=2)
+    second, _ = dream_trajectory(core, altered, steps=2)
 
     assert first.shape == (2, 2, 5)
     assert not torch.allclose(first, second)
+    # The risk logits read off the imagined states are shaped per step, and they
+    # are what the calibration term trains on.
+    assert first_risk.shape == (2, 2, 1)
+    assert torch.isfinite(first_risk).all()
+
+
+def test_imagined_risk_calibration_term_is_optional_and_off_by_default() -> None:
+    """gamma_imagined=0 must reproduce the previous loss exactly."""
+    torch.manual_seed(0)
+    core = _core()
+    batch = 2
+    observations = torch.randn(batch, SEQ_LEN, 5)
+    states, recon, risks, stages = core.forward_sequence(observations)
+    risk_labels = torch.randint(0, 2, (batch, SEQ_LEN)).float()
+    stage_labels = torch.randint(0, 3, (batch, SEQ_LEN))
+    imagined, imagined_risk = dream_trajectory(core, observations, steps=2)
+
+    base, base_parts = rssm_loss(
+        observations,
+        recon,
+        risks,
+        stages,
+        states,
+        risk_labels=risk_labels,
+        stage_labels=stage_labels,
+    )
+    off, off_parts = rssm_loss(
+        observations,
+        recon,
+        risks,
+        stages,
+        states,
+        risk_labels=risk_labels,
+        stage_labels=stage_labels,
+        imagined_risks=imagined_risk,
+        imagined_risk_labels=risk_labels[:, -2:],
+        gamma_imagined=0.0,
+    )
+    assert float(base) == pytest.approx(float(off))
+    assert off_parts["imagined_risk"] == 0.0
+
+    on, on_parts = rssm_loss(
+        observations,
+        recon,
+        risks,
+        stages,
+        states,
+        risk_labels=risk_labels,
+        stage_labels=stage_labels,
+        imagined_risks=imagined_risk,
+        imagined_risk_labels=risk_labels[:, -2:],
+        gamma_imagined=1.0,
+    )
+    assert on_parts["imagined_risk"] > 0.0
+    assert float(on) > float(base), "the calibration term must actually contribute"
+
+
+def test_imagined_risk_term_produces_gradients_for_the_risk_head() -> None:
+    """The point of the term: the head learns from its own decoded states."""
+    torch.manual_seed(0)
+    core = _core()
+    batch = 2
+    observations = torch.randn(batch, SEQ_LEN, 5)
+    states, recon, risks, stages = core.forward_sequence(observations)
+    imagined, imagined_risk = dream_trajectory(core, observations, steps=2)
+    labels = torch.randint(0, 2, (batch, SEQ_LEN)).float()
+
+    loss, _ = rssm_loss(
+        observations,
+        recon,
+        risks,
+        stages,
+        states,
+        risk_labels=labels,
+        imagined_risks=imagined_risk,
+        imagined_risk_labels=labels[:, -2:],
+        gamma_imagined=1.0,
+    )
+    loss.backward()
+    risk_grads = [p.grad for p in core.risk_head.parameters() if p.grad is not None]
+    assert risk_grads, "the risk head received no gradient"
+    assert any(float(g.abs().sum()) > 0 for g in risk_grads)
 
 
 def test_dream_consistency_is_a_positive_scalar() -> None:
@@ -450,3 +532,18 @@ def test_report_states_only_measured_numbers(trained) -> None:
     assert "Persistence MAE" in report
     for metric in trained.result.metrics.values():
         assert f"{metric.reconstruction_mse:.4f}" in report
+
+
+def test_imagined_risk_weight_ships_off_because_it_was_measured_worse() -> None:
+    """The default is a measurement, not an oversight.
+
+    Over 56 pre-onset cuts the term raised mean imagined risk from 0.331 to
+    0.354 against a realized base rate of 0.232, so bias went +0.099 -> +0.122
+    and Brier 0.0815 -> 0.0854. The mechanism is correct and stays available;
+    turning it on requires redoing that measurement. See
+    docs/KNOWN_LIMITATIONS.md.
+    """
+    from sentinel.world_model.train import WorldModelConfig
+
+    assert WorldModelConfig().imagined_risk_weight == 0.0
+    assert WorldModelConfig(imagined_risk_weight=1.0).imagined_risk_weight == 1.0

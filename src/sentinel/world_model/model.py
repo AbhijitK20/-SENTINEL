@@ -364,6 +364,9 @@ def rssm_loss(
     pos_weight: torch.Tensor | None = None,
     rollout_mse: torch.Tensor | None = None,
     gamma_rollout: float = 0.0,
+    imagined_risks: torch.Tensor | None = None,
+    imagined_risk_labels: torch.Tensor | None = None,
+    gamma_imagined: float = 0.0,
 ) -> tuple[torch.Tensor, dict[str, float]]:
     """World-model loss: reconstruction + beta * KL + risk BCE + stage CE.
 
@@ -376,6 +379,11 @@ def rssm_loss(
     imagination path: teacher forcing alone never shows the model its own decoded
     states, so without it open-loop simulation drifts off the observed manifold
     and scores worse than repeating the last window.
+
+    ``imagined_risks`` are the risk head's logits on those *imagined* states and
+    ``imagined_risk_labels`` the realized labels for the same windows, weighted by
+    ``gamma_imagined``. This calibrates the head for the inputs it receives at
+    inference, which are decoded states rather than observations.
     """
     recon_loss = F.mse_loss(reconstructions, observations)
     kl = kl_divergence(states)
@@ -396,12 +404,27 @@ def rssm_loss(
     if rollout_mse is not None and gamma_rollout > 0:
         rollout = rollout_mse
 
+    imagined_risk_loss = recon_loss.new_zeros(())
+    if imagined_risks is not None and imagined_risk_labels is not None and gamma_imagined > 0:
+        # Calibrate the risk head on the states it will actually be asked about.
+        # Under teacher forcing every risk logit is produced from a real
+        # observation, so the head is never trained on the decoded states that
+        # open-loop imagination produces - which are the only inputs it gets at
+        # inference. This term is the difference between a head that is right
+        # about observations and one that is right about futures.
+        imagined_risk_loss = F.binary_cross_entropy_with_logits(
+            imagined_risks.reshape(-1),
+            imagined_risk_labels.reshape(-1).float(),
+            pos_weight=pos_weight,
+        )
+
     total = (
         recon_loss
         + beta * kl
         + lambda_risk * risk_loss
         + gamma_stage * stage_loss
         + gamma_rollout * rollout
+        + gamma_imagined * imagined_risk_loss
     )
     metrics = {
         "recon": float(recon_loss.detach()),
@@ -409,18 +432,26 @@ def rssm_loss(
         "risk": float(risk_loss.detach()),
         "stage": float(stage_loss.detach()),
         "rollout": float(rollout.detach()),
+        "imagined_risk": float(imagined_risk_loss.detach()),
         "total": float(total.detach()),
     }
     return total, metrics
 
 
 def dream_trajectory(core: RSSMCore, observations: torch.Tensor, steps: int) -> torch.Tensor:
-    """Open-loop decoded states for the tail of a sequence: ``(batch, steps, obs_dim)``.
+    """Open-loop decoded states for the tail of a sequence.
 
-    The leading ``T - steps`` windows are burned in through the posterior (real
-    evidence), then the model is rolled forward ``steps`` times from the prior
-    with no observations. Gradients flow through the whole chain, so this is the
+    Returns ``(batch, steps, obs_dim)`` reconstructed observations and
+    ``(batch, steps)`` risk logits read off the *imagined* states. The leading
+    ``T - steps`` windows are burned in through the posterior (real evidence),
+    then the model is rolled forward ``steps`` times from the prior with no
+    observations. Gradients flow through the whole chain, so this is the
     differentiable simulation the open-loop objective is built on.
+
+    The risk logits are the point of interest for calibration: they are what the
+    risk head says about states it generated itself, which is the only input it
+    ever gets at inference time. Scoring those against the realized labels is
+    what keeps the head honest off the observed manifold.
     """
     if steps < 1:
         raise ValueError("steps must be positive")
@@ -434,12 +465,14 @@ def dream_trajectory(core: RSSMCore, observations: torch.Tensor, steps: int) -> 
         _recon, _risk, _stage, state, _encoded = core.forward_step(observations[:, step], state)
 
     imagined: list[torch.Tensor] = []
+    imagined_risk: list[torch.Tensor] = []
     previous: torch.Tensor | None = None
     for _step in range(steps):
-        recon, _risk, _stage, state = core.imagine_step(state, previous)
+        recon, risk, _stage, state = core.imagine_step(state, previous)
         imagined.append(recon)
+        imagined_risk.append(risk)
         previous = recon
-    return torch.stack(imagined, dim=1)
+    return torch.stack(imagined, dim=1), torch.stack(imagined_risk, dim=1)
 
 
 def dream_consistency(core: RSSMCore, observations: torch.Tensor, steps: int) -> torch.Tensor:
@@ -450,5 +483,5 @@ def dream_consistency(core: RSSMCore, observations: torch.Tensor, steps: int) ->
     simulation drifts off the observed manifold and scores worse than repeating
     the last window.
     """
-    imagined = dream_trajectory(core, observations, steps)
+    imagined, _imagined_risk = dream_trajectory(core, observations, steps)
     return F.mse_loss(imagined, observations[:, observations.size(1) - steps :])

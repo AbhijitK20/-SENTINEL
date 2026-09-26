@@ -14,6 +14,28 @@
 These were measured by a script in this repository. The commands are given so
 each number can be reproduced rather than believed.
 
+### The risk head over-predicts, and the imagined-state fix makes that worse
+
+The world model's risk head is trained only under teacher forcing, so it is
+never trained on a state it generated itself - which is the only input it gets
+when `imagine()` rolls forward. `rssm_loss` now has an `imagined_risk` term that
+closes that gap, and `dream_trajectory` returns the risk logits it needs.
+
+It is **off by default**, because it was measured and the measurement said no.
+Over 56 pre-onset cuts in the test scenarios, 4 steps ahead:
+
+| | mean imagined risk | realized base rate | bias | Brier |
+|---|---|---|---|---|
+| term off (shipped) | 0.331 | 0.232 | +0.099 | 0.0815 |
+| term on (weight 1.0) | 0.354 | 0.232 | +0.122 | 0.0854 |
+
+The term is the right mechanism and it does improve the teacher-forced fit (final
+epoch risk loss 0.592 -> 0.515, test F1 0.698 at recall 0.983). But the head
+already over-predicts positives in general - test recall 0.98 against precision
+0.54 - and training it harder on its own confident outputs amplifies that. The
+root cause is the positive-class bias, not the missing imagined-state term. Fix
+the bias first, then this term has something to add.
+
 ### The lateral-movement rule is close to noise on this data
 
 `uv run python scripts/run_detector_benchmark.py`, test split, 108 windows over
