@@ -1,0 +1,14 @@
+{
+  "model_version": "world-model-rssm-v1",
+  "core_type": "lstm",
+  "observation_dim": 98,
+  "sequence_length": 8,
+  "stage_vocabulary": [
+    "Benign",
+    "Lateral Movement",
+    "Reconnaissance"
+  ],
+  "best_epoch": 20,
+  "model_sha256": "c6d7fedc87b8a83533e22219caea0ae01d9a07d85509096a27fe05f8acdcc080",
+  "open_loop_skill_test": null
+}

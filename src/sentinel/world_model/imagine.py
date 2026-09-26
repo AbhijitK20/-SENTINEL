@@ -260,6 +260,78 @@ def risk_saliency(core, history: np.ndarray, feature_names: list[str]) -> list[D
     return result
 
 
+def risk_saliency_vector(core, history: np.ndarray, vector: np.ndarray, schema) -> float:
+    """Sigmoid risk for a *candidate* newest window, given the observed history.
+
+    This is the differentiable score that :mod:`sentinel.explain` differentiates
+    for the world model. The candidate replaces the final observed window, so
+    the attribution is conditional on exactly the burn-in the forecast used.
+    """
+
+    del schema
+    combined = np.vstack([np.asarray(history, dtype=np.float32)[:-1], vector.astype(np.float32)])
+    observations = torch.as_tensor(combined)
+    state = core.initial_state(1)
+    risk_logits = None
+    with torch.no_grad():
+        for step in range(observations.size(0)):
+            _recon, risk_logits, _stage, state, _encoded = core.forward_step(
+                observations[step].unsqueeze(0), state
+            )
+    assert risk_logits is not None
+    return float(torch.sigmoid(risk_logits).squeeze().item())
+
+
+def risk_logit_vector(core, history: np.ndarray, vector: np.ndarray) -> float:
+    """As :func:`risk_saliency_vector` but in logit space.
+
+    Integrated gradients are well defined on the logit; taking them on the
+    probability saturates near 0 and 1, where the derivative vanishes and every
+    feature looks equally innocent.
+    """
+    combined = np.vstack(
+        [np.asarray(history, dtype=np.float32)[:-1], np.asarray(vector, dtype=np.float32)]
+    )
+    observations = torch.as_tensor(combined)
+    state = core.initial_state(1)
+    with torch.no_grad():
+        for step in range(observations.size(0)):
+            _recon, risk_logits, _stage, state, _encoded = core.forward_step(
+                observations[step].unsqueeze(0), state
+            )
+    return float(risk_logits.squeeze().item())
+
+
+def _imagination_explanation(core, ordered, schema, timeline, spread):
+    """Explain an imagined timeline with integrated gradients on the risk logit.
+
+    The risk head is a differentiable function of the observation, so the
+    attribution is a local gradient, not a Shapley value — and the method says
+    so. Integrated gradients are taken in logit space because the sigmoid
+    saturates, and on a saturated probability every feature looks equally
+    innocent.
+    """
+    from sentinel.explain.service import explain_forecast
+
+    try:
+        return explain_forecast(
+            list(ordered),
+            schema,
+            model=None,
+            timeline=list(timeline),
+            model_version=IMAGINATION_VERSION,
+            core=core,
+            spreads={p.window: float(s) for p, s in zip(timeline, spread, strict=True)},
+        )
+    except Exception as error:  # noqa: BLE001 - an explanation must never break a forecast
+        from sentinel.schemas import ForecastExplanation
+
+        return ForecastExplanation(
+            method="unavailable",
+            method_detail=f"attribution failed: {type(error).__name__}: {error}",
+        )
+
+
 def imagination_forecast(
     states: list[NetworkState] | tuple[NetworkState, ...],
     core,
@@ -304,6 +376,7 @@ def imagination_forecast(
     mapping: StageMapping | None = map_stage(
         ordered, infiltration_probability=float(mean_risk[peak_index])
     )
+    explanation = _imagination_explanation(core, ordered, schema, timeline, spread)
     forecast = Forecast(
         input_window_start=ordered[0].window_start,
         input_window_end=ordered[-1].window_end,
@@ -333,6 +406,7 @@ def imagination_forecast(
             "Recursion is open-loop: imagined states feed the next step, so error "
             "accumulates with horizon by construction.",
         ],
+        explanation=explanation,
     )
     diagnostics = rollout_summary(rollout, threshold)
     diagnostics["threshold"] = threshold

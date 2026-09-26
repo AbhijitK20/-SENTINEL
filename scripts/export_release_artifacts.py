@@ -1,17 +1,14 @@
 """Export a versioned, checksummed release artifact bundle.
 
-    uv run python scripts/export_release_artifacts.py \
-        --baseline reports/generated/baseline \
-        --temporal reports/generated/temporal \
-        --calibration reports/generated/calibration \
-        --out models/release/v1
+    uv run python scripts/export_release_artifacts.py --from-benchmark
 
 Produces a self-contained bundle that ``predict.load_artifacts()`` can load
 without any training step.  Every file is SHA-256 checksummed and recorded in
 MANIFEST.json together with the git SHA, config hash, and runtime versions.
 
 The bundle is the single source of truth for the demo and for judges who clone
-the repo — no training is required to run inference.
+the repo — no training is required to run inference, and the world model's
+weights ship with it so the imagined-future path is reachable offline.
 """
 
 from __future__ import annotations
@@ -23,6 +20,8 @@ import platform
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+
+BENCHMARK_DIR = "reports/generated/benchmark/pipeline"
 
 
 def _sha256(path: Path) -> str:
@@ -72,12 +71,30 @@ def main() -> None:
         help="Directory containing calibration.json",
     )
     parser.add_argument(
+        "--world-model",
+        default="reports/generated/world_model",
+        help="Directory containing world_model.json and world_model.pt",
+    )
+    parser.add_argument(
         "--out",
         default="models/release/v1",
         help="Output directory for the release bundle (default: models/release/v1)",
     )
     parser.add_argument("--config", default="configs/default.yaml", help="Config used for training")
+    parser.add_argument(
+        "--from-benchmark",
+        action="store_true",
+        help="Use the standard scripts/run_benchmark.py layout, including the "
+        "world model and its calibration",
+    )
     args = parser.parse_args()
+
+    if args.from_benchmark:
+        pipeline = Path(BENCHMARK_DIR)
+        args.baseline = str(pipeline / "baseline")
+        args.temporal = str(pipeline / "temporal")
+        args.world_model = str(pipeline.parent / "world_model")
+        args.calibration = str(pipeline / "baseline")  # auto-wired by the benchmark
 
     baseline_dir = Path(args.baseline)
     temporal_dir = Path(args.temporal)
@@ -127,6 +144,39 @@ def main() -> None:
     config_src = Path(args.config)
     if config_src.is_file():
         _copy_file(config_src, out / "TRAINING_CONFIG.yaml", files, base=out)
+
+    # --- World model (the imagined-future path must work from a clean clone) ---
+    world_dir = Path(args.world_model)
+    world_result = world_dir / "world_model.json"
+    if world_result.is_file():
+        _copy_file(world_result, out / "world_model.json", files, base=out)
+        world_weights = world_dir / "world_model.pt"
+        if world_weights.is_file():
+            _copy_file(world_weights, out / "weights" / "world_model.pt", files, base=out)
+        world_report = world_dir / "world_model_report.md"
+        if world_report.is_file():
+            _copy_file(world_report, out / "world_model_report.md", files, base=out)
+        try:
+            payload = json.loads(world_result.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+        world_summary = {
+            "model_version": payload.get("model_version"),
+            "core_type": payload.get("config", {}).get("core_type"),
+            "observation_dim": payload.get("observation_dim"),
+            "sequence_length": payload.get("sequence_length"),
+            "stage_vocabulary": payload.get("stage_vocabulary", []),
+            "best_epoch": payload.get("best_epoch"),
+            "model_sha256": payload.get("model_sha256"),
+            "open_loop_skill_test": (
+                (payload.get("metrics", {}).get("test") or {}).get("open_loop_skill")
+            ),
+        }
+        world_summary_path = out / "world_model_summary.json"
+        world_summary_path.write_text(json.dumps(world_summary, indent=2), encoding="utf-8")
+        files[world_summary_path.relative_to(out).as_posix()] = world_summary_path
+    else:
+        print(f"  note: no world model at {world_dir} — the bundle cannot imagine futures")
 
     # --- Provenance ---
     git_sha = _git_sha()

@@ -31,6 +31,11 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from sentinel.baseline import BaselineResult, FeatureWeight
+
+# Imported lazily inside forecast() is not possible (module level is fine and
+# keeps the import graph acyclic): the explainer needs the feature schema and
+# the fitted baseline, both of which the caller already holds.
+from sentinel.explain.service import explain_forecast
 from sentinel.features import FeatureSchema, vectorize_states
 from sentinel.schemas import (
     DrivingFeature,
@@ -211,6 +216,13 @@ def forecast(
         supporting_events=supporting,
         coverage=coverage,
         warnings=warnings,
+        explanation=explain_forecast(
+            ordered,
+            schema,
+            artifacts.baseline_model,
+            timeline=timeline,
+            model_version=FORECAST_VERSION,
+        ),
     )
 
 

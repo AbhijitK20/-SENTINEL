@@ -286,6 +286,43 @@ class SignedFeedback(BaseModel):
     key_version: str = Field(min_length=1)
 
 
+class HorizonAttribution(BaseModel):
+    """Why one point of the probability timeline reads the way it does.
+
+    ``method`` names the technique that produced the values, so a reader always
+    knows whether they are exact Shapley values or a local approximation. A
+    ``spread`` is present when the forecast came from sampled simulation.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    window: int = Field(ge=1)
+    probability: float = Field(ge=0.0, le=1.0)
+    method: str = Field(min_length=1)
+    top_features: list[DrivingFeature] = Field(default_factory=list)
+    spread: float | None = None
+
+
+class ForecastExplanation(BaseModel):
+    """Attribution for a whole forecast: per-step drivers plus a counterfactual.
+
+    Every prediction this product emits carries one of these, or an explicit
+    ``unavailable_reason``. A forecast with no explanation is a black box.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: str = Field(min_length=1)
+    method_detail: str = ""
+    horizon: list[HorizonAttribution] = Field(default_factory=list)
+    current_window: list[DrivingFeature] = Field(default_factory=list)
+    counterfactual: str | None = None
+    caveat: str = (
+        "Model evidence, not causation: these attributions explain this model, "
+        "not the attacker's intent."
+    )
+
+
 class Forecast(BaseModel):
     """Serializable inference output shown to an analyst."""
 
@@ -304,3 +341,4 @@ class Forecast(BaseModel):
     supporting_events: list[str] = Field(default_factory=list)
     coverage: dict[str, bool] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
+    explanation: ForecastExplanation | None = None

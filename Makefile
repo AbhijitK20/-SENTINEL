@@ -1,12 +1,19 @@
-.PHONY: setup gate demo train reproduce bench-real lint test clean web-dev
+.PHONY: setup gate lint test format demo demo-live web-app train reproduce verify \
+	export bench-world bench-real bench-backtest demo-path clean
+
+BUNDLE ?= models/release/v1
+BENCH  ?= reports/generated/benchmark
+CONFIG ?= configs/default.yaml
 
 setup:  ## install everything
-	uv sync --all-extras
+	uv sync --all-extras --all-groups
 
-gate:  ## lint + format-check + tests (run before every commit)
+# ── Quality gate ────────────────────────────────────────────────────────
+gate:  ## lint + format-check + tests + release verification (before every commit)
 	uv run ruff check src tests scripts
 	uv run ruff format --check src tests scripts
 	uv run pytest -q
+	$(MAKE) verify
 
 lint:  ## lint only
 	uv run ruff check src tests scripts
@@ -17,21 +24,48 @@ test:  ## tests only
 format:  ## auto-format code
 	uv run ruff format src tests scripts
 
-demo:  ## dashboard with pretrained release weights, no training
-	uv run streamlit run src/sentinel/dashboard/app.py -- --artifacts models/release/v1
+# ── Release bundle ──────────────────────────────────────────────────────
+verify:  ## check the committed release bundle against its manifest
+	uv run python scripts/verify_release_artifacts.py $(BUNDLE)
 
-train:  ## full reproducible training run
-	uv run python scripts/run_benchmark.py --config configs/default.yaml
+export:  ## rebuild the release bundle from the last benchmark run
+	uv run python scripts/export_release_artifacts.py --from-benchmark --out $(BUNDLE)
+	$(MAKE) verify
 
-reproduce:  ## train, then verify the checksummed release bundle
-	uv run python scripts/run_benchmark.py --config configs/default.yaml
-	uv run python scripts/verify_release_artifacts.py models/release/v1
+# ── Running the product ─────────────────────────────────────────────────
+web-app:  ## analyst console (Streamlit)
+	uv run streamlit run src/sentinel/dashboard/app.py
 
-bench-real:  ## CIC-IDS2017 cross-day benchmark
-	uv run python scripts/run_real_benchmark.py --data-dir data/raw/cic-ids2017/TrafficLabelling
+demo:  ## analyst console preloaded with the committed release artifacts
+	uv run streamlit run src/sentinel/dashboard/app.py -- --artifacts $(BUNDLE)
 
-web-dev:  ## run Next.js frontend dev server
-	cd web/apps/console && npm run dev
+demo-live:  ## console + API + vulnerable target + sensors (docker)
+	docker compose --profile demo up -d
+
+demo-path:  ## headless golden-path demo: prints the six-beat narrative, no clicking
+	uv run python scripts/demo_script.py --output $(BENCH)/demo_script
+
+# ── Reproducing results ─────────────────────────────────────────────────
+train:  ## full reproducible benchmark (baseline, temporal, world model, replay)
+	uv run python scripts/run_benchmark.py --config $(CONFIG) --output $(BENCH)
+
+reproduce:  ## train, export the bundle, then verify it
+	$(MAKE) train
+	$(MAKE) export
+
+bench-world:  ## world-model open-loop benchmark + core comparison
+	uv run python scripts/run_world_model.py \
+		--output $(BENCH)/world_model \
+		--baseline $(BENCH)/pipeline/baseline \
+		--compare-cores
+
+bench-backtest:  ## rolling-origin temporal backtest with drift per origin
+	uv run python scripts/run_backtest.py --output $(BENCH)/backtest
+
+bench-real:  ## CIC-IDS2017 cross-day benchmark (needs the licensed CSVs)
+	uv run python scripts/run_real_benchmark.py \
+		--data-dir data/raw/cic-ids2017/TrafficLabelling \
+		--output reports/generated/real-benchmark
 
 clean:  ## remove build artifacts and caches
 	rm -rf .ruff_cache .pytest_cache __pycache__ dist build
