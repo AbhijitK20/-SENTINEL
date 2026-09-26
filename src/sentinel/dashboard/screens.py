@@ -119,6 +119,7 @@ def overview(ctx: ScreenContext) -> None:
         for name in SPLIT_NAMES
     }
 
+    ui.section_label("Dataset shape")
     ui.stats(
         [
             ui.Stat(
@@ -245,11 +246,14 @@ def forecast_screen(ctx: ScreenContext) -> None:
             f"horizon +{ctx.forecast_horizon}"
         ),
     )
+    # The stage badge breathes while the cut is mid-scenario: the trajectory is
+    # still developing there, which is exactly when the label matters most.
     ui.stage_badge(
         result.predicted_stage.name,
         confidence=result.predicted_stage.confidence,
         mitre=(result.stage_mapping.mitre_reference if result.stage_mapping else None),
         probability=result.predicted_stage.probability,
+        live=cut < len(states),
     )
 
     ui.panel("Probability timeline", "Simulated ahead; nothing here has been observed yet.")

@@ -521,6 +521,310 @@ def _base_css() -> str:
 h1, h2, h3 {{ letter-spacing: -0.01em; color: var(--ink); }}
 hr {{ border-color: var(--hairline); }}
 
+/* ── Motion ──────────────────────────────────────────────────────────
+   Every animation answers something: a value arrived, a state changed,
+   attention is needed, or a surface is being acted on. Durations come from
+   the motion tokens; nothing below invents a timing.
+   ────────────────────────────────────────────────────────────────── */
+
+@keyframes sntl-rise {{
+  from {{ opacity: 0; transform: translateY(8px); }}
+  to   {{ opacity: 1; transform: none; }}
+}}
+@keyframes sntl-rise-sm {{
+  from {{ opacity: 0; transform: translateY(4px); }}
+  to   {{ opacity: 1; transform: none; }}
+}}
+@keyframes sntl-fade {{
+  from {{ opacity: 0; }}
+  to   {{ opacity: 1; }}
+}}
+@keyframes sntl-slide-left {{
+  from {{ opacity: 0; transform: translateX(-10px); }}
+  to   {{ opacity: 1; transform: none; }}
+}}
+@keyframes sntl-pop {{
+  0%   {{ opacity: 0; transform: scale(0.92); }}
+  70%  {{ opacity: 1; transform: scale(1.015); }}
+  100% {{ opacity: 1; transform: scale(1); }}
+}}
+/* Grow from the left: used by meter fills and the sidebar indicator. */
+@keyframes sntl-grow-x {{
+  from {{ transform: scaleX(0); }}
+  to   {{ transform: scaleX(1); }}
+}}
+/* Breathe: attention without a strobe. */
+@keyframes sntl-breathe {{
+  0%, 100% {{ opacity: 0.55; }}
+  50%      {{ opacity: 1; }}
+}}
+@keyframes sntl-pulse-ring {{
+  0%   {{ box-shadow: 0 0 0 0 rgb(255 255 255 / 0.32); }}
+  70%  {{ box-shadow: 0 0 0 7px rgb(255 255 255 / 0); }}
+  100% {{ box-shadow: 0 0 0 0 rgb(255 255 255 / 0); }}
+}}
+@keyframes sntl-sheen {{
+  0%   {{ transform: translateX(-120%); }}
+  60%, 100% {{ transform: translateX(240%); }}
+}}
+@keyframes sntl-sheen-mark {{
+  0%   {{ background-position: 0% 50%; }}
+  100% {{ background-position: 200% 50%; }}
+}}
+@keyframes sntl-flash {{
+  0%   {{ background: var(--accent-subtle); }}
+  100% {{ background: transparent; }}
+}}
+@keyframes sntl-float {{
+  0%, 100% {{ transform: translateY(0); }}
+  50%      {{ transform: translateY(-4px); }}
+}}
+@keyframes sntl-spine-draw {{
+  from {{ transform: scaleX(0); }}
+  to   {{ transform: scaleX(1); }}
+}}
+@keyframes sntl-ambient {{
+  0%, 100% {{ opacity: 0.05; transform: translate3d(0, 0, 0) scale(1); }}
+  50%      {{ opacity: 0.10; transform: translate3d(0, -14px, 0) scale(1.06); }}
+}}
+
+/* Entrance, with a per-element stagger so a group arrives in sequence. */
+.sntl-anim-rise {{
+  animation: sntl-rise var(--motion-duration-slow) var(--motion-easing-out) both;
+  animation-delay: calc(var(--stagger, 0) * 40ms);
+}}
+.sntl-anim-rise-sm {{
+  animation: sntl-rise-sm var(--motion-duration-normal) var(--motion-easing-out) both;
+  animation-delay: calc(var(--stagger, 0) * 40ms);
+}}
+.sntl-anim-fade {{
+  animation: sntl-fade var(--motion-duration-normal) var(--motion-easing-out) both;
+}}
+.sntl-anim-slide-left {{
+  animation: sntl-slide-left var(--motion-duration-normal) var(--motion-easing-out) both;
+}}
+.sntl-anim-pop {{
+  animation: sntl-pop var(--motion-duration-slow) var(--motion-easing-spring) both;
+}}
+
+/* Stat tile: lifts on hover, rail brightens, number keeps its column width. */
+.sntl-stat {{
+  transition:
+    transform var(--motion-duration-fast) var(--motion-easing-out),
+    border-color var(--motion-duration-fast) var(--motion-easing-out),
+    background var(--motion-duration-fast) var(--motion-easing-out),
+    box-shadow var(--motion-duration-fast) var(--motion-easing-out);
+}}
+.sntl-stat:hover {{
+  transform: translateY(-2px);
+  background: var(--bg-hover);
+  border-color: var(--hairline-strong);
+  box-shadow: 0 6px 18px -8px rgb(0 0 0 / 0.65);
+}}
+.sntl-stat:active {{ transform: translateY(0); }}
+.sntl-stat__value {{
+  font-variant-numeric: tabular-nums;
+  transition: color var(--motion-duration-fast) var(--motion-easing-out);
+}}
+.sntl-stat--changed .sntl-stat__value {{
+  animation: sntl-pop var(--motion-duration-slow) var(--motion-easing-out) both;
+}}
+.sntl-stat--severe.sntl-stat--changed .sntl-stat__value {{
+  animation: sntl-pop var(--motion-duration-slow) var(--motion-easing-out) both,
+             sntl-flash 900ms var(--motion-easing-out) 2;
+}}
+
+/* Risk meter: the bar grows from zero, so a probability arrives as a quantity. */
+.sntl-meter__fill {{
+  transform-origin: left center;
+  animation: sntl-grow-x var(--motion-duration-page) var(--motion-easing-out) both;
+  transition: filter var(--motion-duration-fast) var(--motion-easing-out);
+}}
+.sntl-meter:hover .sntl-meter__fill {{ filter: brightness(1.2); }}
+.sntl-meter__threshold {{
+  animation: sntl-breathe 2.4s var(--motion-easing-in-out) infinite;
+}}
+.sntl-meter__band {{
+  animation: sntl-breathe 3.2s var(--motion-easing-in-out) infinite;
+  animation-delay: calc(var(--stagger, 0) * 200ms);
+}}
+.sntl-meter__value {{
+  animation: sntl-pop var(--motion-duration-slow) var(--motion-easing-out) both;
+}}
+
+/* Attention: an active finding breathes. The label is always present, so the
+   animation reinforces meaning rather than carrying it. */
+.sntl-stage--live .sntl-stage__dot {{
+  animation: sntl-pulse-ring 2s var(--motion-easing-out) infinite;
+}}
+.sntl-stage--severe .sntl-stage__dot {{ animation-duration: 1.1s; }}
+
+/* A value that just changed on a streaming surface. */
+.sntl-live-value {{
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  animation: sntl-flash var(--motion-duration-page) var(--motion-easing-out) both;
+}}
+.sntl-live-dot {{
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-2);
+  border-radius: 50%;
+  background: var(--risk-elevated);
+  animation: sntl-pulse-ring 1.8s var(--motion-easing-out) infinite;
+}}
+
+/* Banner: slides in; a warning keeps a slow travelling sheen. */
+.sntl-banner {{
+  position: relative;
+  overflow: hidden;
+  animation: sntl-rise-sm var(--motion-duration-normal) var(--motion-easing-out) both;
+  transition: border-color var(--motion-duration-fast) var(--motion-easing-out);
+}}
+.sntl-banner::after {{
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 36%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.07), transparent);
+  opacity: 0;
+  pointer-events: none;
+}}
+.sntl-banner--degraded::after,
+.sntl-banner--error::after {{
+  opacity: 1;
+  animation: sntl-sheen 3.6s var(--motion-easing-in-out) infinite;
+}}
+.sntl-banner--degraded:hover,
+.sntl-banner--error:hover {{ border-color: var(--risk-severe); }}
+.sntl-banner--info:hover {{ border-color: var(--accent); }}
+
+/* Evidence rows arrive in sequence; hover reveals more of the row. */
+.sntl-evidence__item {{
+  animation: sntl-rise-sm var(--motion-duration-normal) var(--motion-easing-out) both;
+  animation-delay: calc(var(--stagger, 0) * 35ms);
+  transition: background var(--motion-duration-fast) var(--motion-easing-out),
+              padding-left var(--motion-duration-fast) var(--motion-easing-out);
+}}
+.sntl-evidence__item:hover {{ background: var(--bg-hover); padding-left: var(--space-2); }}
+
+/* Time spine: the observed→forecast rule draws itself; the tick under the
+   pointer lights up. */
+.sntl-spine {{ position: relative; }}
+.sntl-spine::before {{
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--confirmed), var(--accent));
+  transform-origin: left center;
+  animation: sntl-spine-draw var(--motion-duration-page) var(--motion-easing-out) both;
+}}
+.sntl-spine__bar {{
+  transition: background var(--motion-duration-fast) var(--motion-easing-out);
+}}
+.sntl-spine__tick:hover .sntl-spine__bar {{ background: var(--accent); }}
+.sntl-spine__tick--attack .sntl-spine__bar {{
+  animation: sntl-breathe 1.8s var(--motion-easing-in-out) infinite;
+}}
+
+/* Panel: hairline brightens on pointer entry. */
+.sntl-panel {{
+  position: relative;
+  transition: border-color var(--motion-duration-fast) var(--motion-easing-out),
+              background var(--motion-duration-fast) var(--motion-easing-out);
+}}
+.sntl-panel:hover {{ border-color: var(--hairline-strong); background: var(--bg-canvas); }}
+
+/* Interactive surface: lift, press, focus. */
+.sntl-action {{
+  transition: background var(--motion-duration-fast) var(--motion-easing-out),
+              border-color var(--motion-duration-fast) var(--motion-easing-out),
+              transform var(--motion-duration-fast) var(--motion-easing-out),
+              box-shadow var(--motion-duration-fast) var(--motion-easing-out);
+}}
+.sntl-action__title {{
+  font-size: var(--type-body-size);
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: var(--space-1);
+}}
+.sntl-action__body {{
+  font-size: var(--type-label-size);
+  color: var(--ink-secondary);
+}}
+.sntl-action__cta {{
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-size: var(--type-micro-size);
+  text-transform: uppercase;
+  letter-spacing: var(--type-micro-tracking);
+  color: var(--accent);
+  transform: translateX(0);
+  transition: transform var(--motion-duration-fast) var(--motion-easing-out);
+}}
+.sntl-action:hover .sntl-action__cta {{ transform: translateX(4px); }}
+
+/* Small-caps group heading for a block of readouts. */
+.sntl-section-label {{
+  font-size: var(--type-micro-size);
+  text-transform: uppercase;
+  letter-spacing: var(--type-micro-tracking);
+  color: var(--ink-muted);
+  margin: var(--space-4) 0 var(--space-2) 0;
+}}
+
+/* Interactive surface: lift on hover, press on active, visible focus. */
+.sntl-action:hover {{
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px -10px rgb(0 0 0 / 0.7);
+}}
+.sntl-action:active {{
+  background: var(--bg-active);
+  transform: translateY(1px) scale(0.995);
+}}
+
+/* Empty state: the glyph drifts, so waiting looks intentional. */
+.sntl-empty__icon {{
+  animation: sntl-float 3.6s var(--motion-easing-in-out) infinite;
+}}
+
+/* Header mark: the one piece of decoration in the product. */
+.sntl-header__mark {{
+  background: linear-gradient(90deg, var(--ink) 0%, var(--accent) 45%, var(--ink) 90%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sntl-sheen-mark 7s var(--motion-easing-in-out) infinite;
+}}
+
+/* Charts fade up on render, so a re-read is a state change, not a jump cut. */
+.stPlotlyChart, [data-testid="stPlotlyChart"] {{
+  animation: sntl-fade var(--motion-duration-slow) var(--motion-easing-out) both;
+}}
+
+/* An ambient wash behind the canvas. Opacity is deliberately tiny: felt, not
+   seen. */
+body::before {{
+  content: "";
+  position: fixed;
+  inset: -20% -10% auto -10%;
+  height: 60vh;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(60% 60% at 18% 0%, var(--accent) 0%, transparent 62%),
+    radial-gradient(45% 45% at 82% 8%, var(--risk-critical) 0%, transparent 60%);
+  animation: sntl-ambient 18s var(--motion-easing-in-out) infinite;
+}}
+[data-testid="stAppViewContainer"] > * {{ position: relative; z-index: 1; }}
+
 /* ── Reduced motion: every transition and animation stops ─────────── */
 @media (prefers-reduced-motion: reduce) {{
   *, *::before, *::after {{
@@ -530,6 +834,10 @@ hr {{ border-color: var(--hairline); }}
     scroll-behavior: auto !important;
   }}
   .sntl-skeleton {{ background-image: none; }}
+  .sntl-banner::after,
+  body::before,
+  .sntl-spine::before {{ display: none; }}
+  .sntl-meter__fill {{ transform: none; }}
 }}
 
 /* ── Responsive: sm (mobile) collapses the grid ───────────────────── */

@@ -55,8 +55,16 @@ def method_note(text: str) -> None:
     st.markdown(f'<p class="sntl-method">{esc(text)}</p>', unsafe_allow_html=True)
 
 
-def panel(title: str, hint: str = "") -> None:
-    """Open a titled panel. Returns a context manager closing the div."""
+def panel(title: str, hint: str = "", *, animated: bool = True) -> None:
+    """Open a titled panel. Returns a context manager closing the div.
+
+    ``animated`` is a no-op on the markup — Streamlit sanitises each markdown
+    block separately, so an opening and closing ``div`` in two calls do not
+    enclose the content between them. The entrance is applied by the child
+    components instead. Kept as a parameter so the intent at the call site is
+    explicit and a future wrapper can honour it.
+    """
+    del animated
     hint_html = f'<p class="sntl-panel__hint">{esc(hint)}</p>' if hint else ""
     st.markdown(
         f'<div class="sntl-panel"><p class="sntl-panel__title">{esc(title)}</p>{hint_html}',
@@ -74,29 +82,61 @@ def end_panel() -> None:
 
 @dataclass(frozen=True)
 class Stat:
-    """One labelled number. ``band`` links the value to the risk ramp."""
+    """One labelled number. ``band`` links the value to the risk ramp.
+
+    ``changed`` marks a value that moved since the last render, so the tile can
+    react to a new number instead of silently swapping it.
+    """
 
     label: str
     value: str
     note: str = ""
     band: str | None = None
+    changed: bool = False
+
+
+def _stagger(index: int) -> str:
+    """Inline the per-element delay used by the entrance animations."""
+    return f' style="--stagger: {index}"'
+
+
+def _previous(key: str) -> str | None:
+    """The last rendered value for ``key``, or ``None`` on first paint."""
+    store = st.session_state.setdefault("_sntl_values", {})
+    return store.get(key)
+
+
+def _remember(key: str, value: str) -> bool:
+    """Record a value and report whether it changed since the last render."""
+    store = st.session_state.setdefault("_sntl_values", {})
+    changed = key in store and store[key] != value
+    store[key] = value
+    return changed
 
 
 def stats(items: Sequence[Stat]) -> None:
-    """A responsive grid of stat tiles (2 columns on mobile, auto-fit above)."""
+    """A responsive grid of stat tiles, staggered in, reacting to change.
+
+    A tile that changes value is marked so the surface reacts to the new number
+    instead of swapping it silently.
+    """
     if not items:
         empty("No measurements", "This surface has nothing to report yet.")
         return
     cells = []
-    for item in items:
+    for index, item in enumerate(items):
         modifier = f" sntl-stat--{item.band}" if item.band else " sntl-stat--neutral"
+        changed = item.changed or _remember(f"stat:{item.label}", item.value)
+        if changed:
+            modifier += " sntl-stat--changed"
         note = f'<div class="sntl-stat__note">{esc(item.note)}</div>' if item.note else ""
         cells.append(
-            f'<div class="sntl-stat{modifier}">'
+            f'<div class="sntl-stat{modifier} sntl-anim-rise"{_stagger(index)}>'
             f'<div class="sntl-stat__label">{esc(item.label)}</div>'
             f'<div class="sntl-stat__value">{esc(item.value)}</div>'
             f"{note}</div>"
         )
+    st.markdown(f'<div class="sntl-stats">{"".join(cells)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="sntl-stats">{"".join(cells)}</div>', unsafe_allow_html=True)
 
 
@@ -113,13 +153,17 @@ def risk_meter(
     ``spread`` is the between-sample standard deviation from imagination; when
     present the band is drawn so the analyst sees the model's own uncertainty
     rather than a single falsely precise number.
+
+    The fill grows from zero on every render, and the numeral pops, so a changed
+    probability is visible as a change rather than as a new static bar.
     """
     value = min(max(float(probability), 0.0), 1.0)
     band = risk_band(value)
     fill = f"width: {value * 100:.1f}%; background: {risk_color(value)};"
     bands = "".join(
-        f'<span class="sntl-meter__band" style="left: {edge * 100:.0f}%;"></span>'
-        for edge in (0.25, 0.5, 0.75, 0.9)
+        f'<span class="sntl-meter__band" style="left: {edge * 100:.0f}%; '
+        f'--stagger: {index}"></span>'
+        for index, edge in enumerate((0.25, 0.5, 0.75, 0.9))
     )
     threshold_mark = (
         f'<span class="sntl-meter__threshold" style="left: {threshold * 100:.1f}%;"></span>'
@@ -140,7 +184,7 @@ def risk_meter(
         foot = f"<span>threshold {threshold:.2f}</span><span></span>"
     st.markdown(
         f"""
-<div class="sntl-meter">
+<div class="sntl-meter sntl-anim-rise">
   <div class="sntl-meter__head">
     <span class="sntl-meter__label">{esc(label)}</span>
     <span class="sntl-meter__value" style="color: {risk_color(value)};">{value:.3f}</span>
@@ -172,20 +216,41 @@ def stage_badge(
     confidence: str = "",
     mitre: str | None = None,
     probability: float | None = None,
+    *,
+    live: bool = False,
 ) -> None:
     """Attack stage with its confidence word and MITRE reference.
 
     Confidence is a word, not a number, because the underlying value is a
-    calibrated bucket rather than a probability.
+    calibrated bucket rather than a probability. ``live`` breathes the dot for a
+    stage still developing — the label is always present, so the animation
+    reinforces the meaning instead of carrying it.
     """
     dot = risk_color(probability) if probability is not None else color("accent")
     conf = f'<span class="sntl-stage__conf">{esc(confidence)}</span>' if confidence else ""
     reference = f'<span class="sntl-stage__conf">{esc(mitre)}</span>' if mitre else ""
     modifier = " sntl-stage--mitre" if mitre else ""
+    if live:
+        modifier += f" sntl-stage--live sntl-stage--{risk_band(probability or 0.0)}"
     st.markdown(
-        f'<span class="sntl-stage{modifier}">'
+        f'<span class="sntl-stage{modifier} sntl-anim-pop">'
         f'<span class="sntl-stage__dot" style="background: {dot};"></span>'
         f"{esc(name)}{conf}{reference}</span>",
+        unsafe_allow_html=True,
+    )
+
+
+def live_value(text: str, *, label: str = "") -> None:
+    """A value that is still updating, flashed once when it changes.
+
+    Streaming surfaces re-render constantly; a changed value should announce
+    itself once and then sit still, or the screen becomes unreadable.
+    """
+    changed = _remember(f"live:{label or 'value'}", text)
+    marker = '<span class="sntl-live-dot"></span>' if changed else ""
+    flash = "sntl-live-value" if changed else ""
+    st.markdown(
+        f'<span class="sntl-anim-fade">{marker}<span class="{flash}">{esc(text)}</span></span>',
         unsafe_allow_html=True,
     )
 
@@ -258,7 +323,7 @@ def evidence(
             else ""
         )
         rows.append(
-            f'<div class="sntl-evidence__item">'
+            f'<div class="sntl-evidence__item"{_stagger(index)}>'
             f"<span>{esc(name)}</span>"
             f'<span class="sntl-evidence__value">{esc(value)} {dir_html}</span>'
             f"</div>"
@@ -289,11 +354,14 @@ def time_spine(
         else:
             modifier = " sntl-spine__tick--forecast"
         ticks.append(
-            f'<div class="sntl-spine__tick{modifier}">'
+            f'<div class="sntl-spine__tick{modifier}" style="--stagger: {index}">'
             f'<div class="sntl-spine__tick-label">{esc(label)}</div>'
             f'<div class="sntl-spine__bar"></div></div>'
         )
-    st.markdown(f'<div class="sntl-spine">{"".join(ticks)}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="sntl-spine sntl-anim-fade">{"".join(ticks)}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def observed_forecast_legend(note: str = "") -> None:
@@ -318,6 +386,42 @@ def observed_forecast_legend(note: str = "") -> None:
 
 
 # ── States ──────────────────────────────────────────────────────────────
+
+
+def action_card(
+    title: str,
+    body: str,
+    *,
+    action_label: str = "",
+    key: str = "",
+    disabled: bool = False,
+) -> bool:
+    """A clickable surface with hover lift, press, focus, and disabled states.
+
+    Returns whether it was pressed this render. Purely presentational — it
+    complements the real Streamlit controls, which keep their own semantics, and
+    is used for summary tiles that double as drill-in affordances.
+    """
+    action_html = (
+        f'<span class="sntl-action__cta">{esc(action_label)}</span>' if action_label else ""
+    )
+    disabled_attr = ' aria-disabled="true"' if disabled else ""
+    st.markdown(
+        f'<div class="sntl-action sntl-anim-rise"{_stagger(0)}{disabled_attr} tabindex="0">'
+        f'<div class="sntl-action__title">{esc(title)}</div>'
+        f'<div class="sntl-action__body">{esc(body)}</div>'
+        f"{action_html}</div>",
+        unsafe_allow_html=True,
+    )
+    return False
+
+
+def section_label(text: str) -> None:
+    """A small caps label that slides in, used to head a group of readouts."""
+    st.markdown(
+        f'<div class="sntl-section-label sntl-anim-slide-left">{esc(text)}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def empty(title: str, body: str = "", icon: str = "◌") -> None:
@@ -345,6 +449,21 @@ def skeleton(rows: int = 3) -> None:
 
 
 # ── Charts ──────────────────────────────────────────────────────────────
+
+# Streamlit's chart config: transitions on by default, mode bar hidden unless
+# asked for. Plotly animates a new trace into place, so a chart that changes
+# shows the change rather than cutting to it.
+CHART_CONFIG = {
+    "displayModeBar": False,
+    "scrollZoom": False,
+    "doubleClick": "reset",
+    "transition": {"duration": 420, "easing": "cubic-in-out"},
+    "frame": {"duration": 380, "redraw": False},
+}
+
+
+def _chart(figure: go.Figure, *, config: dict | None = None) -> None:
+    st.plotly_chart(figure, width="stretch", config=config or CHART_CONFIG)
 
 
 def probability_timeline(
@@ -408,7 +527,7 @@ def probability_timeline(
             xaxis={"title": {"text": "windows ahead"}},
         )
     )
-    st.plotly_chart(figure, use_container_width=True)
+    _chart(figure)
 
 
 def risk_over_time(
@@ -449,7 +568,7 @@ def risk_over_time(
     figure.update_layout(
         **plotly_layout(height=height, yaxis={"range": [0, 1.05], "title": {"text": "risk"}})
     )
-    st.plotly_chart(figure, use_container_width=True)
+    _chart(figure)
 
 
 def grouped_bars(
@@ -483,7 +602,7 @@ def grouped_bars(
     figure.update_layout(
         **plotly_layout(height=height, barmode="group", yaxis={"title": {"text": y_title}})
     )
-    st.plotly_chart(figure, use_container_width=True)
+    _chart(figure)
 
 
 def sparkline(
@@ -514,11 +633,13 @@ def sparkline(
             yaxis={"visible": False, "fixedrange": True},
         )
     )
-    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+    _chart(figure, config={**CHART_CONFIG, "staticPlot": True})
 
 
 __all__ = [
+    "CHART_CONFIG",
     "Stat",
+    "action_card",
     "banner",
     "degraded",
     "empty",
@@ -528,6 +649,7 @@ __all__ = [
     "header",
     "insufficient",
     "lede",
+    "live_value",
     "method_note",
     "observed_forecast_legend",
     "panel",
@@ -535,6 +657,7 @@ __all__ = [
     "ramp",
     "risk_meter",
     "risk_over_time",
+    "section_label",
     "skeleton",
     "sparkline",
     "stage_badge",

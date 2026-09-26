@@ -79,6 +79,14 @@ least-squares norm 2.7e5"). A number without a method is not actionable.
 - 2026-09-26 — the world-model tab's two hand-rolled charts were deleted in favour
   of `ui.probability_timeline` and `ui.grouped_bars`, so a chart cannot exist
   outside the design system.
+- 2026-09-27 — motion layer added. Every animation answers one of four
+  questions: a value arrived, a state changed, attention is needed, or a surface
+  is being acted on. Nothing animates decoratively.
+- 2026-09-27 — stat tiles detect a changed value across renders and react once,
+  via a small session-state store. A streaming surface that re-renders every two
+  seconds would be unreadable if every redraw animated.
+- 2026-09-27 — one `prefers-reduced-motion: reduce` block disables all of it,
+  including the ambient wash, the banner sheen, and the meter fill origin.
 
 ## Components (`src/sentinel/frontend/components.py`)
 
@@ -100,15 +108,37 @@ least-squares norm 2.7e5"). A number without a method is not actionable.
 | `observed_forecast_legend` | persistent measured-vs-simulated strip | — |
 | `empty` | icon + heading + explanation | — |
 | `skeleton` | loading placeholder matching real geometry | — |
-| `probability_timeline` | forecast curve, threshold, realised overlay | — |
-| `risk_over_time` | observed risk with an unobserved tail | — |
-| `grouped_bars` | model-vs-model comparison | — |
-| `sparkline` | inline trend for a table cell | — |
+| `live_value` | a value still updating, flashed once when it changes | change-reactive |
+| `probability_timeline` | forecast curve, threshold, realised overlay | Plotly transitions |
+| `risk_over_time` | observed risk with an unobserved tail | Plotly transitions |
+| `grouped_bars` | model-vs-model comparison | Plotly transitions |
+| `sparkline` | inline trend for a table cell | static (cell-sized) |
 | `.sntl-action` | interactive surface: hover, active, focus-visible, disabled | all four |
 
-Every interactive element defines hover, active, focus-visible and disabled in
-the stylesheet, and every animation is wrapped by one
-`prefers-reduced-motion: reduce` block.
+## Motion
+
+Motion is a system, not a pile of keyframes. Four questions earn an animation:
+
+1. **A value arrived** — stat tiles rise in sequence, the risk meter fill grows
+   from zero, the numeral pops, evidence rows cascade.
+2. **A state changed** — a stat tile whose value moved flashes once; the live
+   dot appears on a streaming surface. Change is detected against the previous
+   render (session state), so a value that does not move does not animate.
+3. **Attention is needed** — a live stage badge breathes (faster at severe), the
+   threshold marker breathes, a warning banner carries a slow travelling sheen,
+   attack ticks on the time spine pulse. All of these are paired with a text
+   label, so the motion reinforces meaning rather than carrying it.
+4. **A surface is acted on** — tiles and panels lift on hover and press on
+   active, the header mark has a 7-second sheen, the ambient wash drifts behind
+   the canvas at ≤10% opacity.
+
+Everything else is deliberately still. A dense analyst surface that moves
+constantly is unreadable, so infinite loops are limited to the attention and
+ambient cases above, and durations come from the motion tokens (100/150/200/300/
+400 ms) rather than being invented per component.
+
+`prefers-reduced-motion: reduce` stops all of it — entrances, loops, the
+ambient wash, the banner sheen, and the meter fill origin.
 
 ## Screens (`src/sentinel/dashboard/screens.py`)
 

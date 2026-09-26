@@ -8,7 +8,9 @@ rather than as a list of styling calls. Nothing new lives here.
 from __future__ import annotations
 
 from sentinel.frontend.components import (
+    CHART_CONFIG,
     Stat,
+    action_card,
     banner,
     degraded,
     empty,
@@ -18,6 +20,7 @@ from sentinel.frontend.components import (
     header,
     insufficient,
     lede,
+    live_value,
     method_note,
     observed_forecast_legend,
     panel,
@@ -25,6 +28,7 @@ from sentinel.frontend.components import (
     ramp,
     risk_meter,
     risk_over_time,
+    section_label,
     skeleton,
     sparkline,
     stage_badge,
@@ -46,7 +50,9 @@ def band_of(probability: float | None) -> str | None:
 
 
 __all__ = [
+    "CHART_CONFIG",
     "Stat",
+    "action_card",
     "band_of",
     "banner",
     "degraded",
@@ -57,6 +63,7 @@ __all__ = [
     "header",
     "insufficient",
     "lede",
+    "live_value",
     "method_note",
     "observed_forecast_legend",
     "panel",
@@ -64,6 +71,7 @@ __all__ = [
     "ramp",
     "risk_meter",
     "risk_over_time",
+    "section_label",
     "skeleton",
     "sparkline",
     "stage_badge",
