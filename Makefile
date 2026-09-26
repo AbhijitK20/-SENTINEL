@@ -1,4 +1,4 @@
-.PHONY: setup gate lint test format demo demo-live web-app train reproduce verify \
+.PHONY: setup gate lint reach test format demo demo-live web-app train reproduce verify \
 	export bench-world bench-real bench-backtest bench-detectors demo-path clean
 
 BUNDLE ?= models/release/v1
@@ -9,14 +9,18 @@ setup:  ## install everything
 	uv sync --all-extras --all-groups
 
 # ── Quality gate ────────────────────────────────────────────────────────
-gate:  ## lint + format-check + tests + release verification (before every commit)
+gate:  ## lint + format-check + reachability + tests + release verification
 	uv run ruff check src tests scripts
 	uv run ruff format --check src tests scripts
+	uv run python scripts/check_reachability.py --strict
 	uv run pytest -q
 	$(MAKE) verify
 
 lint:  ## lint only
 	uv run ruff check src tests scripts
+
+reach:  ## fail if any module is unreachable from an entry point
+	uv run python scripts/check_reachability.py --strict
 
 test:  ## tests only
 	uv run pytest -q

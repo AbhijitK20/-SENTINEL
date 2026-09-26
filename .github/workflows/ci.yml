@@ -17,6 +17,7 @@ jobs:
       - run: uv sync
       - run: uv run ruff check src tests scripts
       - run: uv run ruff format --check src tests scripts
+      - run: uv run python scripts/check_reachability.py --strict
 
   test:
     runs-on: ubuntu-latest

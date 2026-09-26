@@ -10,7 +10,6 @@ import pytest
 from sentinel.cases import CaseStore
 from sentinel.compliance import generate_report, write_report
 from sentinel.drift import band_of, compare_feature, psi
-from sentinel.federated import fed_average
 from sentinel.feedback import sign_feedback, verify_feedback
 from sentinel.registry import ModelRegistry
 from sentinel.schemas import AnalystFeedback, NetworkState
@@ -120,47 +119,6 @@ def test_compliance_report_is_honest(tmp: Path) -> None:
     assert path.with_suffix(".json").exists()
 
 
-# ── federated ────────────────────────────────────────────────────────────
-def test_fedavg_weighted_average_and_guards() -> None:
-    import numpy as np
-
-    from sentinel.federated import ClientUpdate
-
-    updates = [
-        ClientUpdate("a", np.array([1.0, 2.0]), 0.5, 100),
-        ClientUpdate("b", np.array([3.0, 4.0]), 1.5, 300),
-    ]
-    result = fed_average(updates)
-    assert result.n_clients == 2
-    assert result.total_samples == 400
-    assert result.coef == pytest.approx([2.5, 3.5])  # (1*100 + 3*300)/400, etc.
-    assert result.intercept == pytest.approx(1.25)
-    with pytest.raises(ValueError, match="at least one"):
-        fed_average([])
-    with pytest.raises(ValueError, match="dimensions disagree"):
-        fed_average([updates[0], ClientUpdate("c", np.array([1.0]), 0.0, 10)])
-
-
-def test_fedavg_trains_real_clients() -> None:
-    scenarios = [f"fed{i}" for i in range(4)]
-    labelled = generate_labelled_states(scenarios, seed=9, window_seconds=60, stride_seconds=60)
-    from sentinel.targets import build_sequence_samples, make_split_manifest
-
-    updates = []
-    for c in range(2):
-        cs = scenarios[c * 2 : (c + 1) * 2]
-        cl = [item for item in labelled if item.scenario_id in cs]
-        samples = build_sequence_samples(cl, sequence_length=2, horizon=1)
-        manifest = make_split_manifest(cs, seed=9)
-        from sentinel.federated import train_client
-
-        updates.append(train_client(f"client-{c}", cl, samples, manifest, seed=9))
-    result = fed_average(updates)
-    assert result.n_clients == 2
-    assert result.total_samples == sum(u.n_samples for u in updates)
-
-
-# ── signed feedback ──────────────────────────────────────────────────────
 def test_signed_feedback_detects_tampering() -> None:
     feedback = AnalystFeedback(
         subject_id="INC-001",

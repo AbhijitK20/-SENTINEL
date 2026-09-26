@@ -367,7 +367,7 @@ Lateral Movement ~61 s).
 Roadmap phases 7-11 gained honest in-process implementations: model registry
 with approve/rollback (`registry.py`), PSI drift monitoring (`drift.py`),
 case lifecycle with SLA (`cases.py`), NIST/ISO/SOC2 control reporting with
-gaps listed (`compliance.py`), FedAvg federated simulation (`federated.py`),
+gaps listed (`compliance.py`),
 HMAC-signed analyst feedback, org_id tenant fields on API keys, four
 telemetry-gated detectors (C2/phishing/insider/malware), a Prometheus
 `/metrics` endpoint, `POST /v1/events` live push, GitHub Actions CI, and a

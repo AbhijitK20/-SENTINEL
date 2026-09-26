@@ -69,7 +69,11 @@ to be unbacked, which for a results table is the same thing.
 
 ## Explicitly not claimed
 
-- No graph neural network. The GAT was deleted; only `build_network_graph` ships.
+- No graph neural network, and no graph representation either. Both
+  `sentinel/graph/gnn.py` and `sentinel/graph/state.py` were unreachable and have
+  been deleted. The dashboard builds its own topology view from flow summaries.
+- No federated learning. `federated.py` was a FedAvg simulation that nothing
+  called; it is gone rather than left to look like a capability.
 - No attention visualisation. The temporal model is a GRU and produces no
   attention weights, so `Explanation.temporal_attention` and `graph_attention`
   are always `None`.
@@ -78,10 +82,14 @@ to be unbacked, which for a results table is the same thing.
 - No causal claim. Every attribution is model evidence.
 - No posterior interval on the probability timeline. `ProbabilityPoint.confidence`
   is a per-window score composed of horizon skill, model agreement, and
-  decisiveness. Nothing there is sampled.
+  decisiveness. Nothing there is sampled. (Conformal prediction with a real
+  coverage guarantee is Sprint 2 work.)
 - No like-for-like world-model-vs-linear comparison. The linear baseline is
   crushed by its own stability projection; the rollout forecast says so on its
   face.
+- No Kubernetes, Kafka, PostgreSQL, Redis, MLflow or permissioned chain. The
+  removed `ga/packaging.py` and `scale/capacity.py` described all of them, and
+  cited load tests that were never run.
 
 ## Version strings are load-bearing
 
@@ -89,7 +97,6 @@ to be unbacked, which for a results table is the same thing.
 |---|---|
 | `state-features-v1` | `features.py` |
 | `state-features-v4` | `state_builder.py` |
-| `network-graph-v1` | `graph/state.py` |
 | `world-model-rssm-v1` | `world_model/model.py` |
 | `rssm-imagination-v1` | `world_model/imagine.py` |
 | `file-forecast-v1` | `file_forecast.py` |

@@ -215,3 +215,52 @@ def _point(window: int, probability: float):
     from sentinel.schemas import ProbabilityPoint
 
     return ProbabilityPoint(window=window, infiltration_probability=probability, confidence=0.0)
+
+
+# -- contract construction ------------------------------------------------
+
+
+def test_explanation_contract_records_method_and_caveat_free_fields() -> None:
+    from sentinel.explain.contracts import Explanation as ExplainContract
+    from sentinel.explain.contracts import FeatureAttribution as Attribution
+
+    explanation = ExplainContract(
+        prediction=0.87,
+        risk_score=0.87,
+        stage_probs={"Unknown": 1.0},
+        feature_attributions=[
+            Attribution(name="dst_port_nunique", value=47.0, shap_value=0.312, method="exact")
+        ],
+        method="exact",
+    )
+    assert explanation.risk_score == 0.87
+    assert len(explanation.feature_attributions) == 1
+    assert explanation.top_k(1)[0].name == "dst_port_nunique"
+
+
+def test_attention_fields_are_present_but_never_populated() -> None:
+    # The temporal model is a GRU and no graph encoder ships, so these are
+    # contract compatibility only. They must stay None rather than be filled
+    # with something invented - see explain/__init__.py.
+    from sentinel.explain.contracts import Explanation as ExplainContract
+
+    explanation = ExplainContract(
+        prediction=0.1, risk_score=0.1, stage_probs={"Benign": 1.0}, feature_attributions=[]
+    )
+    assert explanation.temporal_attention is None
+    assert explanation.graph_attention is None
+
+
+def test_counterfactual_contract_records_the_move() -> None:
+    from sentinel.explain.contracts import Counterfactual as CF
+    from sentinel.explain.contracts import FeatureAttribution as Attribution
+
+    counterfactual = CF(
+        original=0.87,
+        target=0.14,
+        features=[Attribution(name="a", value=0.5, shap_value=-0.73, method="exact")],
+        predicted_impact=-0.73,
+    )
+    assert counterfactual.original == 0.87
+    assert counterfactual.target == 0.14
+    assert counterfactual.predicted_impact == -0.73

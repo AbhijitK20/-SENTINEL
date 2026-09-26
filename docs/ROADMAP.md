@@ -12,7 +12,7 @@ exists today, with the scale-level ladder from prototype to platform.
 | 2 — Pilot / MVP | + FastAPI inference API, key-based auth + RBAC + audit | **Shipped** (`sentinel/api.py`, `sentinel/auth.py`) |
 | 3 — Production SaaS | + React UI, Kafka, PostgreSQL, Redis, MLflow | 🟡 API-side ops shipped in-process (`registry.py`, `drift.py`, `/metrics`); React/Kafka/Postgres/Redis not started |
 | 4 — Enterprise platform | + TimescaleDB, Kubernetes, permissioned chain | 🟡 Case lifecycle (`cases.py`), compliance exports, signed feedback; K8s/TSDB/permissioned chain not started |
-| 5 — Ecosystem | Multi-tenant SaaS, federated learning, marketplace | 🟡 FedAvg simulation (`federated.py`), org-scoped API keys; real federated infra not started |
+| 5 — Ecosystem | Multi-tenant SaaS, federated learning, marketplace | 🟡 Org-scoped API keys; federated learning **not started** - an unreachable FedAvg simulation was removed in the Sprint 1 purge |
 
 ## Phase status
 
@@ -28,7 +28,7 @@ exists today, with the scale-level ladder from prototype to platform.
 | 8 — Observability | Prometheus, tracing, paging | 🟡 `/metrics` Prometheus text endpoint + validated scrape stack: `docker compose --profile obs up` runs Prometheus (target verified `up`) and Grafana with the auto-provisioned SENTINEL API Overview dashboard; tracing/paging not started |
 | 9 — Deployment infra | K8s, CI/CD, Vault, Postgres | 🟡 GitHub Actions CI (lint+tests+wheel), `docker-compose.yml` pilot (dashboard+API); K8s/Vault/Postgres not started |
 | 10 — Enterprise features | Compliance exports, case management, retention | 🟡 `cases.py` lifecycle (OPEN→RESOLVED, SLA by severity) with `/v1/cases`; `compliance.py` NIST CSF/ISO 27001/SOC 2 control report (0.75 coverage, gaps listed); retention policies not started |
-| 11 — Advanced detection | GNN, federated learning, ZK proofs | 🟡 `federated.py` FedAvg simulation (weights-only sharing, verified vs centralized); GNN/ZK remain research scope |
+| 11 — Advanced detection | GNN, federated learning, ZK proofs | 🟡 Not started. The unreachable GAT and FedAvg modules were deleted rather than left to look like capability (see docs/CLAIMS.md) |
 
 ## What the roadmap builds on (already true)
 
