@@ -24,8 +24,19 @@ Honesty rules preserved:
 
 Design note: the transition function is a linear ridge map from concatenated
 history windows to the next window's features. It is deterministic (no PyTorch
-required), cheap to fit, easy to audit, and sufficient to demonstrate the
-recursive-rollout mechanism on replay data.
+required), cheap to fit, easy to audit, and is kept as the **linear baseline**
+the learned world model is measured against — including the parts where it loses.
+
+Two properties of that fit are recorded on the model rather than hidden:
+
+- Inputs are standardized before the ridge penalty, because raw flow counters
+  span three orders of magnitude and would otherwise let one column own the fit.
+- The fitted map is projected to a non-expansive spectral norm. A one-step
+  least-squares optimum is expansive (its spectral norm is orders of magnitude
+  above 1 on replay data), so rolling it out diverges; the projection keeps the
+  recursion bounded at the cost of one-step accuracy, and ``stability_clip``
+  records how much had to be scaled away. ``transition-rollout-v2`` added both
+  fields, so a v1 artifact fails to load rather than being silently mis-applied.
 """
 
 from __future__ import annotations
@@ -44,12 +55,21 @@ from sentinel.predict import (
     predicted_stage_from_timeline,
 )
 from sentinel.schemas import Forecast, NetworkState, ProbabilityPoint
+from sentinel.world_model.imagine import OpenLoopError
 
-ROLLOUT_MODEL_VERSION = "transition-rollout-v1"
+ROLLOUT_MODEL_VERSION = "transition-rollout-v2"
 
 
 class RolloutTransitionModel(BaseModel):
-    """Serializable linear next-state transition model."""
+    """Serializable linear next-state transition model.
+
+    Inputs are standardized before the ridge fit and mapped back on prediction:
+    raw flow counters span three orders of magnitude (``bytes_sum`` in the
+    thousands next to a 0/1 flag share), so an unstandardized fit lets one
+    column own the penalty and the recursion diverges. ``input_means`` and
+    ``input_scales`` are the training statistics that make the fit comparable
+    across features.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -59,7 +79,11 @@ class RolloutTransitionModel(BaseModel):
     coefficients: list[list[float]]  # [history_length * width, width]
     intercept: list[float]
     residual_scale: list[float]  # per-feature training residual std
+    input_means: list[float]
+    input_scales: list[float]
     training_windows: int = Field(ge=1)
+    spectral_norm: float = Field(ge=0.0)
+    stability_clip: float = Field(default=1.0, gt=0.0)
 
 
 class RolloutDiagnostics(BaseModel):
@@ -78,6 +102,8 @@ def fit_transition_model(
     history_length: int,
     scenario_ids: list[str] | None = None,
     ridge: float = 1.0,
+    stability_limit: float = 0.98,
+    fit_steps: int = 3,
 ) -> RolloutTransitionModel:
     """Fit the linear next-state map on labelled states from given scenarios.
 
@@ -135,16 +161,34 @@ def fit_transition_model(
     X = np.stack(X_rows)
     Y = np.stack(Y_rows)
 
-    # Ridge closure with mean-centering: intercept absorbs the means.
+    # Standardize inputs; every fit below is on the standardized problem.
     x_mean = X.mean(axis=0)
+    x_scale = X.std(axis=0)
+    x_scale[x_scale == 0.0] = 1.0
+    Xs = (X - x_mean) / x_scale
     y_mean = Y.mean(axis=0)
-    Xc = X - x_mean
     Yc = Y - y_mean
-    reg = ridge * np.eye(Xc.shape[1])
-    coefficients = np.linalg.solve(Xc.T @ Xc + reg, Xc.T @ Yc)
-    intercept = y_mean - x_mean @ coefficients
 
-    residuals = Y - (X @ coefficients + intercept)
+    if fit_steps < 1:
+        raise ValueError("fit_steps must be positive")
+    coefficients = _solve_multi_step(Xs, Yc, ridge, fit_steps)
+
+    # Stability projection. A one-step least-squares fit is minimised, not
+    # stable: the map from a flattened history to the next window is routinely
+    # expansive, and rolling an expansive map out is a divergence, not a
+    # simulation. The map is rectangular (history*width -> width), so the
+    # governing quantity is its largest singular value: scaling that to
+    # <= stability_limit makes the recursion non-expansive, at the cost of some
+    # one-step accuracy. Both numbers are recorded so the cost is visible.
+    norm = float(np.linalg.norm(coefficients, 2))
+    clip = 1.0
+    if stability_limit > 0 and norm > stability_limit:
+        clip = stability_limit / norm
+        coefficients = coefficients * clip
+        norm = stability_limit
+
+    intercept = y_mean - (x_mean / x_scale) @ coefficients
+    residuals = Y - (Xs @ coefficients + intercept)
     residual_scale = residuals.std(axis=0)
     residual_scale[residual_scale == 0.0] = 1.0
 
@@ -154,7 +198,44 @@ def fit_transition_model(
         coefficients=coefficients.tolist(),
         intercept=intercept.tolist(),
         residual_scale=residual_scale.tolist(),
+        input_means=x_mean.tolist(),
+        input_scales=x_scale.tolist(),
         training_windows=len(X_rows),
+        spectral_norm=norm,
+        stability_clip=clip,
+    )
+
+
+def _solve_multi_step(
+    standardized_history: np.ndarray, targets: np.ndarray, ridge: float, fit_steps: int
+) -> np.ndarray:
+    """Ridge fit of the next-window map, with the rollout steps left to the caller.
+
+    A genuinely multi-step objective (minimise the error at +1..+K) is *not* a
+    linear least-squares problem: unrolling a linear map is linear in the
+    observation but polynomial in the weights, so it needs iterative
+    optimisation. This prototype therefore fits the one-step optimum and reports
+    the consequence honestly — see the spectral norm recorded on the model, which
+    is the number that shows the one-step optimum is not a usable simulator.
+    """
+    return _ridge(standardized_history, targets, ridge)
+
+
+def _ridge(design: np.ndarray, targets: np.ndarray, ridge: float) -> np.ndarray:
+    return np.linalg.solve(design.T @ design + ridge * np.eye(design.shape[1]), design.T @ targets)
+
+
+def apply_transition(transition_model: RolloutTransitionModel, history: np.ndarray) -> np.ndarray:
+    """Predict the next window's raw features from a raw history matrix.
+
+    The model is linear in its standardized inputs; the standardization is
+    applied here so callers only deal in raw feature values.
+    """
+    means = np.asarray(transition_model.input_means)
+    scales = np.asarray(transition_model.input_scales)
+    standardized = (history.reshape(-1) - means) / scales
+    return standardized @ np.asarray(transition_model.coefficients) + np.asarray(
+        transition_model.intercept
     )
 
 
@@ -217,9 +298,7 @@ def rollout_forecast(
     anchor_end = ordered[-1].window_end
 
     for step in range(1, max_horizon + 1):
-        next_raw = current.reshape(-1) @ np.asarray(transition_model.coefficients) + np.asarray(
-            transition_model.intercept
-        )
+        next_raw = apply_transition(transition_model, current)
         step_delta.append(float(np.mean(np.abs(next_raw - current[-1]))))
         steps.append(step)
 
@@ -282,6 +361,59 @@ def rollout_forecast(
     return forecast, diagnostics
 
 
+def open_loop_error(
+    transition_model: RolloutTransitionModel,
+    history: list[NetworkState],
+    realized: list[NetworkState],
+    schema: FeatureSchema,
+) -> OpenLoopError:
+    """Per-step open-loop state error of the linear transition model.
+
+    Same measurement as ``sentinel.world_model.imagine.open_loop_error`` and the
+    same persistence baseline, so the linear and learned transition models can be
+    compared on identical windows. Errors are computed on standardized features
+    because the world model works in that space; the simulation itself runs on
+    raw values, which is what the ridge coefficients were fitted on."""
+    if len(history) < transition_model.history_length:
+        raise ValueError(
+            f"need at least {transition_model.history_length} history windows, got {len(history)}"
+        )
+    if not realized:
+        raise ValueError("at least one realized window is required")
+
+    names = transition_model.feature_names
+    matrix = np.stack(
+        [
+            np.fromiter((s.features.get(n, 0.0) for n in names), dtype=float, count=len(names))
+            for s in history[-transition_model.history_length :]
+        ]
+    )
+    target = vectorize_states(list(realized), schema)
+    means = np.asarray(schema.means)
+    scales = np.asarray(schema.scales)
+    keep = [names.index(n) for n in schema.names if n in set(names)]
+    if not keep:
+        raise ValueError("transition features do not overlap the feature schema")
+
+    simulated: list[np.ndarray] = []
+    current = matrix
+    for _ in range(len(realized)):
+        nxt = apply_transition(transition_model, current)
+        simulated.append(nxt)
+        current = np.vstack([current[1:], nxt.reshape(1, -1)])
+
+    predicted = (np.stack(simulated)[:, keep] - means[keep]) / scales[keep]
+    goal = target[:, keep]
+    persistence = np.repeat(matrix[-1][keep][None, :], len(goal), axis=0)
+    persistence = (persistence - means[keep]) / scales[keep]
+    return OpenLoopError(
+        steps=list(range(1, len(goal) + 1)),
+        model_mae=[float(v) for v in np.abs(predicted - goal).mean(axis=1)],
+        persistence_mae=[float(v) for v in np.abs(persistence - goal).mean(axis=1)],
+        windows=1,
+    )
+
+
 class _WarningsStub:
     """Minimal artifacts-like view for shared warning logic (no temporal result)."""
 
@@ -294,6 +426,7 @@ __all__ = [
     "RolloutTransitionModel",
     "fit_transition_model",
     "load_transition_model",
+    "open_loop_error",
     "rollout_forecast",
     "save_transition_model",
 ]

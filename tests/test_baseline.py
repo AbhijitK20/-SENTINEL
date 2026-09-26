@@ -32,7 +32,20 @@ def test_synthetic_scenarios_are_deterministic_and_staged() -> None:
     assert [e.model_dump() for e in first] == [e.model_dump() for e in second]
     assert [e.event_id for e in first] != [e.event_id for e in other] or first != other
     assert boundaries["recon_start"] < boundaries["lateral_start"]
-    assert any(e.features["failed_auth"] == 1.0 for e in first)
+    assert any(e.features["failed_auth"] == 1.0 for e in first if e.event_type == "flow")
+
+
+def test_synthetic_scenarios_emit_both_telemetry_levels() -> None:
+    """Packet-level features only reach the model if the generator emits packets."""
+    events, _ = generate_scenario_events("demo", seed=1)
+    kinds = {event.event_type for event in events}
+
+    assert kinds == {"flow", "packet"}
+    packets = [event for event in events if event.event_type == "packet"]
+    for name in ("ttl", "tcp_window_size", "fragment_flags", "payload_size", "retransmission"):
+        assert name in packets[0].features
+    # Packet coverage is what tells inference that packet signals were present.
+    assert any(event.features["retransmission"] == 1.0 for event in packets)
 
 
 def test_split_audit_confirms_scenario_and_window_isolation() -> None:

@@ -30,17 +30,21 @@ src/sentinel/          core library (offline, no network imports)
   schemas.py             Pydantic contracts — READ FIRST
   ingestion.py           flow CSV → UnifiedEvent
   pcap_ingestion.py      PCAP → UnifiedEvent (scapy, optional extra)
-  state_builder.py       events → NetworkState windows
+  state_builder.py       events → NetworkState windows (flow AND packet level)
   features.py            NetworkState → fixed-width vector (leakage-safe)
   baseline.py            logistic regression baseline
   temporal.py            GRU per-horizon classifier (torch)
-  rollout.py             recursive K-step transition rollout
+  world_model/model.py   RSSM core: prior/posterior/decoder + forecast heads
+  world_model/train.py   ELBO + open-loop training, artifacts, loader
+  world_model/imagine.py open-loop K-step simulation → Forecast
+  rollout.py             stabilized linear K-step transition rollout
+  file_forecast.py       PCAP/CSV file → states → Forecast (CLI/dashboard/API)
   predict.py             inference: artifacts → Forecast
   stage_mapping.py       MITRE stage rules
   detectors.py           9 attack-type detectors
   evaluation.py          walk-forward replay
 scripts/                 CLIs — may use network
-tests/                   pytest, 236+ test functions
+tests/                   pytest, 300+ test functions
 configs/                 YAML, strictly validated by config.py
 models/release/          committed release bundle (checksummed)
 ```
@@ -77,11 +81,14 @@ Does this sentence say "real traffic"?  → Did the run use a licensed real data
 
 | Version string | Module | Bumps in |
 |---|---|---|
-| `state-features-v1` | `features.py` | S2 |
+| `state-features-v1` | `features.py` (schema) | S2 |
+| `state-features-v4` | `state_builder.py` (window features) | v4 = packet level + frag/retransmission |
 | `network-graph-v1` | `graph_state.py` | S3 (new) |
-| `world-model-rssm-v1` | `world_model.py` | S4 (new) |
+| `world-model-rssm-v1` | `world_model/model.py` | S4 (new) |
+| `rssm-imagination-v1` | `world_model/imagine.py` | S4 (new) |
+| `file-forecast-v1` | `file_forecast.py` | new (file → Forecast) |
 | `gru-temporal-v1` | `temporal.py` | unchanged |
-| `transition-rollout-v1` | `rollout.py` | unchanged |
+| `transition-rollout-v2` | `rollout.py` | v2 = standardized inputs + stability projection |
 | `forecast-inference-v1` | `predict.py` | S4 |
 | `stage-mapping-v1` | `stage_mapping.py` | S7 |
 | `explanation-v1` | `explain.py` | S6 (new) |

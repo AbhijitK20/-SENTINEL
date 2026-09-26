@@ -155,7 +155,28 @@ def main() -> None:
         ],
     )
 
-    # 7. Aggregate.
+    # 7. World model: train the RSSM, then score open-loop state prediction
+    #    against the linear transition model and persistence on identical
+    #    test-scenario windows, plus the imagination forecaster in replay.
+    _run(
+        "run_world_model.py",
+        [
+            "--config",
+            args.config,
+            "--baseline",
+            baseline_dir,
+            "--scenarios",
+            str(args.scenarios),
+            "--seed",
+            str(args.seed),
+            "--horizon",
+            str(args.horizon),
+            "--output",
+            str(out / "world_model"),
+        ],
+    )
+
+    # 8. Aggregate.
     benchmark = _aggregate(args, out, calibration, best_threshold)
     (out / "benchmark.json").write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
     (out / "BENCHMARK.md").write_text(_render_markdown(benchmark), encoding="utf-8")
@@ -170,6 +191,7 @@ def _aggregate(args, out: Path, calibration: dict, best_threshold: float) -> dic
     replay_def = _read_json(out / "replay_default" / "replay.json")
     rollout = _read_json(out / "rollout" / "rollout.json")
     forecast = _read_json(out / "forecast.json")
+    world = _read_json(out / "world_model" / "world_model_benchmark.json")
 
     last_horizon = temporal["horizons"][-1] if temporal["horizons"] else None
     return {
@@ -215,6 +237,23 @@ def _aggregate(args, out: Path, calibration: dict, best_threshold: float) -> dic
             "lead_windows": (forecast.get("lead_time") or {}).get("lead_windows"),
             "threshold": (forecast.get("lead_time") or {}).get("threshold"),
         },
+        "world_model": {
+            "model_version": world["model"]["model_version"],
+            "core_type": world["experiment"]["core_type"],
+            "best_epoch": world["model"]["best_epoch"],
+            "training_seconds": world["model"]["training_seconds"],
+            "test_reconstruction_mse": world["model"]["split_metrics"]["test"][
+                "reconstruction_mse"
+            ],
+            "test_kl_nats": world["model"]["split_metrics"]["test"]["kl_nats"],
+            "test_stage_macro_f1": world["model"]["split_metrics"]["test"]["stage_macro_f1"],
+            "open_loop_skill": {
+                key: world["open_loop"][key]["skill"]
+                for key in ("world_model", "linear_transition", "ablation_no_rollout_loss")
+                if world["open_loop"].get(key)
+            },
+            "forecast_comparison": world.get("forecast_comparison"),
+        },
     }
 
 
@@ -243,6 +282,7 @@ def _render_markdown(b: dict) -> str:
     baseline, temporal = b["baseline_test"], b["temporal_last_horizon"]
     calibration = b["calibration"]
     replay_cal, replay_def = b["replay_calibrated"], b["replay_default"]
+    world = b["world_model"]
     rollout = b["rollout"]
     demo = b["demo_forecast"]
     experiment = b["experiment"]
@@ -313,6 +353,42 @@ def _render_markdown(b: dict) -> str:
         f"{demo['predicted_stage']} · lead {demo['lead_windows']} window(s) "
         f"at threshold {demo['threshold']:.2f}",
         "",
+        "## World Model — open-loop state prediction (test scenarios)",
+        "",
+        f"- Model: `{world['model_version']}` · core `{world['core_type']}` · best epoch "
+        f"{world['best_epoch']} · {world['training_seconds']:.1f} s",
+        f"- Test reconstruction MSE {world['test_reconstruction_mse']:.4f} · "
+        f"KL {world['test_kl_nats']:.4f} nats · stage macro-F1 "
+        f"{_fmt(world['test_stage_macro_f1'])}",
+        "- Open-loop skill: `1 - imagined-vs-realized MAE / persistence MAE` on",
+        "  standardized state features. Positive means the model predicts unseen",
+        "  future windows better than repeating the last observed window.",
+        "",
+        "| Transition model | Open-loop skill |",
+        "|---|---:|",
+    ]
+    for key, label in (
+        ("world_model", "World model (RSSM)"),
+        ("linear_transition", "Linear ridge transition"),
+        ("ablation_no_rollout_loss", "Ablation: no open-loop objective"),
+    ):
+        skill = world["open_loop_skill"].get(key)
+        lines.append(f"| {label} | {'n/a' if skill is None else f'{skill:+.3f}'} |")
+    comparison = world.get("forecast_comparison") or {}
+    if comparison:
+        lines += [
+            "",
+            "| Forecaster (replay) | Median lead (win) | Crossing rate | False early |",
+            "|---|---:|---:|---:|",
+        ]
+        for name, row in comparison.items():
+            lines.append(
+                f"| {name} | {_fmt(row['median_lead_windows'], 1)} | "
+                f"{row['crossing_rate']:.2f} | {row['false_early_warning_rate']:.2f} |"
+            )
+
+    lines += [
+        "",
         "## Limitations",
         "",
         "- Synthetic replay transitions stages abruptly; measured lead time is 0.0",
@@ -320,8 +396,9 @@ def _render_markdown(b: dict) -> str:
         "  switch within one window. Real datasets with attack dwell time are",
         "  required to demonstrate lead > 0 (CIC-IDS2017 adapter is implemented; a",
         "  licensed real-data run is pending).",
-        "- Each temporal horizon is an independent model; the recursive rollout is",
-        "  a linear next-state surrogate, not a deep world model.",
+        "- The per-horizon forecaster is nowcast, not rollout. The recursive linear",
+        "  rollout and the RSSM imagination forecaster both simulate forward; the",
+        "  open-loop table above is the fair comparison between transition models.",
         "- Probabilities are model evidence, not certainty; a positive forecast is",
         "  decision support, never automatic response.",
     ]

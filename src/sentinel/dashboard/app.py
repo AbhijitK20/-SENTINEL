@@ -26,6 +26,7 @@ from sentinel.config import BaselineConfig
 from sentinel.dashboard.network_graphs import kill_chain_figure, topology_figure
 from sentinel.dashboard.state import LEDGER_PATH
 from sentinel.dashboard.tabs import live as _live_tab
+from sentinel.dashboard.tabs import world_model as _world_model_tab
 from sentinel.evaluation import evaluate_replay
 from sentinel.features import fit_feature_schema
 from sentinel.ledger import AlertLedger
@@ -377,6 +378,7 @@ loaded = artifacts_from_runs(baseline_run, temporal_run=temporal_run)
     tab_compare,
     tab_replay,
     tab_demo,
+    tab_world_model,
     tab_live,
     tab_metrics,
     tab_story,
@@ -388,6 +390,7 @@ loaded = artifacts_from_runs(baseline_run, temporal_run=temporal_run)
         "Comparison",
         "Replay",
         "Demo",
+        "World Model",
         "Live Detection",
         "Metrics",
         "Attack Story",
@@ -1377,6 +1380,19 @@ with tab_story:
         st.caption(
             "Containment is simulated and analyst-approved; it does not alter host firewalls."
         )
+
+
+# ── Tab: World Model (extracted to tabs/world_model.py) ────────────────
+with tab_world_model:
+    _world_model_tab.render(
+        labelled=labelled,
+        manifest=manifest,
+        schema=schema,
+        loaded=loaded,
+        sequence_length=int(sequence_length),
+        forecast_horizon=int(forecast_horizon),
+        seed=int(seed),
+    )
 
 
 # ── Tab: Live Detection (extracted to tabs/live.py) ──────────────────

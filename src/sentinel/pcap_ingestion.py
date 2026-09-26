@@ -79,6 +79,7 @@ def read_pcap(path: str | Path) -> PcapIngestionResult:
                 "ttl",
                 "tcp_window_size",
                 "fragment_flags",
+                "frag_offset",
                 "payload_size",
                 "retransmission",
                 "tcp_flags",
@@ -86,6 +87,20 @@ def read_pcap(path: str | Path) -> PcapIngestionResult:
             warnings=tuple(warnings),
         ),
     )
+
+
+def _ip_flags_word(ip_layer: object) -> float:
+    """The wire value of the 3-bit IP flags field (DF = 0x4000, MF = 0x2000).
+
+    Scapy exposes ``IP.flags`` as a ``FlagValue`` enum whose ``int()`` is the
+    *ordinal* of the set flags (1 for MF, 2 for DF), not the bitmask the
+    fragmentation features test for. Reading the serialized header is the only
+    way to get the value a sensor would actually see.
+    """
+    raw = bytes(ip_layer.build())
+    if len(raw) < 7:
+        return 0.0
+    return float(int.from_bytes(raw[6:8], "big") & 0xE000)
 
 
 def _packet_to_event(
@@ -103,7 +118,8 @@ def _packet_to_event(
     protocol = int(ip_layer.proto) if hasattr(ip_layer, "proto") else 0
     features: dict[str, float] = {
         "ttl": float(getattr(ip_layer, "ttl", getattr(ip_layer, "hlim", 0))),
-        "fragment_flags": float(getattr(getattr(ip_layer, "flags", 0), "value", 0)),
+        "fragment_flags": _ip_flags_word(ip_layer),
+        "frag_offset": float(getattr(ip_layer, "frag", 0)),
         "payload_size": float(len(bytes(packet.payload))),
         "tcp_window_size": 0.0,
         "tcp_flags": 0.0,

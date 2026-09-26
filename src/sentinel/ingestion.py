@@ -30,6 +30,17 @@ OPTIONAL_COLUMNS = {
     "iat_variance",
     "iat_max",
     "bidirectional_ratio",
+    "failed_auth",
+    "auth_attempt",
+    # Packet-level columns: a flow CSV may carry header evidence alongside its
+    # aggregate counters, and the state builder turns these into the TTL,
+    # window-size, fragmentation, and retransmission window features.
+    "ttl",
+    "tcp_window_size",
+    "fragment_flags",
+    "frag_offset",
+    "retransmission",
+    "payload_size",
 }
 
 
