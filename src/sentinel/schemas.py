@@ -101,7 +101,14 @@ def split_assignment(manifest: SplitManifest) -> dict[str, str]:
 
 
 class ProbabilityPoint(BaseModel):
-    """One point in a future infiltration probability timeline."""
+    """One point in a future infiltration probability timeline.
+
+    ``confidence`` is per-window: it composes this horizon's own test skill,
+    how far the per-horizon model and the baseline disagree on this window, and
+    how far the probability sits from the decision boundary. It is a score, not
+    a posterior interval - nothing here is sampled. ``0.0`` means there was no
+    measurement to stand on.
+    """
 
     window: int = Field(ge=1)
     infiltration_probability: float = Field(ge=0, le=1)

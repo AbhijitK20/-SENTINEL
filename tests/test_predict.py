@@ -116,3 +116,44 @@ def test_forecast_requires_at_least_one_state(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="at least one network state is required"):
         forecast([], loaded)
+
+
+# -- per-window uncertainty ------------------------------------------------
+# The timeline used to copy the baseline's test PR-AUC onto every point, so a
+# one-step call and a five-step call were shown with identical authority. These
+# tests fail if confidence collapses back to a constant.
+
+
+def test_confidence_varies_across_the_timeline(tmp_path: Path) -> None:
+    baseline_dir, _, states = _build_artifact_paths(tmp_path)
+    result = forecast(states, load_artifacts(baseline_dir), max_horizon=4)
+    values = [point.confidence for point in result.probability_timeline]
+    assert len(set(values)) > 1, f"confidence is constant at {values[0]}"
+
+
+def test_confidence_decays_with_horizon(tmp_path: Path) -> None:
+    # The decay path pulls the probability toward 0.5 with distance, so a
+    # further-out window is both less certain and less decisive.
+    baseline_dir, _, states = _build_artifact_paths(tmp_path)
+    result = forecast(states, load_artifacts(baseline_dir), max_horizon=4)
+    assert result.probability_timeline[0].confidence > result.probability_timeline[-1].confidence
+
+
+def test_confidence_stays_in_range(tmp_path: Path) -> None:
+    baseline_dir, _, states = _build_artifact_paths(tmp_path)
+    result = forecast(states, load_artifacts(baseline_dir), max_horizon=5)
+    for point in result.probability_timeline:
+        assert 0.0 <= point.confidence <= 1.0
+
+
+def test_no_measurement_means_zero_confidence_not_a_middling_one(tmp_path: Path) -> None:
+    # An artifact with no test metrics has nothing to stand on; the honest
+    # answer is the lowest score, not an invented middle one.
+    from sentinel.predict import _window_confidence
+
+    class _Bare:
+        temporal_result = None
+        temporal_models: dict[int, object] = {}
+        baseline_result = type("R", (), {"metrics": {}})()
+
+    assert _window_confidence(_Bare(), 1, 0.9, 0.9) == 0.0

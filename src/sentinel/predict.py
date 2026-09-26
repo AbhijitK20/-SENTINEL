@@ -277,8 +277,6 @@ def _build_timeline(
     max_horizon: int,
 ) -> list[ProbabilityPoint]:
     points: list[ProbabilityPoint] = []
-    pr_auc = artifacts.baseline_result.metrics.get("test")
-    confidence = _confidence_for(pr_auc.pr_auc if pr_auc else None)
     for window in range(1, max_horizon + 1):
         proba = _temporal_probability(
             artifacts, baseline_features, history_matrix, baseline_proba, window
@@ -287,10 +285,78 @@ def _build_timeline(
             ProbabilityPoint(
                 window=window,
                 infiltration_probability=proba,
-                confidence=confidence,
+                confidence=_window_confidence(
+                    artifacts,
+                    window,
+                    proba,
+                    _temporal_probability(
+                        artifacts,
+                        baseline_features,
+                        history_matrix,
+                        baseline_proba,
+                        window,
+                        force_baseline=True,
+                    ),
+                ),
             )
         )
     return points
+
+
+def _window_confidence(
+    artifacts: LoadedArtifacts,
+    horizon: int,
+    probability: float,
+    baseline_proba: float,
+) -> float:
+    """How much to trust *this* window's probability.
+
+    The previous value was a single number - the baseline's test PR-AUC - copied
+    onto every point of every timeline, so a one-step-ahead call and a
+    five-step-ahead call were presented with identical authority. Three real
+    signals now compose it, each of which actually varies by window:
+
+    1. **Skill at this horizon.** The per-horizon model carries its own test
+       metric. A horizon the model was actually trained for is trusted more
+       than one it was not.
+    2. **Model agreement.** Where a per-horizon model exists, how far its
+       probability sits from the baseline's is a genuine disagreement measure
+       between two independently trained models on the same window.
+    3. **Distance from the decision boundary.** A probability of 0.99 or 0.01
+       is a more confident statement than 0.52, and saying so is free.
+
+    No sampling is involved, so this is a calibrated-ish score, not a posterior
+    interval. The docstring on ``ProbabilityPoint`` should keep saying so.
+    """
+    horizon_result = next(
+        (
+            h
+            for h in (artifacts.temporal_result.horizons if artifacts.temporal_result else [])
+            if h.horizon == horizon
+        ),
+        None,
+    )
+    if horizon_result is not None:
+        test_metrics = horizon_result.metrics.get("test")
+        skill = test_metrics.pr_auc if test_metrics else None
+    else:
+        test_metrics = artifacts.baseline_result.metrics.get("test")
+        skill = test_metrics.pr_auc if test_metrics else None
+
+    if skill is None:
+        # No measurement to stand on: say "unknown" by returning the lowest
+        # score rather than inventing a middling one.
+        return 0.0
+
+    if horizon in artifacts.temporal_models:
+        agreement = 1.0 - min(1.0, abs(probability - baseline_proba) / 0.5)
+    else:
+        # Beyond the trained horizons the timeline is a decay, not a prediction.
+        agreement = 0.5
+
+    decisiveness = 2.0 * abs(probability - 0.5)
+    score = float(np.clip(skill, 0.0, 1.0)) ** 0.5
+    return float(np.clip(score * (0.5 + 0.5 * agreement) * (0.5 + 0.5 * decisiveness), 0.0, 1.0))
 
 
 def _temporal_probability(
@@ -299,8 +365,10 @@ def _temporal_probability(
     history_matrix: np.ndarray,
     baseline_proba: float,
     horizon: int,
+    *,
+    force_baseline: bool = False,
 ) -> float:
-    if artifacts.temporal_result is None:
+    if force_baseline or artifacts.temporal_result is None:
         return _decay(baseline_proba, horizon)
     if horizon in artifacts.temporal_models:
         return _temporal_model_probability(artifacts, history_matrix, horizon)
@@ -338,12 +406,6 @@ def _decay(probability: float, horizon: int, *, weight: float = 0.5) -> float:
     if probability >= 0.5:
         return float(np.clip(0.5 + span, 0.0, 1.0))
     return float(np.clip(0.5 - span, 0.0, 1.0))
-
-
-def _confidence_for(pr_auc: float | None) -> float:
-    if pr_auc is None:
-        return 0.0
-    return float(max(0.0, min(1.0, pr_auc)))
 
 
 def predicted_stage_from_timeline(
