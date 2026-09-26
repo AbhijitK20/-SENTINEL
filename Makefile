@@ -1,5 +1,5 @@
 .PHONY: setup gate lint test format demo demo-live web-app train reproduce verify \
-	export bench-world bench-real bench-backtest demo-path clean
+	export bench-world bench-real bench-backtest bench-detectors demo-path clean
 
 BUNDLE ?= models/release/v1
 BENCH  ?= reports/generated/benchmark
@@ -61,6 +61,9 @@ bench-world:  ## world-model open-loop benchmark + core comparison
 
 bench-backtest:  ## rolling-origin temporal backtest with drift per origin
 	uv run python scripts/run_backtest.py --output $(BENCH)/backtest
+
+bench-detectors:  ## per-detector precision/recall/F1 on held-out windows
+	uv run python scripts/run_detector_benchmark.py --output $(BENCH)/detectors
 
 bench-real:  ## CIC-IDS2017 cross-day benchmark (needs the licensed CSVs)
 	uv run python scripts/run_real_benchmark.py \
