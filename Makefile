@@ -1,5 +1,5 @@
 .PHONY: setup gate lint reach test format demo demo-live web-app train reproduce verify \
-	export bench-world bench-real bench-backtest bench-detectors bench-calibration demo-path clean
+	export bench-world bench-real bench-backtest bench-detectors bench-calibration bench-telemetry demo-path clean
 
 BUNDLE ?= models/release/v1
 BENCH  ?= reports/generated/benchmark
@@ -71,6 +71,9 @@ bench-detectors:  ## per-detector precision/recall/F1 on held-out windows
 
 bench-calibration:  ## reliability, ECE and Brier decomposition per model
 	uv run python scripts/run_calibration_report.py --output $(BENCH)/calibration
+
+bench-telemetry:  ## minimum sufficient telemetry, with a cost/benefit frontier
+	uv run python scripts/run_telemetry_budget.py --output $(BENCH)/telemetry
 
 bench-real:  ## CIC-IDS2017 cross-day benchmark (needs the licensed CSVs)
 	uv run python scripts/run_real_benchmark.py \

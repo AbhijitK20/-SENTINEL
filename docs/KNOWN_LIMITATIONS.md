@@ -49,6 +49,53 @@ So: the machinery is correct, tested against the closed-form identities, and
 currently confirms rather than corrects. That is worth saying plainly, because
 "we fixed the metric" would have been the more flattering and wrong summary.
 
+### Three features are indistinguishable from 98, and the data cannot really tell
+
+`make bench-telemetry`. The 98-feature schema splits by collection cost:
+
+| tier | what it needs | features |
+|---|---|---|
+| flow_window | flow records, window aggregates only | 43 |
+| flow_per_flow | per-flow values retained, not just aggregates | 24 |
+| packet | **packet capture on the sensing interface** | 31 |
+
+A third of the feature set requires a sensor on the wire. So the first ablation
+was run with forward selection scored on the training split, and a paired
+bootstrap on the untouched validation split:
+
+| features | Brier (lower better) | tiers | 95% CI on loss | indistinguishable? |
+|---|---|---|---|---|
+| 3 | 0.0212 | flow_window, packet | -0.0123 to +0.0017 | yes |
+| 5 | 0.0220 | flow_window, packet | -0.0161 to +0.0016 | yes |
+| 8 | 0.0220 | all three | -0.0143 to +0.0001 | yes |
+| 12 | 0.0190 | all three | -0.0058 to +0.0002 | yes |
+| 20 | 0.0177 | all three | -0.0023 to +0.0003 | yes |
+
+The recommended profile is **3 features - `packets_max`, `rst_count`,
+`bytes_max`** - against 98.
+
+**That is a much weaker claim than it looks, and the reason matters.** The
+validation split is 68 windows, and every interval above is wide enough to
+straddle zero for wildly different feature counts. The tool says "no measurable
+loss on this split", not "equally good", and the report says so in the same
+words. A reader should treat this as *the data cannot distinguish 3 from 20*,
+which is a statement about 68 windows rather than about the problem.
+
+Two method notes, both because the first attempt produced nonsense:
+
+- Ranking by coefficient magnitude gave a **non-monotone** curve - 8 features
+  indistinguishable while 12 was measurably worse, which is incoherent for a
+  nested family. Coefficient magnitude ignores collinearity, so it is not a
+  ranking of usefulness. Greedy forward selection on the training split replaced
+  it and the curve became coherent.
+- The metric is **Brier, not F1**, because the bootstrap needs a per-window
+  quantity and F1 is not additive over windows. A bootstrap over F1 would be
+  measuring the resampling.
+
+The operational prize is real but unproven: 31 of 98 features need packet
+capture, and the small sets that qualify do not. Confirming that on real traffic
+is the thing to check first when CIC-IDS2017 becomes available.
+
 ### The baseline is well calibrated; the world model's risk head is not
 
 `scripts/run_calibration_report.py`, ten synthetic scenarios, test split:
