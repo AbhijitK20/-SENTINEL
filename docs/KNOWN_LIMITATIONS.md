@@ -192,6 +192,54 @@ already over-predicts positives in general - test recall 0.98 against precision
 root cause is the positive-class bias, not the missing imagined-state term. Fix
 the bias first, then this term has something to add.
 
+### Self-supervised pretraining made it worse, and the reason is instructive
+
+`make bench-labels`, 12 synthetic scenarios, 7 training scenarios, scored on the
+68-window validation split. A masked-feature autoencoder (98 -> 16 -> 98) is
+fitted on every training window **without reading a label**, then the same nested
+label budgets are spent on its representation and on the raw features.
+
+| method | Brier trained on everything | Brier from one scenario | headroom |
+|---|---|---|---|
+| scratch (98 raw features) | **0.0256** | 0.0701 | +0.0444 |
+| pretrained (16 latent dims) | 0.0678 | 0.1080 | +0.0402 |
+
+**The representation loses, by a factor of 2.6 on Brier.** Its reconstruction loss
+fell from 0.7816 to 0.0900, so the encoder did learn the feature structure well -
+it just learned the wrong thing. Reconstructing flow features is a *variance*
+problem: the dominant directions in a 98-dimensional flow summary are the busy
+ones, total bytes and packet counts. The infiltration signal lives in a
+different, smaller direction, and a 16-wide bottleneck trained to rebuild the
+busy dimensions has no reason to preserve it. **Reconstruction is not
+discrimination**, and on this feature set the two point in different directions.
+
+The second finding is the one that makes the first interpretable. Headroom is
++0.0444 for the raw features: one labelled scenario is *not* enough here, and the
+curve climbs steadily from 0.0701 to 0.0419 by six scenarios. The label question
+is therefore live on this data, which means the pretraining result is a real
+negative rather than an artefact of a saturated task.
+
+What this does not establish: anything about masked-feature pretraining in
+general. It is one architecture, one latent width, one synthetic generator. A
+contrastive objective over *windows* rather than features, or a wider bottleneck,
+could plausibly close the gap, and neither was tried.
+
+The verdict column is mostly "at ceiling" and that is the small-split problem
+again: 68 validation windows is too few for the paired bootstrap to separate a
+4-scenario model from a 7-scenario one. Only the single worst point is
+distinguishable. The intervals are printed rather than summarised to "no
+difference".
+
+### The telemetry budget is not the same as the label budget
+
+Two superficially similar questions, opposite answers, and the pairing is the
+useful part. Sprint 5 found that 3 of 98 features lose nothing measurable; this
+sprint finds that 1 of 7 scenarios is worth 0.0444 Brier. So the features are
+highly redundant while the *scenarios* are not - a single campaign teaches
+something a second campaign still teaches again. Anyone reading the Sprint 5
+result as "this needs almost no data" would be wrong in the dimension that
+actually binds.
+
 ### The lateral-movement rule can be evaded by going slower, not quieter
 
 `make bench-evasion`, 16 real attacking windows from the test split, with six
