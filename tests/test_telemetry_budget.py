@@ -141,6 +141,46 @@ def test_the_interval_excludes_zero_when_there_is_a_real_difference() -> None:
     assert low > 0.0, "a real 0.30 gap should not straddle zero"
 
 
+def test_a_worse_subset_gives_a_positive_interval_for_a_lower_is_better_metric() -> None:
+    """Regression: the interval and the loss must point the same way.
+
+    Brier is lower-is-better, so a *worse* subset is one with a *larger* mean,
+    and the CI for ``subset - full`` must sit above zero. The original call site
+    passed the arguments the other way round, which left the sign of every
+    reported bound upside down while still straddling zero, so the existing tests
+    - all of which used a higher-is-better arrangement - passed throughout.
+    """
+    rng = np.random.default_rng(5)
+    full = rng.normal(0.02, 0.004, size=400)
+    subset = full + 0.01
+    low, high = bootstrap_difference(subset, full, iterations=500)
+    assert low > 0.0
+    assert (low, high) != bootstrap_difference(full, subset, iterations=500)
+
+
+def test_the_interval_agrees_with_the_reported_loss() -> None:
+    """The CI and the point estimate must point the same way.
+
+    Checking the endpoints in isolation is what let the sign bug hide: a flipped
+    interval still contains zero, so the earlier tests all passed. Agreement
+    between the point estimate and the bounds is the check that fails.
+    """
+    rng = np.random.default_rng(6)
+    full = rng.uniform(0.01, 0.03, size=80)
+    # Noisy, not a constant shift: a constant offset makes every paired
+    # difference identical, the interval collapses to a point, and the test
+    # would measure float rounding rather than the sign convention.
+    worse = full + 0.005 + rng.normal(0, 0.001, size=80)
+    result = ablation_curve(
+        subsets={"full": ("a", "b"), "lean": ("a",)},
+        per_window_scores={"full": full, "lean": worse},
+        bootstrap_iterations=400,
+    )
+    point = result.points[0]
+    assert point.loss_from_full > 0.0, "dropping features made Brier worse"
+    assert point.ci_low <= point.loss_from_full <= point.ci_high
+
+
 def test_misaligned_windows_are_rejected() -> None:
     with pytest.raises(ValueError, match="same windows"):
         bootstrap_difference(np.zeros(10), np.zeros(9))

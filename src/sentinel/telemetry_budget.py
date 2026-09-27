@@ -232,28 +232,35 @@ class AblationResult:
 
 
 def bootstrap_difference(
-    full_scores: np.ndarray,
-    subset_scores: np.ndarray,
+    scores_a: np.ndarray,
+    scores_b: np.ndarray,
     *,
     iterations: int = 2000,
     seed: int = 0,
     level: float = 0.95,
 ) -> tuple[float, float]:
-    """Paired bootstrap CI for ``mean(full) - mean(subset)``.
+    """Paired bootstrap CI for ``mean(scores_a) - mean(scores_b)``.
 
     Paired, because both are evaluated on the same windows; an unpaired bootstrap
     would charge the comparison for variance it does not have. Resampling the
     *paired differences* directly is the same thing and simpler to reason about.
 
-    The interval containing zero is what "indistinguishable" means here.
+    The parameters are deliberately *not* named ``full`` and ``subset``. An
+    earlier version was, and the caller passed them in the opposite order to the
+    one it wanted, so the interval came back with the sign flipped - harmless for
+    "does this contain zero", but the reported bounds were upside down. Naming
+    the arguments ``a`` and ``b`` forces the caller to state which direction it
+    means, which is the only thing that ever mattered here.
+
+    The interval containing zero is what "indistinguishable" means.
     """
-    full = np.asarray(full_scores, dtype=float)
-    subset = np.asarray(subset_scores, dtype=float)
-    if full.shape != subset.shape:
+    a = np.asarray(scores_a, dtype=float)
+    b = np.asarray(scores_b, dtype=float)
+    if a.shape != b.shape:
         raise ValueError("paired bootstrap needs the same windows for both")
-    if full.size == 0:
+    if a.size == 0:
         raise ValueError("at least one window is required")
-    differences = full - subset
+    differences = a - b
     rng = np.random.default_rng(seed)
     n = differences.size
     means = np.empty(iterations)
@@ -296,12 +303,13 @@ def ablation_curve(
                 f"subset '{key}' has {vector.size} window scores but the full set has "
                 f"{full_vector.size}; the bootstrap needs them paired"
             )
+        # Brier: lower is better, so the loss of dropping features is
+        # subset - full, and positive means the subset is worse. The interval
+        # is in that same direction, so its sign agrees with loss_from_full.
         low, high = bootstrap_difference(
-            full_vector, vector, iterations=bootstrap_iterations, seed=seed, level=level
+            vector, full_vector, iterations=bootstrap_iterations, seed=seed, level=level
         )
         features = tuple(subsets[key])
-        # Brier: lower is better, so the loss of dropping features is
-        # subset - full, and positive means the subset is worse.
         loss = float(vector.mean() - full_vector.mean())
         result.points.append(
             AblationPoint(

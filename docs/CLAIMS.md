@@ -80,10 +80,17 @@ to be unbacked, which for a results table is the same thing.
 - No field benchmark. `scripts/validate_real_detectors.py` is a plumbing check
   on a single host with log-derived features.
 - No causal claim. Every attribution is model evidence.
-- No posterior interval on the probability timeline. `ProbabilityPoint.confidence`
-  is a per-window score composed of horizon skill, model agreement, and
-  decisiveness. Nothing there is sampled. (Conformal prediction with a real
-  coverage guarantee is Sprint 2 work.)
+- `ProbabilityPoint.confidence` is a per-window score composed of horizon skill,
+  model agreement, and decisiveness. Nothing there is sampled. The separate
+  `ProbabilityPoint.interval` is a split-conformal band fitted on the validation
+  split and shipped in the artifact, and it is `None` for a model trained before
+  that existed or whose calibration data was too small - absence, not a guess.
+- No set-valued stage prediction. The stage name comes from a deterministic rule
+  table applied to the infiltration probability, so there is no per-window
+  probability vector over stages for a conformal set to threshold. A
+  `stage_set` field once existed on `ForecastExplanation` and was never populated
+  by any code path; it has been removed rather than left as a promise the product
+  does not keep. Quantifying stage uncertainty needs a learned stage head first.
 - No like-for-like world-model-vs-linear comparison. The linear baseline is
   crushed by its own stability projection; the rollout forecast says so on its
   face.
@@ -102,7 +109,12 @@ to be unbacked, which for a results table is the same thing.
 | `file-forecast-v1` | `file_forecast.py` |
 | `gru-temporal-v1` | `temporal.py` |
 | `transition-rollout-v3` | `rollout.py` |
-| `forecast-inference-v1` | `predict.py` |
+| `forecast-inference-v2` | `predict.py` |
+| `conformal-prediction-v1` | `conformal.py` |
+| `isotonic-recalibration-v1` | `isotonic.py` |
+| `survival-analysis-v1` | `survival.py` |
+| `telemetry-budget-v1` | `telemetry_budget.py` |
+| `evasion-cost-v1` | `evasion.py` |
 | `stage-mapping-v1` | `stage_mapping.py` |
 | `threshold-calibration-v1` | `calibration.py` |
 | `replay-evaluation-v2` | `evaluation.py` |

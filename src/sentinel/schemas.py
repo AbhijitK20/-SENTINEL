@@ -129,25 +129,6 @@ class ProbabilityInterval(BaseModel):
     )
 
 
-class StagePredictionSet(BaseModel):
-    """The stages that cannot be ruled out, with a coverage guarantee.
-
-    The honest alternative to a single stage name when the model is uncertain. A
-    one-element set is a decision; a three-element set is the method declining to
-    make one.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    stages: list[str] = Field(min_length=1)
-    nominal_coverage: float = Field(gt=0.0, lt=1.0)
-    method: str = Field(min_length=1)
-
-    @property
-    def is_decision(self) -> bool:
-        return len(self.stages) == 1
-
-
 class ProbabilityPoint(BaseModel):
     """One point in a future infiltration probability timeline.
 
@@ -378,9 +359,6 @@ class ForecastExplanation(BaseModel):
     horizon: list[HorizonAttribution] = Field(default_factory=list)
     current_window: list[DrivingFeature] = Field(default_factory=list)
     counterfactual: str | None = None
-    # The stage set is the set-valued answer: when it holds more than one stage,
-    # the model is declining to name a single one and the caller should say so.
-    stage_set: StagePredictionSet | None = None
     caveat: str = (
         "Model evidence, not causation: these attributions explain this model, "
         "not the attacker's intent."

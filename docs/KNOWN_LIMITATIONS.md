@@ -65,12 +65,15 @@ bootstrap on the untouched validation split:
 
 | features | Brier (lower better) | tiers | 95% CI on loss | indistinguishable? |
 |---|---|---|---|---|
-| 3 | 0.0212 | flow_window, packet | -0.0123 to +0.0017 | yes |
-| 5 | 0.0220 | flow_window, packet | -0.0161 to +0.0016 | yes |
-| 8 | 0.0220 | all three | -0.0143 to +0.0001 | yes |
-| 12 | 0.0190 | all three | -0.0058 to +0.0002 | yes |
-| 20 | 0.0177 | all three | -0.0023 to +0.0003 | yes |
+| 3 | 0.0212 | flow_window, packet | -0.0017 to +0.0123 | yes |
+| 5 | 0.0220 | flow_window, packet | -0.0016 to +0.0161 | yes |
+| 8 | 0.0220 | all three | -0.0001 to +0.0143 | yes |
+| 12 | 0.0190 | all three | -0.0002 to +0.0058 | yes |
+| 20 | 0.0177 | all three | -0.0003 to +0.0023 | yes |
 
+"Loss" is `subset - full` on Brier, so a *positive* interval means the smaller
+feature set is measurably worse and a negative one that it is measurably better;
+either way an interval containing zero means the split cannot tell them apart.
 The recommended profile is **3 features - `packets_max`, `rst_count`,
 `bytes_max`** - against 98.
 
@@ -138,8 +141,15 @@ Tried on two fixtures. It improved **ECE on both** and **Brier on only one**:
 So it is **gated**. `_risk_recalibration` fits on validation, measures on test,
 and ships the curve only if held-out Brier improved *and* the ranking is
 unchanged. Otherwise the head ships as trained, and
-`risk_recalibration_outcome` records that it was tried and rejected. The current
-release bundle carries the rejected case, which is the honest one to publish.
+`risk_recalibration_outcome` records that it was tried and rejected.
+
+The committed release bundle predates this work, so it carries no
+`risk_recalibration` field at all and the loader takes the untuned path. That is
+the same outcome by omission rather than by measurement, which is a weaker
+statement than the table above: the gate has not actually been exercised on the
+published artifact. `models/release/v1` is re-exported in Sprint 10, at which
+point the shipped bundle will either carry a curve that passed the gate or
+record the rejection explicitly.
 
 ### The head is saturated, so recalibration cannot be fine-grained
 

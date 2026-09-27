@@ -93,45 +93,6 @@ class ConformalInterval:
         return self.lower <= value <= self.upper
 
 
-@dataclass(frozen=True)
-class PredictionSet:
-    """A *set* of plausible labels with guaranteed coverage.
-
-    When a classifier is torn between two stages, saying "Lateral Movement,
-    51%" is a false precision. An adaptive prediction set says "these two, and
-    I am 90% sure the right one is in here" - which is the honest statement, and
-    the set shrinks automatically when the model is confident.
-
-    **Measured behaviour worth knowing.** The set widens as the model gets worse,
-    without being told the model's accuracy: at 90% top-1 accuracy the mean set
-    size is 1.0, and at 70% it is the whole three-label space. That is not a bug,
-    it is the guarantee refusing to let a set-valued classifier claim a decision it
-    cannot support - and it degrades conservatively (coverage rises above the
-    nominal), never optimistically. A stage classifier that kept returning
-    singletons at 70% accuracy would be the dangerous artefact.
-    """
-
-    labels: tuple[str, ...]
-    nominal_coverage: float
-    method: str = "aps-scaled"
-    calibration_size: int = 0
-    caveat: str = (
-        "The true label is in this set with at least the stated probability, on "
-        "exchangeable data. An empty set is impossible by construction."
-    )
-
-    def contains(self, label: str) -> bool:
-        return label in self.labels
-
-    @property
-    def size(self) -> int:
-        return len(self.labels)
-
-    def singleton(self) -> str | None:
-        """The label, if the set is small enough to be a decision."""
-        return self.labels[0] if len(self.labels) == 1 else None
-
-
 @dataclass
 class SplitConformal:
     """Symmetric split-conformal interval for a bounded [0, 1] target.
@@ -254,113 +215,6 @@ class MondrianConformal:
     @property
     def is_fitted(self) -> bool:
         return bool(self._groups)
-
-
-class AdaptivePredictionSets:
-    """Adaptive Prediction Sets (Romano et al. 2020) for a K-class head.
-
-    The score of label ``k`` for a probability vector ``p`` is the total mass
-    placed on labels ranked at or below ``k``. A randomised conformal p-value
-    turns that into a uniform ``[0, 1]``, so thresholding at ``1 - alpha`` gives
-    a prediction set with guaranteed coverage.
-
-    The randomisation is what makes the guarantee exact rather than
-    conservative, and it needs a source of randomness - seeded, so a forecast is
-    reproducible. The expected set size is the honest efficiency measure, and it
-    is reported alongside the set rather than left implicit.
-    """
-
-    def __init__(self, coverage: float = COVERAGE_90) -> None:
-        self.coverage = coverage
-        self._lambda: float | None = None
-        self._labels: tuple[str, ...] = ()
-        self._mean_size: float = 0.0
-
-    def fit(
-        self,
-        label_space: list[str],
-        probabilities: np.ndarray,
-        truth_index: np.ndarray,
-    ) -> AdaptivePredictionSets:
-        matrix = np.asarray(probabilities, dtype=float)
-        if matrix.ndim != 2 or matrix.shape[0] != np.asarray(truth_index).size:
-            raise ValueError("probabilities must be (n, n_labels) aligned with truth_index")
-        self._labels = tuple(label_space)
-        scores = np.array(
-            [
-                _aps_score(row, int(t))
-                for row, t in zip(matrix, np.asarray(truth_index), strict=True)
-            ]
-        )
-        self._lambda = _conformal_quantile(scores, 1.0 - self.coverage)
-        sizes = [len(self._set_from_probabilities(row, None, self._lambda)) for row in matrix]
-        self._mean_size = float(np.mean(sizes)) if sizes else 0.0
-        return self
-
-    @property
-    def is_fitted(self) -> bool:
-        return self._lambda is not None
-
-    @property
-    def mean_set_size(self) -> float:
-        """Expected number of labels per set - smaller is better, at equal coverage."""
-        return self._mean_size
-
-    def predict(
-        self, probabilities: np.ndarray, rng: np.random.Generator | None = None
-    ) -> PredictionSet:
-        if not self.is_fitted:
-            raise ValueError("AdaptivePredictionSets.predict called before fit")
-        row = np.asarray(probabilities, dtype=float)
-        indices = self._set_from_probabilities(row, rng, float(self._lambda or 1.0))
-        return PredictionSet(
-            labels=tuple(self._labels[i] for i in indices),
-            nominal_coverage=self.coverage,
-            calibration_size=0,
-        )
-
-    def _set_from_probabilities(
-        self, row: np.ndarray, rng: np.random.Generator | None, lam: float
-    ) -> list[int]:
-        """Add labels in descending mass until the running total passes the quantile.
-
-        The rule is ``include rank j iff C_j <= lambda``, where ``C_j`` is the
-        cumulative mass through rank ``j`` and ``lambda`` is the conformal
-        quantile of :func:`_aps_score`. It has to be read that way round: a
-        *larger* ``lambda`` means a more uncertain calibration set and therefore a
-        *larger* prediction set, because ``lambda`` is a bound on how much
-        probability mass may accumulate before the tail is judged implausible.
-        Inverting it produces sets that are too small and silently breaks the
-        coverage guarantee, which is the failure this function previously had.
-
-        ``rng`` is accepted and ignored. Randomised tie-breaking is the standard
-        refinement, and it needs a uniform drawn consistently at fit and predict
-        time; without it ties produce a set that is very slightly conservative
-        rather than exactly sized. A conservative set is the safe direction.
-        """
-        order = np.argsort(-row)
-        cumulative = 0.0
-        chosen: list[int] = []
-        for index in order:
-            cumulative += float(row[index])
-            if cumulative > lam + 1e-12:
-                break
-            chosen.append(int(index))
-        return chosen or [int(order[0])]
-
-
-def _aps_score(probabilities: np.ndarray, truth_index: int) -> float:
-    """Total probability mass ranked at or above the true label.
-
-    The comparison is on the *probability value*, not the rank position. With a
-    tie, ``argsort`` picks an arbitrary order, so a rank-based score would charge
-    the true label only the mass above its tie rather than the mass of the whole
-    tied group. That under-counts, which shortens the calibrated quantile and
-    produces prediction sets that are too small - the guarantee then fails
-    precisely where the model is uncertain, which is where it matters.
-    """
-    truth_mass = float(probabilities[truth_index])
-    return float(probabilities[probabilities >= truth_mass - 1e-12].sum())
 
 
 @dataclass
@@ -692,13 +546,11 @@ __all__ = [
     "COVERAGE_99",
     "CONFORMAL_VERSION",
     "PUBLISHABLE_COVERAGE",
-    "AdaptivePredictionSets",
     "ConformalInterval",
     "CoverageResult",
     "HorizonCalibrator",
     "InsufficientCalibrationData",
     "MondrianConformal",
-    "PredictionSet",
     "SplitConformal",
     "brier_decomposition",
     "expected_calibration_error",
