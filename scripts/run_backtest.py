@@ -34,14 +34,14 @@ import numpy as np
 from sentinel.baseline import train_baseline
 from sentinel.calibration import calibrate_threshold
 from sentinel.config import BaselineConfig
-from sentinel.drift import compare_feature
+from sentinel.drift import EXCEEDS_NULL, compare_feature
 from sentinel.evaluation import evaluate_replay
 from sentinel.features import vectorize_states
 from sentinel.predict import artifacts_from_runs
 from sentinel.synthetic import DATASET_ID, generate_labelled_states
 from sentinel.targets import build_sequence_samples, make_split_manifest
 
-BACKTEST_VERSION = "rolling-origin-backtest-v1"
+BACKTEST_VERSION = "rolling-origin-backtest-v2"
 
 # Only the features whose movement most often accompanies a change in attack
 # behaviour. A PSI over every one of 98 features would bury the signal in noise
@@ -79,10 +79,20 @@ class OriginResult:
 
 
 def _psi_table(
-    reference: list[dict[str, float]], current: list[dict[str, float]]
-) -> list[tuple[str, float]]:
-    """PSI per watched feature, skipping any absent from either side."""
+    reference: list[dict[str, float]],
+    current: list[dict[str, float]],
+    null_rows: list[dict[str, float]] | None = None,
+) -> list[tuple[str, float, str | None]]:
+    """PSI per watched feature, skipping any absent from either side.
+
+    ``null_rows`` are held-out rows from the same population as ``reference`` -
+    the validation scenarios here. They supply the threshold the band is measured
+    against; without them no band is emitted. The previous version called anything
+    above 0.25 "drifted", which Sprint 8 showed is what *every* block of ordinary
+    noise exceeds.
+    """
     names = [f for f in WATCHED_FEATURES if f in reference[0] and f in current[0]]
+    blocks = _null_blocks(null_rows, names) if null_rows else None
     return [
         (
             name,
@@ -90,10 +100,33 @@ def _psi_table(
                 name,
                 [row[name] for row in reference],
                 [row[name] for row in current],
-            ).psi,
+                null_blocks=blocks.get(name) if blocks else None,
+            ),
         )
         for name in names
     ]
+
+
+#: Contiguous chunks the held-out rows are cut into. A block is one unit of
+#: observation, and PSI depends on block size, so the same size is used to place
+#: the threshold and to place the observation.
+NULL_BLOCKS = 4
+
+
+def _null_blocks(
+    null_rows: list[dict[str, float]], names: list[str]
+) -> dict[str, list[list[float]]]:
+    usable = [row for row in null_rows if all(name in row for name in names)]
+    if len(usable) < NULL_BLOCKS:
+        return {}
+    size = len(usable) // NULL_BLOCKS
+    return {
+        name: [
+            [row[name] for row in usable[index * size : (index + 1) * size]]
+            for index in range(NULL_BLOCKS)
+        ]
+        for name in names
+    }
 
 
 def run_backtest(
@@ -186,9 +219,13 @@ def run_backtest(
         current_rows = _feature_rows(
             [s for sid in test_ids for s in by_scenario[sid]], run.result.feature_schema
         )
-        psi = _psi_table(reference_rows, current_rows)
-        worst_name, worst_value = max(psi, key=lambda pair: pair[1], default=("none", 0.0))
-        drifted = tuple(name for name, value in psi if value >= 0.25)
+        null_rows = _feature_rows(
+            [s for sid in validation_ids for s in by_scenario[sid]], run.result.feature_schema
+        )
+        psi = _psi_table(reference_rows, current_rows, null_rows)
+        worst_name, worst_report = max(psi, key=lambda pair: pair[1].psi, default=(None, None))
+        worst_value = worst_report.psi if worst_report else 0.0
+        drifted = tuple(name for name, report in psi if report.band == EXCEEDS_NULL)
 
         rows.append(
             OriginResult(
@@ -341,7 +378,8 @@ def _render(payload: dict) -> str:
     ]
     drifted = sorted({f for row in payload["rows"] for f in row["drifted_features"]})
     lines.append(
-        f"- features crossing PSI 0.25 at some origin: {', '.join(drifted) if drifted else 'none'}"
+        f"- features exceeding their calibrated null at some origin: "
+        f"{', '.join(drifted) if drifted else 'none'}"
     )
     lines += ["", "## Warnings", ""]
     lines += [f"- {warning}" for warning in payload["warnings"]]

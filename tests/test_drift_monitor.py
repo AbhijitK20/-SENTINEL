@@ -18,7 +18,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from sentinel.drift import PSI_STABLE
 from sentinel.drift_monitor import (
     DriftMonitor,
     DriftVerdict,
@@ -129,43 +128,40 @@ def test_a_block_of_the_wrong_width_is_rejected() -> None:
 # ── the shipped bands, made falsifiable ──────────────────────────────────
 
 
-def test_the_shipped_bands_are_reported_as_measured_rates_not_constants() -> None:
-    """`band_of` says "significant" from 0.25. This says how often that is true.
+def test_the_old_constant_0_10_is_reported_as_the_rate_it_actually_buys() -> None:
+    """Why `sentinel.drift` no longer hardcodes 0.10 and 0.25.
 
-    The point of the test is that the function returns a *rate*, so the constant
-    in `sentinel.drift` is something the codebase can check rather than something
-    it has to take on trust.
+    The constants are gone, replaced by a threshold calibrated per feature
+    against a null. The measurement of why stays, as a literal, because it is the
+    argument against putting the number back.
     """
+    legacy = 0.10
     rates = false_alarm_rate_at(
-        _population(400, seed=3), ["a", "b", "c"], _population(400, seed=4), (PSI_STABLE,)
+        _population(400, seed=3), ["a", "b", "c"], _population(400, seed=4), (legacy,)
     )
-    assert PSI_STABLE in rates
-    assert 0.0 <= rates[PSI_STABLE] <= 1.0
+    assert 0.0 <= rates[legacy] <= 1.0
     assert "median_single_feature_at_0.1" in rates
 
 
-def test_the_shipped_0_10_band_fires_on_everything_and_that_is_the_defect() -> None:
-    """Pins a known defect rather than asserting a property that does not hold.
+def test_a_calibrated_threshold_does_not_fire_on_ordinary_noise() -> None:
+    """The positive proof that the fix works.
 
-    On 400 held-out blocks of *iid Gaussian noise* - no drift whatsoever - the
-    worst of three features exceeds 0.10 on every single block. So
-    `sentinel.drift.band_of` answers "significant" for ordinary noise at this
-    block size, and the API's `/compare` endpoint inherits that.
-
-    The bands are the conventional 0.10 / 0.25, and they are unanchored: nothing
-    ties them to a sample size, so nothing can say what rate they buy. The fix is
-    to make the band depend on a calibrated threshold (see `DriftMonitor`), which
-    means changing an API-visible value and bumping the version. Until that
-    happens this test holds the number still, and tightening it will fail loudly
-    for whoever fixes the constant.
+    The old 0.10 band fired on 100% of held-out blocks of iid noise. A threshold
+    placed on this data's own null must not: the whole point of a null is that
+    ordinary variation is what the threshold sits on top of.
     """
-    rates = false_alarm_rate_at(
-        _population(400, seed=3), ["a", "b", "c"], _population(400, seed=4), (PSI_STABLE,)
+    reference = _population(400, seed=3)
+    held_out = _population(400, seed=4)
+    monitor = DriftMonitor().calibrate(
+        reference, ["a", "b", "c"], _population(400, seed=8), level=0.99, window=30
     )
-    assert rates[PSI_STABLE] == 1.0
-    # The single-feature rate is the less absurd of the two, and still not a
-    # threshold anyone would call a tripwire.
-    assert rates["median_single_feature_at_0.1"] > 0.5
+    verdicts = monitor.stream(held_out)
+    rate = sum(1 for v in verdicts if v.exceeded) / len(verdicts)
+    assert rate < 0.10, f"{rate:.1%} of held-out noise blocks still trip the monitor"
+    # And a real shift must still be caught, or the threshold is simply too high.
+    shifted = monitor.stream(_population(400, seed=9) + 3.0)
+    caught = sum(1 for v in shifted if v.exceeded) / len(shifted)
+    assert caught > 0.9, f"a 3-sigma shift was only caught {caught:.1%} of the time"
 
 
 def test_an_empty_control_reports_nan_rather_than_zero() -> None:

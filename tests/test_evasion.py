@@ -146,45 +146,63 @@ def test_a_sequence_derived_alert_is_not_attacked_at_the_byte_level() -> None:
     assert not moves[0].evades
 
 
-def test_a_measured_alert_does_get_byte_level_moves() -> None:
-    state = _state(0, [_edge("a", "b", 80_000.0), _edge("c", "d", 80_000.0)])
-    history = (_state(1, [_edge("x", "y", 10.0)]),)
+def _known_edge_rule(band: float = 50_000.0):
+    """A stub of the *current* lateral rule: fires on bytes over known edges.
+
+    The rule used to score bytes over *new* edges, and these tests were written
+    against that. Recon pre-registers the edges lateral movement later uses, so
+    the premise was backwards; the stub follows the rule, not the other way round.
+    """
 
     def run(current, history_tuple):
-        # Only fires when the new-edge byte total clears the alert band.
         prior = {
             (e["source"], e["destination"]) for w in history_tuple[-5:] for e in w.edge_summary
         }
-        new_bytes = sum(
-            e["bytes"] for e in current.edge_summary if (e["source"], e["destination"]) not in prior
+        known_bytes = sum(
+            e["bytes"] for e in current.edge_summary if (e["source"], e["destination"]) in prior
         )
-        firing = new_bytes >= 50_000
+        firing = known_bytes >= band
         return [_finding("lateral_movement", 1.0 if firing else 0.0, firing, "T1021")]
 
-    moves = evasion_moves_for("lateral_movement", state, history, run)
+    return run
+
+
+def test_a_measured_alert_does_get_byte_level_moves() -> None:
+    # The transfer is on an edge history already knows, which is what the rule scores.
+    state = _state(0, [_edge("a", "b", 80_000.0), _edge("c", "d", 80_000.0)])
+    history = (_state(1, [_edge("a", "b", 10.0), _edge("c", "d", 10.0)]),)
+
+    moves = evasion_moves_for("lateral_movement", state, history, _known_edge_rule())
     names = {m.name for m in moves}
     assert "throttle_the_transfer" in names
-    assert "rehearse_edge_one_window_early" in names
+    assert "split_the_transfer_over_more_edges" in names
     assert "edit_the_flow_exporter" in names
+
+
+def test_rehearsal_is_not_offered_because_the_rule_no_longer_rewards_it() -> None:
+    """Pre-warming defeated the old new-edge rule and now only adds a known edge.
+
+    The move is gone from the enumeration rather than kept and reported as
+    failing, because offering an attacker a move that makes them *more* visible
+    is noise in a list that is supposed to be short.
+    """
+    state = _state(0, [_edge("a", "b", 80_000.0)])
+    history = (_state(1, [_edge("a", "b", 10.0)]),)
+    names = {
+        m.name for m in evasion_moves_for("lateral_movement", state, history, _known_edge_rule())
+    }
+    assert "rehearse_edge_one_window_early" not in names
 
 
 def test_throttling_is_only_claimed_when_it_actually_stops_the_alert() -> None:
     state = _state(0, [_edge("a", "b", 80_000.0)])
-    history = (_state(1, [_edge("x", "y", 10.0)]),)
+    history = (_state(1, [_edge("a", "b", 10.0)]),)
 
-    def run(current, history_tuple):
-        prior = {
-            (e["source"], e["destination"]) for w in history_tuple[-5:] for e in w.edge_summary
-        }
-        new_bytes = sum(
-            e["bytes"] for e in current.edge_summary if (e["source"], e["destination"]) not in prior
-        )
-        firing = new_bytes >= 50_000
-        return [_finding("lateral_movement", 1.0 if firing else 0.0, firing, "T1021")]
-
-    moves = {m.name: m for m in evasion_moves_for("lateral_movement", state, history, run)}
-    # Padding with more bytes cannot lower a high-byte rule. Throttling can, and
-    # it costs dwell time rather than bandwidth.
+    moves = {
+        m.name: m for m in evasion_moves_for("lateral_movement", state, history, _known_edge_rule())
+    }
+    # Adding bytes cannot lower a high-byte rule; throttling can, and it costs
+    # dwell time rather than bandwidth.
     throttle = moves["throttle_the_transfer"]
     assert throttle.evades
     assert throttle.cost_bytes == 0.0

@@ -121,13 +121,21 @@ class RegistryActionRequest(BaseModel):
 
 
 class DriftCheckRequest(BaseModel):
-    """PSI drift check for one feature against a reference sample."""
+    """PSI drift check for one feature against a reference sample.
+
+    ``null`` is the list of held-out blocks from the same population as
+    ``reference``. Supply it and the response carries a band that means
+    something; omit it and the response carries the statistic and no band, which
+    is why the previous hardcoded 0.10/0.25 cutoffs are gone.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     feature: str = Field(min_length=1)
     reference: list[float] = Field(min_length=10)
     current: list[float] = Field(min_length=1)
+    null: list[list[float]] | None = None
+    level: float = Field(default=0.99, gt=0.5, lt=1.0)
 
 
 class EventsIngestRequest(BaseModel):
@@ -624,7 +632,16 @@ def create_app(
 
     @app.post("/v1/drift", dependencies=[require("POST", "/v1/drift")])
     def drift_check(payload: DriftCheckRequest) -> dict[str, Any]:
-        report = compare_feature(payload.feature, payload.reference, payload.current)
+        try:
+            report = compare_feature(
+                payload.feature,
+                payload.reference,
+                payload.current,
+                null_blocks=payload.null,
+                level=payload.level,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
         return report.model_dump(mode="json")
 
     @app.post("/v1/events", dependencies=[require("POST", "/v1/events")])

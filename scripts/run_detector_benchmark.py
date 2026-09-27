@@ -32,11 +32,15 @@ from sentinel.detectors import run_all_detectors
 from sentinel.synthetic import DATASET_ID, generate_labelled_states
 from sentinel.targets import make_split_manifest
 
-DETECTOR_BENCHMARK_VERSION = "detector-benchmark-v1"
+DETECTOR_BENCHMARK_VERSION = "detector-benchmark-v2"
 
 # Ground truth this dataset can actually provide, per rule. A rule maps to a
 # window label only if the generator produces that label; everything else is
 # reported as unevaluable rather than scored against a label it cannot have.
+#: The sequence detector reuses real attack_type names, so it must be identifiable.
+#: Shared with sentinel.sequence_detector.detect_sequence_prediction.
+SEQUENCE_TECHNIQUE = "sequence-prediction"
+
 EVALUABLE: dict[str, str] = {
     "reconnaissance": "Reconnaissance",
     "lateral_movement": "Lateral Movement",
@@ -108,10 +112,20 @@ def evaluate_detectors(
         for index, item in enumerate(states):
             window_count += 1
             history = tuple(s.state for s in states[:index])
+            # Only the window-based rules are scored here. `detect_sequence_prediction`
+            # reports `attack_type=best_tech`, so it can emit a *second* finding
+            # labelled `lateral_movement` on top of the real one. It is a
+            # prediction about the next stage drawn from detection history, not a
+            # measurement of this window's bytes, and counting it as a detection
+            # both inflated recall and pushed the sequence detector's false alarms
+            # into the lateral bucket - 31 of them on the test split. Sprint 6 hit
+            # the same wall from the other side: the evasion report kept concluding
+            # that the lateral alert "arrives as sequence-prediction, not from the
+            # byte rule". `mitre_technique` is the discriminator.
             fired = {
                 finding.attack_type
                 for finding in run_all_detectors(item.state, history)
-                if finding.is_alert
+                if finding.is_alert and finding.mitre_technique != SEQUENCE_TECHNIQUE
             }
             for name in attack_types:
                 if name in fired:

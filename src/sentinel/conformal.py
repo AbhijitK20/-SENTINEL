@@ -36,8 +36,10 @@ Three things this module refuses to do, because each would be a lie:
   explicitly, so a caller cannot quietly fit the quantile on the data it is
   scoring.
 
-Only numpy and the standard library. :func:`_normal_quantile` uses
-:func:`math.erf` rather than scipy, so the offline dependency set is unchanged.
+Only numpy and the standard library, so the offline dependency set is unchanged.
+The inverse-normal-quantile helper that used to live here was dead code and also
+wrong - it called ``math.erf`` where the inverse needs ``math.erf``'s inverse.
+:mod:`sentinel.survival` has a correct one, where it is actually used.
 """
 
 from __future__ import annotations
@@ -358,11 +360,6 @@ def _conformal_quantile(scores: np.ndarray, alpha: float) -> float:
             f"needs at least {rank}. Use a lower coverage, or more calibration data."
         )
     return float(np.sort(np.asarray(scores, dtype=float))[rank - 1])
-
-
-def _normal_quantile(level: float) -> float:
-    """Standard-normal quantile via the inverse error function (no scipy)."""
-    return float(math.sqrt(2.0) * math.erf(2.0 * level - 1.0))
 
 
 @dataclass(frozen=True)

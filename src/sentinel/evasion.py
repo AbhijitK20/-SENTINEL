@@ -49,7 +49,7 @@ from typing import Any
 
 from sentinel.detectors import (
     EXFIL_BYTES_ALERT,
-    NEW_EDGE_BYTES_WARN,
+    KNOWN_EDGE_BYTES_WARN,
     PROBE_BYTES,
     PROBE_SHARE_ALERT,
 )
@@ -127,18 +127,36 @@ def _throttle_edges(state: NetworkState, cap_per_edge: float) -> NetworkState:
     return state.model_copy(update={"edge_summary": edges})
 
 
-def _rehearse_edges(
-    state: NetworkState, history: tuple[NetworkState, ...], lookback: int
-) -> tuple[NetworkState, tuple[NetworkState, ...]]:
-    """Touch the target edges one window earlier, so they are no longer new.
+def _spread_edges(
+    state: NetworkState, history: tuple[NetworkState, ...], *, factor: int
+) -> NetworkState:
+    """Re-route each edge's bytes over ``factor`` extra intermediate edges.
 
-    This is the cheapest move against an edge-novelty rule and it is entirely
-    physical: the attacker simply pings the destination a window before the
-    transfer. The cost is a little traffic plus one more window of dwell time -
-    and the dwell time is the real tax, because it is the thing that makes an
-    attack more visible to something else.
+    Physically real: the attacker relays the same payload through more internal
+    hops instead of sending it directly. Against a rule that scores a byte *total*
+    this does nothing - the total is the total - which is the point. It is
+    enumerated because "use more hops" is the obvious thing to try against a
+    volume rule, and a red-team list that only contains moves that work is not a
+    red-team list.
     """
-    return state, (state,) + history
+    known = _known_edges(state, history)
+    if not known or factor < 2:
+        return state
+    edges = []
+    for edge in state.edge_summary:
+        edges.append(edge)
+        if (edge["source"], edge["destination"]) in known:
+            share = float(edge.get("bytes", 0.0)) / factor
+            for hop in range(1, factor):
+                edges.append(
+                    {
+                        **edge,
+                        "source": f"{edge['source']}~h{hop}",
+                        "destination": f"{edge['destination']}~h{hop}",
+                        "bytes": share,
+                    }
+                )
+    return state.model_copy(update={"edge_summary": edges})
 
 
 def _replay_within_history(
@@ -222,9 +240,9 @@ def evasion_moves_for(
 
     # 1. Throttle: bring the scored quantity under its alert band, paying in time.
     if detector in {"lateral_movement", "exfiltration"}:
-        headroom = NEW_EDGE_BYTES_WARN if detector == "lateral_movement" else EXFIL_BYTES_ALERT
+        headroom = KNOWN_EDGE_BYTES_WARN if detector == "lateral_movement" else EXFIL_BYTES_ALERT
         current = (
-            _new_edge_bytes(state, history)
+            _known_edge_bytes(state, history)
             if detector == "lateral_movement"
             else _window_bytes(state)
         )
@@ -250,24 +268,30 @@ def evasion_moves_for(
                 )
             )
 
-    # 2. Edge rehearsal: make the edges stop being new.
+    # 2. Split the transfer across *more* edges.
+    #
+    # The previous rule scored bytes on edges **unseen** in the lookback, and
+    # `rehearse_edge_one_window_early` defeated it for free: pre-warm an edge and
+    # it stops counting as new. That move is gone because the rule now scores
+    # bytes on edges **already seen**, so pre-warming no longer hides anything -
+    # it hands the attacker one more known edge to be measured on. What is left
+    # against an absolute byte total is spreading the same payload thinner, which
+    # `throttle_the_transfer` already covers, plus this: more, smaller edges put
+    # the same bytes on known edges without any single window carrying the band.
     if detector == "lateral_movement":
-        _, warmed = _rehearse_edges(state, history, lookback=5)
-        still = _alerts(run_detectors(state, warmed), detector)
+        spread = _spread_edges(state, history, factor=2)
+        still = _alerts(run_detectors(spread, history), detector)
         moves.append(
             EvasionMove(
                 detector=detector,
-                name="rehearse_edge_one_window_early",
+                name="split_the_transfer_over_more_edges",
                 description=(
-                    "send a single probe to the destination one window before the "
-                    "transfer, so the edge is inside the lookback and stops "
-                    "counting as new"
+                    "re-route the same bytes over twice as many internal edges, so "
+                    "no single window concentrates them; the scored total is "
+                    "unchanged, so this is expected to fail and is reported either way"
                 ),
                 evades=not still,
-                # One probe per edge, sized at the smallest flow the exporter
-                # records, plus the extra window of dwell time.
-                cost_bytes=float(len(state.edge_summary)) * 64.0,
-                cost_windows=1.0,
+                cost_bytes=0.0,
             )
         )
 
@@ -306,16 +330,31 @@ def evasion_moves_for(
     return moves
 
 
-def _new_edge_bytes(state: NetworkState, history: tuple[NetworkState, ...]) -> float:
+def _known_edges(state: NetworkState, history: tuple[NetworkState, ...]) -> set[tuple[str, str]]:
     prior: set[tuple[str, str]] = set()
     for window in history[-5:]:
         for edge in window.edge_summary:
             prior.add((edge["source"], edge["destination"]))
+    return {
+        (edge["source"], edge["destination"])
+        for edge in state.edge_summary
+        if (edge["source"], edge["destination"]) in prior
+    }
+
+
+def _known_edge_bytes(state: NetworkState, history: tuple[NetworkState, ...]) -> float:
+    """Bytes on internal edges the lookback has already seen.
+
+    This is the quantity `detect_lateral` scores. It replaced the new-edge byte
+    count, which the rule used before: recon pre-registers the edges lateral
+    movement later uses, so "new" measured the wrong thing.
+    """
+    known = _known_edges(state, history)
     return float(
         sum(
             float(edge.get("bytes", 0.0))
             for edge in state.edge_summary
-            if (edge["source"], edge["destination"]) not in prior
+            if (edge["source"], edge["destination"]) in known
         )
     )
 
