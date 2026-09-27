@@ -46,6 +46,9 @@ uv run python scripts/run_evasion_report.py --output reports/generated/benchmark
 echo "== label efficiency (does unlabelled data help?) =="
 uv run python scripts/run_label_efficiency.py --output reports/generated/benchmark/label-efficiency
 
+echo "== drift and detection delay =="
+uv run python scripts/run_drift_report.py --output reports/generated/benchmark/drift
+
 echo "== world model open-loop skill =="
 uv run python scripts/run_world_model.py \
     --output reports/generated/benchmark/world_model \
@@ -74,6 +77,7 @@ All done. Reports:
   reports/generated/benchmark/telemetry/telemetry_budget.md
   reports/generated/benchmark/evasion/evasion.md
   reports/generated/benchmark/label-efficiency/label_efficiency.md
+  reports/generated/benchmark/drift/drift.md
   reports/generated/benchmark/world_model/WORLD_MODEL.md
   reports/generated/benchmark/demo_script/demo.json
   reports/generated/burndown.html

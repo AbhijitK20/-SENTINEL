@@ -85,6 +85,10 @@ to be unbacked, which for a results table is the same thing.
   `ProbabilityPoint.interval` is a split-conformal band fitted on the validation
   split and shipped in the artifact, and it is `None` for a model trained before
   that existed or whose calibration data was too small - absence, not a guess.
+- No usable drift alarm. `sentinel.drift.band_of` bands PSI at 0.10 and 0.25 with
+  no sample size attached; on 400 held-out blocks of iid noise at 30 windows per
+  block, 100% exceed 0.10 and 92% exceed it on a single feature. The band is a
+  magnitude indicator, not a decision. See `docs/KNOWN_LIMITATIONS.md`.
 - No set-valued stage prediction. The stage name comes from a deterministic rule
   table applied to the infiltration probability, so there is no per-window
   probability vector over stages for a conformal set to threshold. A
@@ -115,6 +119,8 @@ to be unbacked, which for a results table is the same thing.
 | `survival-analysis-v1` | `survival.py` |
 | `telemetry-budget-v1` | `telemetry_budget.py` |
 | `evasion-cost-v1` | `evasion.py` |
+| `label-efficiency-v1` | `label_efficiency.py` |
+| `drift-monitor-v1` | `drift_monitor.py` |
 | `stage-mapping-v1` | `stage_mapping.py` |
 | `threshold-calibration-v1` | `calibration.py` |
 | `replay-evaluation-v2` | `evaluation.py` |

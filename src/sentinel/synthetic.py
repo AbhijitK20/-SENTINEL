@@ -283,14 +283,33 @@ def generate_labelled_states(
     seed: int,
     window_seconds: int,
     stride_seconds: int,
+    benign_minutes: int = 20,
+    recon_minutes: int = 8,
+    lateral_minutes: int = 8,
+    precursor_minutes: int = 4,
 ) -> list[LabelledState]:
-    """Generate windowed, labelled states for several independent scenarios."""
+    """Generate windowed, labelled states for several independent scenarios.
+
+    The phase lengths are forwarded so a caller can generate the *same* attack
+    family at different intensities. That is what makes a drift experiment
+    possible without bolting noise onto a feature vector: shorten ``lateral_minutes``
+    and the attacker is doing the same thing faster and quieter, which is a shift
+    in the covariate distribution rather than a different dataset.
+    """
     if not scenario_ids:
         raise ValueError("at least one scenario id is required")
     labelled: list[LabelledState] = []
     for offset, scenario_id in enumerate(scenario_ids):
         start = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(days=offset)
-        events, boundaries = generate_scenario_events(scenario_id, seed=seed, start=start)
+        events, boundaries = generate_scenario_events(
+            scenario_id,
+            seed=seed,
+            start=start,
+            benign_minutes=benign_minutes,
+            recon_minutes=recon_minutes,
+            lateral_minutes=lateral_minutes,
+            precursor_minutes=precursor_minutes,
+        )
         states = build_network_states(
             events, window_seconds=window_seconds, stride_seconds=stride_seconds
         )

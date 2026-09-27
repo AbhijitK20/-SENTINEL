@@ -192,6 +192,75 @@ already over-predicts positives in general - test recall 0.98 against precision
 root cause is the positive-class bias, not the missing imagined-state term. Fix
 the bias first, then this term has something to add.
 
+### The shipped PSI bands fire on ordinary noise, so `band_of` cannot be trusted
+
+`make bench-drift`. `sentinel.drift` bands PSI at **0.10** ("moderate") and
+**0.25** ("significant"). Those are the conventional numbers and they are quoted
+without the sample size that produces them, so nothing in this codebase could say
+what false-alarm rate they buy. The API exposes them through `/compare` and the
+backtest script calls `compare_feature` directly, so this is not a dormant
+constant.
+
+Measured on **400 held-out blocks of iid Gaussian noise** - no drift in them at
+all - at 30 windows per block:
+
+| band | worst of 3 features | median single feature |
+|---|---|---|
+| 0.10 | **100%** | **92%** |
+| 0.25 | **100%** | 51% |
+
+**Every block exceeds both bands.** So `band_of` answers `significant` for
+ordinary noise, and a caller cannot distinguish a real drift from a quiet Tuesday.
+The single-feature column matters: the problem is the constant, not the
+aggregation, because 0.10 already fires on 92% of one feature's own held-out
+blocks.
+
+The fix is to band against a threshold calibrated to the data's own null, which is
+what `drift_monitor.DriftMonitor` does, and it is **not applied** to
+`sentinel.drift` here because that changes an API-visible value and needs a
+version bump. Until then, `band_of` should be read as a rough indicator of
+*magnitude* and never as a decision. A test pins the measured rate so a fix will
+fail loudly.
+
+### A drift monitor on this data cannot tell a stealthier attacker from a new cohort
+
+The same run asks the operational question: train on one attack style, then meet
+another - same generator, lateral phase shortened from 8 minutes to 3, so the
+attacker is doing the same thing faster and quieter. Everything is fitted on
+pre-shift windows only.
+
+| windows/block | false alarms pre-shift | detections post-shift | delay |
+|---|---|---|---|
+| 10 | 117/127 | 221/290 | 0 |
+| 30 | 57/107 | 91/290 | 0 |
+| 60 | 38/77 | 116/290 | 13 |
+| 120 | 2/17 | 174/290 | 15 |
+
+**The false-alarm rate before the shift is as high as the detection rate after
+it.** The monitor is already screaming when nothing has changed, so its "detection
+delay" is not a useful number on this data - the delay is 0 because the alarm was
+already on. Longer blocks cut the false alarms and cost nothing in delay here, but
+even at 120 windows there are only 17 pre-shift blocks to judge from, which is why
+the block size is *stated* at 30 rather than chosen from this table: picking the
+row that looks best would be selecting on a 17-sample zero.
+
+The underlying cause is that a 10-window block lies almost entirely inside one
+scenario, so PSI over many features is measuring *which scenario it is looking at*
+rather than whether the process changed. This feature set needs far longer
+aggregation, or a handful of features, before a drift tripwire means anything.
+
+### Two other things the drift run measured
+
+- **Coverage barely moved under the shift**: 92.6% before, 90.3% after, against a
+  promised 90%. The caveat in `ConformalInterval` - "not valid under distribution
+  shift" - is real in principle and was *not* observed here. That is a null result
+  on one synthetic shift, not evidence the caveat can be deleted, and the two
+  cohorts differ in attack rate as well as style so the comparison mixes two
+  effects.
+- **Brier degraded mildly**, 0.0286 to 0.0327, on a cohort whose attack rate had
+  also nearly halved. A model evaluated on a different base rate is being asked a
+  different question, so this is not a clean measure of drift damage either.
+
 ### Self-supervised pretraining made it worse, and the reason is instructive
 
 `make bench-labels`, 12 synthetic scenarios, 7 training scenarios, scored on the

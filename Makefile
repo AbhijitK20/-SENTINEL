@@ -1,5 +1,5 @@
 .PHONY: setup gate lint reach test format demo demo-live web-app train reproduce verify \
-	export bench-world bench-real bench-backtest bench-detectors bench-calibration bench-telemetry bench-evasion bench-labels demo-path clean
+	export bench-world bench-real bench-backtest bench-detectors bench-calibration bench-telemetry bench-evasion bench-labels bench-drift demo-path clean
 
 BUNDLE ?= models/release/v1
 BENCH  ?= reports/generated/benchmark
@@ -80,6 +80,9 @@ bench-evasion:  ## red-team the detectors: what it costs to walk past each rule
 
 bench-labels:  ## label-efficiency curve, and whether unlabelled data helps
 	uv run python scripts/run_label_efficiency.py --output $(BENCH)/label-efficiency
+
+bench-drift:  ## what a stealthier attacker costs, and how long until we notice
+	uv run python scripts/run_drift_report.py --output $(BENCH)/drift
 
 bench-real:  ## CIC-IDS2017 cross-day benchmark (needs the licensed CSVs)
 	uv run python scripts/run_real_benchmark.py \
