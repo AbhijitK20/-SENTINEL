@@ -51,8 +51,8 @@ numbers will differ by seed, and that is the point - they are not constants.
 | The reconnaissance rule is usable but noisy | `make bench-detectors` | precision 0.686, recall 1.000, F1 0.814 (24 TP / 11 FP / 0 FN) |
 | Seven of nine rules cannot be scored here | `make bench-detectors` | reported as not evaluable, with the reason |
 | The linear transition baseline is barely a simulator | `make bench-world` | pre-projection spectral norm ~1.6e5; the projection keeps ~6e-06 of it |
-| The imagined-risk calibration term makes things worse | see `docs/KNOWN_LIMITATIONS.md` | bias +0.099 -> +0.122, Brier 0.0815 -> 0.0854 over 56 cuts |
 | The world model beats persistence open-loop | `make bench-world` | +0.189 mean skill |
+| Isotonic recalibration of the world-model risk head is gated, and rejected on the release fixture | `make bench-calibration` | Brier 0.0420 -> 0.0568 (worse, so no curve ships); ECE 0.0592 -> 0.0503 (better, but the gate requires both) |
 
 ## Not currently backed by an artifact - treat as unverified
 
@@ -66,6 +66,7 @@ to be unbacked, which for a results table is the same thing.
 | ~900k real flows were benchmarked | `deliverables/ABSTRACT.md` | same | same |
 | PB-001 "Confirm dataset availability and licenses" is Done | `docs/planning/PRODUCT_BACKLOG.md` | no dataset is present | same |
 | Sprint 0-8 complete including the licensed real-data run | `docs/IMPLEMENTATION_STATUS.md` | same | same |
+| The imagined-risk calibration term in the world model makes predictions worse (bias +0.099 -> +0.122, Brier 0.0815 -> 0.0854 over 56 cuts) | formerly in this table | those figures were produced by an earlier run and **no script in the current tree prints them**. `make bench-calibration` reports the isotonic recalibration gate instead, which is a different mechanism and is now the quoted row above | re-add the imagined-risk sweep to `scripts/run_calibration_report.py` and quote that |
 
 ## Explicitly not claimed
 

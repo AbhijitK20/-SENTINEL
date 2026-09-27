@@ -794,13 +794,26 @@
       "coefficient": 0.0
     }
   ],
-  "training_seconds": 0.016023300122469664,
-  "inference_microseconds_per_sample": 1.406833374251922,
+  "training_seconds": 0.01693599999998696,
+  "inference_microseconds_per_sample": 1.3291666671951436,
   "runtime": {
     "python": "3.11.15",
     "scikit_learn": "1.9.0",
     "numpy": "2.4.6",
     "platform": "Windows-10-10.0.26200-SP0"
   },
-  "model_sha256": "2eecf6be8be5b4e99f625c197d88e1a22b9bf99ac91fd2293be16040a8a08b50"
+  "model_sha256": "2eecf6be8be5b4e99f625c197d88e1a22b9bf99ac91fd2293be16040a8a08b50",
+  "conformal": {
+    "conformal_version": "conformal-prediction-v1",
+    "coverage": 0.9,
+    "quantiles": {
+      "5": 0.3141746791460238
+    },
+    "calibration_sizes": {
+      "5": 120
+    },
+    "pooled_quantile": 0.3141746791460238,
+    "pooled_size": 120
+  },
+  "conformal_coverage": 0.9
 }

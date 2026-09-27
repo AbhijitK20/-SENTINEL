@@ -7,9 +7,9 @@
 - Observation dim: 98 · sequence length: 8
 - Stage vocabulary: Benign, Lateral Movement, Reconnaissance
 - Feature version: state-features-v1
-- Best epoch: 20 · training time: 17.7 s
+- Best epoch: 20 · training time: 7.4 s
 - Model SHA-256: `c6d7fedc87b8a83533e22219caea0ae01d9a07d85509096a27fe05f8acdcc080`
-- Configuration: `{"core_type":"lstm","hidden_size":64,"latent_dim":16,"num_layers":1,"num_heads":4,"learning_rate":0.003,"weight_decay":0.00001,"batch_size":32,"max_epochs":40,"early_stopping_patience":12,"grad_clip":5.0,"kl_free_nats":1.0,"kl_anneal_epochs":8,"risk_loss_weight":1.0,"stage_loss_weight":0.5,"imagination_samples":64,"rollout_steps":3,"rollout_loss_weight":1.0}`
+- Configuration: `{"core_type":"lstm","hidden_size":64,"latent_dim":16,"num_layers":1,"num_heads":4,"learning_rate":0.003,"weight_decay":0.00001,"batch_size":32,"max_epochs":40,"early_stopping_patience":12,"grad_clip":5.0,"kl_free_nats":1.0,"kl_anneal_epochs":8,"risk_loss_weight":1.0,"stage_loss_weight":0.5,"imagination_samples":64,"rollout_steps":3,"rollout_loss_weight":1.0,"imagined_risk_weight":0.0}`
 
 ## Split Metrics
 

@@ -58,6 +58,9 @@ uv run python scripts/run_world_model.py \
     --baseline reports/generated/benchmark/pipeline/baseline \
     --compare-cores
 
+echo "== claims audit (every figure in docs/CLAIMS.md came from a script) =="
+uv run python scripts/check_claims.py
+
 echo "== release bundle =="
 uv run python scripts/export_release_artifacts.py \
     --from-benchmark --out models/release/v1

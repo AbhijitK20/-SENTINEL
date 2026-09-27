@@ -384,7 +384,7 @@
         }
       },
       "best_epoch": 26,
-      "training_seconds": 1.1509015001356602,
+      "training_seconds": 1.0907713999999942,
       "model_sha256": "f6298a65324ce878d92c12f838e1de7868dda6e78e41822ad4b0893ec2522e66"
     },
     {
@@ -437,7 +437,7 @@
         }
       },
       "best_epoch": 24,
-      "training_seconds": 1.1112077001016587,
+      "training_seconds": 1.0012538999999379,
       "model_sha256": "aff19937d3cfd4de22b349c2592fff6358c7d55d497a602374a34669b2fbb3a5"
     },
     {
@@ -490,7 +490,7 @@
         }
       },
       "best_epoch": 19,
-      "training_seconds": 0.978008400183171,
+      "training_seconds": 0.8109374000000571,
       "model_sha256": "23957e1a1164630131fc948232f361de9ac4e1413b6eaa6c96401d3f8582b0e8"
     },
     {
@@ -543,7 +543,7 @@
         }
       },
       "best_epoch": 16,
-      "training_seconds": 0.8122789000626653,
+      "training_seconds": 1.0622631999999612,
       "model_sha256": "2714392d231f87749fd548212d3e4e7bb6b77824fbf16f4ff8482120cb8c3079"
     },
     {
@@ -596,7 +596,7 @@
         }
       },
       "best_epoch": 28,
-      "training_seconds": 1.2503583999350667,
+      "training_seconds": 1.3548897999999099,
       "model_sha256": "acb530a5a922972dd30700646d56a9b00bd5f2bde7456956bc7f9c050dc0b04c"
     }
   ],

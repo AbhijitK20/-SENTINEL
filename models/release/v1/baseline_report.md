@@ -32,8 +32,8 @@
 | False-positive rate | 0.0198 | 0.0595 | 0.0595 |
 | PR-AUC | 0.9962 | 0.9704 | 0.9784 |
 
-- Training time: 16.0 ms
-- Inference latency: 1.4 us/sample
+- Training time: 16.9 ms
+- Inference latency: 1.3 us/sample
 
 ## Feature Weights (standardized inputs)
 
