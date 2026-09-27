@@ -49,6 +49,9 @@ uv run python scripts/run_label_efficiency.py --output reports/generated/benchma
 echo "== drift and detection delay =="
 uv run python scripts/run_drift_report.py --output reports/generated/benchmark/drift
 
+echo "== throughput profile =="
+uv run python scripts/run_perf_profile.py --output reports/generated/benchmark/perf-profile
+
 echo "== world model open-loop skill =="
 uv run python scripts/run_world_model.py \
     --output reports/generated/benchmark/world_model \
@@ -78,6 +81,7 @@ All done. Reports:
   reports/generated/benchmark/evasion/evasion.md
   reports/generated/benchmark/label-efficiency/label_efficiency.md
   reports/generated/benchmark/drift/drift.md
+  reports/generated/benchmark/perf-profile/perf_profile.md
   reports/generated/benchmark/world_model/WORLD_MODEL.md
   reports/generated/benchmark/demo_script/demo.json
   reports/generated/burndown.html

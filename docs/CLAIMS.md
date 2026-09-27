@@ -85,6 +85,12 @@ to be unbacked, which for a results table is the same thing.
   `ProbabilityPoint.interval` is a split-conformal band fitted on the validation
   split and shipped in the artifact, and it is `None` for a model trained before
   that existed or whose calibration data was too small - absence, not a guess.
+- No machine-independent performance claim. `make bench-perf` measures ~103k flow
+  rows/second and ~457k events/second into windows on one Windows dev box, with
+  2.6x and 5.7x headroom against the budgets in `tests/test_performance.py`.
+  Those budgets are wall-clock with no unit and no machine, and run-to-run spread
+  on the box moved the fitted slope from 0.87 to 1.29, so the linear/super-linear
+  shape is not resolvable here. See `docs/KNOWN_LIMITATIONS.md`.
 - No usable drift alarm. `sentinel.drift.band_of` bands PSI at 0.10 and 0.25 with
   no sample size attached; on 400 held-out blocks of iid noise at 30 windows per
   block, 100% exceed 0.10 and 92% exceed it on a single feature. The band is a

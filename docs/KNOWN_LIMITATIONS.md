@@ -192,6 +192,53 @@ already over-predicts positives in general - test recall 0.98 against precision
 root cause is the positive-class bias, not the missing imagined-state term. Fix
 the bias first, then this term has something to add.
 
+### The performance budgets have no unit and no machine, which makes them a flake waiting to happen
+
+`make bench-perf`. `tests/test_performance.py` asserts wall-clock limits - 200k
+flow rows under 10s, 200k events into windows under 5s. They pass here with room
+to spare, and that is the problem: the numbers carry no throughput and no
+machine, so nothing can say what they buy, and they will fail on a loaded CI box
+for reasons that have nothing to do with this code.
+
+Measured, best of three runs per size, on one Windows dev box with the platform
+string in the report:
+
+| items | read_flow_csv | us/row | build_network_states | us/event |
+|---|---|---|---|---|
+| 25,000 | 0.248s | 9.91 | 0.121s | 4.85 |
+| 100,000 | 0.978s | 9.78 | 0.303s | 3.04 |
+| 200,000 | 1.942s | 9.71 | 0.484s | 2.42 |
+| 400,000 | 3.850s | 9.63 | 0.874s | 2.19 |
+
+Two different shapes, and the second one is the interesting one:
+
+- **CSV ingestion is linear**, slope 0.99, at **~103,000 rows/second**, 9.7 us per
+  row. 400k rows takes 3.85s against a 10s budget, so **2.6x headroom**.
+- **Windowing is sub-linear**, slope 0.70, and per-event cost *falls* from 4.85 to
+  2.19 us as the input grows. Fixed setup is amortising across more windows, so
+  throughput climbs from 206k to 457k events/second. 400k events takes 0.87s
+  against a 5s budget, so **5.7x headroom**.
+
+An earlier version of the profiler labelled anything outside 0.85-1.20
+"super-linear" and printed it in capitals for the windowing stage, whose
+throughput was *improving*. A slope below 1 is amortisation, not a wall, and
+distinguishing the two cases is most of the value of fitting one.
+
+**The honest limit on all of this: the fit is only as good as the machine.**
+Timing the same 200k-row read on this box produced 2.07s, 3.37s and 4.47s on
+consecutive runs, and the fitted slope moved with it - 0.87, 0.98, 1.29 - which
+crosses the linear/super-linear boundary on noise alone. The profiler reports the
+run-to-run spread next to every timing and says outright that the shape is not
+resolvable when that spread exceeds 20% of the time. The table above is from a
+run where it was not. **A throughput number from a shared dev box is a
+measurement of the box as much as of the code**, and these budgets should be
+expressed as items/second on a named machine rather than as seconds here.
+
+Extrapolation past 400k is arithmetic on a fitted slope, not a measurement, and
+the report says so instead of publishing a capacity figure - which is what the
+deleted `scale/capacity.py` did, with invented throughput and a load test that
+was never run.
+
 ### The shipped PSI bands fire on ordinary noise, so `band_of` cannot be trusted
 
 `make bench-drift`. `sentinel.drift` bands PSI at **0.10** ("moderate") and
