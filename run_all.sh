@@ -40,6 +40,9 @@ uv run python scripts/run_calibration_report.py --output reports/generated/bench
 echo "== telemetry budget (minimum sufficient features) =="
 uv run python scripts/run_telemetry_budget.py --output reports/generated/benchmark/telemetry
 
+echo "== evasion cost (red-team the detectors) =="
+uv run python scripts/run_evasion_report.py --output reports/generated/benchmark/evasion
+
 echo "== world model open-loop skill =="
 uv run python scripts/run_world_model.py \
     --output reports/generated/benchmark/world_model \
@@ -66,6 +69,7 @@ All done. Reports:
   reports/generated/benchmark/detectors/detector_benchmark.md
   reports/generated/benchmark/calibration/calibration.md
   reports/generated/benchmark/telemetry/telemetry_budget.md
+  reports/generated/benchmark/evasion/evasion.md
   reports/generated/benchmark/world_model/WORLD_MODEL.md
   reports/generated/benchmark/demo_script/demo.json
   reports/generated/burndown.html

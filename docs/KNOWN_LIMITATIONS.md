@@ -182,6 +182,54 @@ already over-predicts positives in general - test recall 0.98 against precision
 root cause is the positive-class bias, not the missing imagined-state term. Fix
 the bias first, then this term has something to add.
 
+### The lateral-movement rule can be evaded by going slower, not quieter
+
+`make bench-evasion`, 16 real attacking windows from the test split, with six
+windows of history each. Every detector was attacked with a closed set of
+executable strategies and the alert was re-measured.
+
+**Result: one of nine is evadable.**
+
+| detector | cheapest feasible evasion | extra bytes | extra windows |
+|---|---|---|---|
+| lateral_movement | **throttle the transfer** | **0** | **0.8** |
+| reconnaissance | none found | - | - |
+| credential_abuse | none found | - | - |
+| ddos | none found | - | - |
+| insider_threat | none found | - | - |
+| exfiltration | none found | - | - |
+| command_and_control | none found | - | - |
+| malware_activity | none found | - | - |
+| phishing | none found | - | - |
+
+`detect_lateral` scores bytes across internal edges unseen in the last five
+windows. An attacker who sends the same payload more slowly keeps every window
+under the band, and pays **nothing in bandwidth and about 0.8 windows of extra
+dwell time**. That is the whole cost.
+
+This is the same rule that scored precision 0.194 in Sprint 4's detector
+benchmark, and the two findings are the same finding from two directions: a
+narrow byte band is easy to sit under in both directions, and it fires on benign
+hops as readily as on attacks. **The rule is not fit for purpose as written** -
+either it needs a ratio or a rate rather than an absolute byte count, or it needs
+to be combined with something the attacker cannot simply slow down.
+
+Two limits on this analysis, both stated in the report it produces:
+
+- The strategies are **hand-enumerated** from each rule's own definition, so
+  this prices the *known* evasions. A signature nobody anticipated is not here,
+  and "none found" means "none of the moves we thought of", not "impossible".
+- Costs are bytes and windows, not currency. Converting to money needs a
+  deployment's own numbers, and inventing a rate would be the same mistake as the
+  removed capacity table's invented throughput.
+
+One structural note worth keeping: on these windows the `lateral_movement` alert
+arrives as `sequence-prediction` from the sequence detector, not from the byte
+rule. The evasion is therefore *upstream* - stay under the reconnaissance
+threshold - rather than a weakness in the byte band. The report attributes each
+alert to the rule that produced it for exactly this reason; a byte-level search
+against a history-based rule measures nothing.
+
 ### The lateral-movement rule is close to noise on this data
 
 `uv run python scripts/run_detector_benchmark.py`, test split, 108 windows over
