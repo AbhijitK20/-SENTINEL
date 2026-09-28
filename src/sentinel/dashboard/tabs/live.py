@@ -10,11 +10,13 @@ import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 import plotly.graph_objects as go
 import streamlit as st
 
 from sentinel.assets import default_asset_registry
+from sentinel.attack_phases import PHASE_NAMES, PHASES, parse_summary
 from sentinel.dashboard.live_artifacts import select_live_artifacts
 from sentinel.feedback import VERDICTS as FEEDBACK_VERDICTS
 from sentinel.feedback import FeedbackStore
@@ -471,97 +473,117 @@ def render(seed: int = 42, loaded: Any = None, baseline_run: Any = None) -> None
 
     st.divider()
     st.subheader("Force Attack — Trigger Real Attack Scripts")
-    target_url = os.environ.get("SENTINEL_DEMO_TARGET", "http://127.0.0.1:5000")
+    target_url = os.environ.get("SENTINEL_DEMO_TARGET", "http://localhost:8888")
+    # Inside Docker the API is a service name; on the host it is localhost.
+    api_url = os.environ.get("SENTINEL_API_URL", "http://api:8100")
+    if not os.path.exists("/.dockerenv"):
+        api_url = api_url.replace("//api:", "//localhost:")
+    target_host = os.environ.get("SENTINEL_TARGET_HOST") or urlparse(target_url).hostname
+    target_port = int(os.environ.get("SENTINEL_TARGET_PORT") or urlparse(target_url).port or 8888)
     st.caption(
-        "Launch attack scripts against the vulnerable demo app "
-        f"({target_url}). The scanner picks up the traffic and pushes "
-        "it into the SENTINEL API so detectors fire on real HTTP requests."
+        f"Target `{target_url}` (scan host `{target_host}:{target_port}`). "
+        f"Events are pushed to the SENTINEL API at `{api_url}`."
     )
     st.caption(
-        "These buttons run the actual attack modules (brute_force, sqli, scan) "
-        "against the vulnerable Flask app. They require the demo stack to be "
-        "running (docker compose --profile demo up or the vulnerable app locally)."
+        "Each button runs one phase: real HTTP requests hit the target, and the "
+        "events SENTINEL derives from those responses are shown below."
     )
-    attack_col1, attack_col2, attack_col3 = st.columns(3)
-    with attack_col1:
-        if st.button("🔑 Brute Force Attack", key="attack-brute-force"):
-            st.session_state["pending_attack"] = "brute_force"
-    with attack_col2:
-        if st.button("💉 SQL Injection Attack", key="attack-sqli"):
-            st.session_state["pending_attack"] = "sqli"
-    with attack_col3:
-        if st.button("🔍 Port Scan Attack", key="attack-scan"):
-            st.session_state["pending_attack"] = "scan"
+
+    for row_start in range(0, len(PHASES), 3):
+        cols = st.columns(3)
+        for offset, col in enumerate(cols):
+            index = row_start + offset
+            if index >= len(PHASES):
+                break
+            phase = PHASES[index]
+            with col:
+                technique = phase["technique"] or "no detector"
+                st.caption(f"{phase['description']} — target: {technique}")
+                if st.button(phase["label"], key=f"attack-{phase['name']}"):
+                    st.session_state["pending_attack"] = phase["name"]
+
+    if st.button(f"Run All {len(PHASES)} Phases", key="attack-all", type="primary"):
+        st.session_state["pending_attack"] = "all"
 
     pending_attack = st.session_state.pop("pending_attack", None)
     if pending_attack:
-        cmd_map = {
-            "brute_force": [
-                sys.executable,
-                "-m",
-                "apps.vulnerable.attacks.brute_force",
-                "--target",
-                target_url,
-                "--delay",
-                "0.1",
-                "--attempts",
-                "5",
-            ],
-            "sqli": [
-                sys.executable,
-                "-m",
-                "apps.vulnerable.attacks.sqli",
-                "--target",
-                target_url,
-                "--delay",
-                "0.1",
-                "--rounds",
-                "1",
-            ],
-            "scan": [
-                sys.executable,
-                "-m",
-                "apps.vulnerable.attacks.scan",
-                "--target",
-                target_url,
-                "--delay",
-                "0.05",
-                "--rounds",
-                "1",
-            ],
-        }
-        attack_labels = {
-            "brute_force": "Brute Force",
-            "sqli": "SQL Injection",
-            "scan": "Port Scan",
-        }
-        cmd = cmd_map[pending_attack]
-        label = attack_labels[pending_attack]
+        if pending_attack == "all":
+            phases_to_run = list(PHASE_NAMES)
+            label = f"All {len(PHASES)} Phases"
+        else:
+            phases_to_run = [pending_attack]
+            label = next(p["label"] for p in PHASES if p["name"] == pending_attack)
 
-        with st.spinner(f"Resetting live engine and running {label} attack..."):
+        cmd = [
+            sys.executable,
+            str(ROOT / "scripts" / "full_attack.py"),
+            "--target",
+            target_url,
+            "--api",
+            api_url,
+            "--api-key",
+            os.environ.get("SENTINEL_API_KEY", "sent_demo_key_2026"),
+            "--target-host",
+            target_host or "localhost",
+            "--target-port",
+            str(target_port),
+            "--summary-json",
+            "--phases",
+            *phases_to_run,
+        ]
+
+        with st.spinner(f"Running {label}..."):
             live_eng = st.session_state.get("live_engine")
             if live_eng is not None:
                 live_eng.reset()
-
             try:
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
-                    timeout=60,
+                    timeout=300,
                     cwd=str(ROOT),
                 )
                 output = result.stdout + result.stderr
-                if result.returncode == 0:
-                    st.success(f"{label} attack completed successfully.")
-                else:
-                    st.warning(f"{label} attack finished with code {result.returncode}.")
-                with st.expander(f"{label} output"):
-                    st.code(output[:3000])
             except subprocess.TimeoutExpired:
-                st.error(f"{label} attack timed out after 60s.")
+                st.error(f"{label} timed out after 300s.")
+                output = ""
             except Exception as exc:
-                st.error(f"Failed to run {label} attack: {exc}")
+                st.error(f"Failed to run {label}: {exc}")
+                output = ""
+
+            summary = parse_summary(output)
+            if summary["phases"]:
+                st.markdown("#### Data extracted from the target")
+                st.dataframe(
+                    [
+                        {
+                            "phase": row["phase"],
+                            "events": row["events"],
+                            "targets": row["endpoints"],
+                            "bytes sent": int(row["bytes_sent"]),
+                            "bytes received": int(row["bytes_received"]),
+                            "HTTP statuses": ", ".join(
+                                f"{code}x{count}" if code else f"no HTTP response x{count}"
+                                for code, count in sorted(row["http_statuses"].items())
+                            ),
+                        }
+                        for row in summary["phases"]
+                    ],
+                    use_container_width=True,
+                )
+            if result.returncode != 0 and output:
+                st.error(f"{label} failed (exit {result.returncode}).")
+                st.code(output[-2000:])
+            elif summary["phases"]:
+                push_result = summary["push"]
+                st.success(
+                    f"{label}: {push_result.get('events_seen', 0)} events pushed, "
+                    f"{push_result.get('windows_emitted', 0)} windows, "
+                    f"alert status {push_result.get('alert_status', 'unknown')}."
+                )
+                with st.expander("Full script output"):
+                    st.code(output[-3000:])
 
     if start_requested or attack_requested:
         try:

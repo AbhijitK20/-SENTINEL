@@ -101,3 +101,64 @@ def test_the_known_limitations_file_records_the_unflattering_results() -> None:
     # If these are deleted the measurements become unfalsifiable again.
     assert "lateral-movement" in text
     assert "not a working simulator" in text or "barely a simulator" in text
+
+
+# ── the audit's numeric match is tolerance-based, on purpose ──────────────
+
+
+def _claims_audit():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_claims", ROOT / "scripts" / "check_claims.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_a_re_measured_figure_is_matched_within_tolerance() -> None:
+    """A figure may drift when its inputs are versioned; that is not a failure.
+
+    The claims job measured +0.190 for a figure CLAIMS.md recorded as 0.189 and
+    failed the build over rounding. No edit to the document can fix that, because
+    re-exporting the release bundle moves the number every run. It must match on
+    proximity, and say so.
+    """
+    audit = _claims_audit()
+    available = {round(0.1904, 4): "0.1904"}
+    assert audit._within_tolerance(0.189, available) == "0.1904"
+
+
+def test_the_tolerance_still_rejects_a_wrong_figure() -> None:
+    """Proximity matching must not become a loophole.
+
+    Anything outside the tolerance is not produced, exactly as before. A claim
+    off by 0.05 is a different measurement, not a rounding difference.
+    """
+    audit = _claims_audit()
+    available = {round(0.1904, 4): "0.1904"}
+    assert audit._within_tolerance(0.24, available) is None
+    assert audit._within_tolerance(0.05, available) is None
+
+
+def test_the_tolerance_is_tight_against_the_measured_environment_spread() -> None:
+    """The slack is two orders of magnitude below a 3.11/3.12 torch spread.
+
+    A different interpreter moves the world-model skill from 0.147 to 0.190, a
+    0.043 gap. If the tolerance were wide enough to absorb that, it would also
+    absorb a wrong figure, so it is pinned well below it.
+    """
+    audit = _claims_audit()
+    spread = abs(0.190 - 0.147)
+    slack = max(audit.TOLERANCE_ABSOLUTE, 0.147 * audit.TOLERANCE_RELATIVE)
+    assert slack < spread / 5, (
+        "the matching tolerance must stay far below the interpreter-dependent spread"
+    )
+
+
+def test_an_exact_match_is_still_an_exact_match() -> None:
+    """Tolerance widens the net; it must not change what an exact hit means."""
+    audit = _claims_audit()
+    assert audit._within_tolerance(0.945, {round(0.945, 3): "0.945"}) == "0.945"

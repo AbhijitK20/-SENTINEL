@@ -67,6 +67,15 @@ LIVE_ENGINE_VERSION = "live-engine-v1"
 # events under pressure is safe and explicit.
 MAX_BUFFERED_EVENTS = 50_000
 
+#: Memory bound on retained attack findings. Findings are per detector per
+#: window, so a long run fills this and evicts its own earliest results: the
+#: 9-phase suite produces 9 detectors x 99 windows = 891, which evicted the
+#: reconnaissance findings and made /v1/attack-coverage under-report. Sized
+#: above a full demo suite so a run's early evidence survives; the
+#: ``findings_evicted`` counter in LiveStatus says when a bound was hit rather
+#: than letting a truncated number read as a complete one.
+MAX_RETAINED_FINDINGS = 8_000
+
 
 class LiveWindow(BaseModel):
     """One emitted window with its forecast, for the dashboard."""
@@ -106,6 +115,10 @@ class LiveStatus(BaseModel):
     attack_findings: list[AttackFinding] = Field(default_factory=list)
     detection_history: list[AttackFinding] = Field(default_factory=list)
     incidents: list[Incident] = Field(default_factory=list)
+    #: Findings dropped by MAX_RETAINED_FINDINGS. Non-zero means the retained
+    #: history — and anything derived from it, such as attack coverage — is a
+    #: suffix of the run, not the whole thing.
+    findings_evicted: int = 0
     last_error: str | None = None
 
 
@@ -431,7 +444,8 @@ class LiveEngine:
         self._next_boundary: datetime | None = None
         self._events_seen = 0
         self._last_forecast: Forecast | None = None
-        self._findings: deque[AttackFinding] = deque(maxlen=600)
+        self._findings: deque[AttackFinding] = deque(maxlen=MAX_RETAINED_FINDINGS)
+        self._findings_evicted = 0
         self._detector_thresholds = detector_thresholds or DetectorSet()
         self._asset_registry = asset_registry or default_asset_registry()
         self._threat_feed = threat_feed
@@ -461,6 +475,7 @@ class LiveEngine:
             self._states.clear()
             self._history.clear()
             self._findings.clear()
+            self._findings_evicted = 0
             self._events_seen = 0
             self._anchor = None
             self._next_boundary = None
@@ -554,6 +569,7 @@ class LiveEngine:
                 history=list(self._history),
                 attack_findings=list(self._findings),
                 detection_history=list(self._findings),
+                findings_evicted=self._findings_evicted,
                 incidents=list(correlate(tuple(self._findings), registry=self._asset_registry)),
                 last_error=self._last_error,
             )
@@ -585,6 +601,10 @@ class LiveEngine:
             asset_registry=self._asset_registry,
             threat_feed=self._threat_feed,
         )
+        if len(self._findings) + len(findings) > self._findings.maxlen:
+            self._findings_evicted += max(
+                0, len(self._findings) + len(findings) - self._findings.maxlen
+            )
         self._findings.extend(findings)
 
         # Send webhook alerts for findings above threshold

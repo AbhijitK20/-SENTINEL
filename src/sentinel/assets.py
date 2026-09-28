@@ -92,6 +92,8 @@ def fuse_risk(
     The severity contribution uses the maximum severity across affected
     assets' exposure; with no registry, criticality contributes a neutral 0.5
     and the formula says so.
+
+    Formula: 0.5*probability + 0.3*asset_criticality + 0.2*severity
     """
     registered = [a for a in affected_assets if a in registry] if registry else []
     worst = (
@@ -104,7 +106,7 @@ def fuse_risk(
     if not (registry and registered):
         formula += " [no registry match — neutral criticality]"
     return RiskAssessment(
-        score=round(score, 3),
-        level=risk_level(score),
+        score=round(min(1.0, score), 3),
+        level=risk_level(min(1.0, score)),
         formula=formula,
     )

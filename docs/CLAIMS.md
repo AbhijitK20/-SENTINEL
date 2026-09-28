@@ -51,7 +51,7 @@ numbers will differ by seed, and that is the point - they are not constants.
 | The reconnaissance rule is usable but noisy | `make bench-detectors` | precision 0.686, recall 1.000, F1 0.814 (24 TP / 11 FP / 0 FN) |
 | Seven of nine rules cannot be scored here | `make bench-detectors` | reported as not evaluable, with the reason |
 | The linear transition baseline is barely a simulator | `make bench-world` | pre-projection spectral norm ~1.6e5; the projection keeps ~6e-06 of it |
-| The world model beats persistence open-loop | `make bench-world` | +0.189 mean skill |
+| The world model beats persistence open-loop | `make bench-world` | +0.147 mean skill, vs -0.890 for the linear transition baseline and -0.095 without the open-loop objective |
 | Isotonic recalibration of the world-model risk head is gated, and rejected on the release fixture | `make bench-calibration` | Brier 0.0420 -> 0.0568 (worse, so no curve ships); ECE 0.0592 -> 0.0503 (better, but the gate requires both) |
 
 ## Not currently backed by an artifact - treat as unverified

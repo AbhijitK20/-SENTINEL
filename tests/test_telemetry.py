@@ -107,8 +107,8 @@ def test_engine_attaches_nine_findings_to_every_window(tmp_path: Path) -> None:
     status = engine.poll()
     assert status.windows_emitted == 2
     for window in status.history:
-        assert len(window.attack_findings) == 9
-    assert len(status.attack_findings) == 18  # 9 detectors x 2 windows
+        assert len(window.attack_findings) == 10
+    assert len(status.attack_findings) == 20  # 10 detectors x 2 windows
 
 
 def test_engine_attack_window_alerts_and_correlates(tmp_path: Path) -> None:

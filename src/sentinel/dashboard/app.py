@@ -20,6 +20,7 @@ from pathlib import Path
 import streamlit as st
 
 from sentinel.baseline import train_baseline
+from sentinel.cic_ids2017 import DATASET_ID as CIC_DATASET_ID
 from sentinel.cic_ids2017 import build_labelled_states, load_flow_csv
 from sentinel.config import BaselineConfig
 from sentinel.dashboard.screens import SCREENS, ScreenContext
@@ -28,7 +29,7 @@ from sentinel.dashboard.tabs import world_model as world_model_tab
 from sentinel.frontend import ui
 from sentinel.frontend.theme import apply_theme
 from sentinel.predict import artifacts_from_runs
-from sentinel.synthetic import generate_labelled_states
+from sentinel.synthetic import DATASET_ID, generate_labelled_states
 from sentinel.targets import (
     build_sequence_samples,
     make_split_manifest,
@@ -166,7 +167,7 @@ def synthetic_dataset(
         labelled,
         samples,
         make_split_manifest(scenario_ids, seed=seed),
-        "synthetic-recon-lateral-v2",
+        DATASET_ID,
     )
 
 
@@ -230,7 +231,7 @@ def cic_dataset(
         labelled, sequence_length=sequence_length, horizon=forecast_horizon
     )
     manifest = make_stratified_split_manifest(scenario_ids, stage_by_scenario, seed=seed)
-    return labelled, samples, manifest, "CIC-IDS2017 (attack days)"
+    return labelled, samples, manifest, f"{CIC_DATASET_ID} (attack days)"
 
 
 @st.cache_resource(show_spinner="Training baseline + temporal models…")
@@ -266,11 +267,11 @@ with st.sidebar:
     ui.header("SENTINEL", "analyst console")
 
     st.subheader("Data source")
-    mode_options = ["Synthetic replay"] + (["CIC-IDS2017 attack days"] if available else [])
+    mode_options = ["Synthetic replay"] + ([f"{CIC_DATASET_ID} attack days"] if available else [])
     mode = st.radio("Dataset", mode_options, index=0)
 
     selected_days: list[str] = []
-    if mode == "CIC-IDS2017 attack days":
+    if mode == f"{CIC_DATASET_ID} attack days":
         selected_days = st.multiselect(
             "Attack days",
             [stem for stem, _ in available],
@@ -317,7 +318,7 @@ with st.sidebar:
 
 # ── Data ────────────────────────────────────────────────────────────────
 
-use_real = mode == "CIC-IDS2017 attack days" and len(selected_days) >= 3
+use_real = mode == f"{CIC_DATASET_ID} attack days" and len(selected_days) >= 3
 fingerprint = (
     f"{mode}|{sorted(selected_days)}|{seed}|{window_seconds}|{stride_seconds}|"
     f"{sequence_length}|{forecast_horizon}|{scenario_count}|{full_training}"

@@ -60,7 +60,7 @@ reproduce:  ## train, export the bundle, then verify it
 bench-world:  ## world-model open-loop benchmark + core comparison
 	uv run python scripts/run_world_model.py \
 		--output $(BENCH)/world_model \
-		--baseline $(BENCH)/pipeline/baseline \
+		--baseline $(BUNDLE) \
 		--compare-cores
 
 bench-backtest:  ## rolling-origin temporal backtest with drift per origin

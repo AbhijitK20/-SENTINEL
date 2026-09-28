@@ -38,6 +38,8 @@ PERMISSIONS: dict[str, tuple[str, ...]] = {
         "GET /v1/cases",
         "POST /v1/cases",
         "GET /v1/compliance",
+        "GET /v1/attack-coverage",
+        "GET /v1/live",
     ),
     "engineer": (
         "GET /health",
@@ -54,6 +56,9 @@ PERMISSIONS: dict[str, tuple[str, ...]] = {
         "POST /v1/drift",
         "GET /metrics",
         "GET /admin/keys",
+        "GET /v1/attack-coverage",
+        "GET /v1/live",
+        "POST /v1/live/reset",
     ),
     "admin": ("*",),
 }

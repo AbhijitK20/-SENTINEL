@@ -123,6 +123,8 @@ def test_report_contains_contract_sections(tmp_path: Path) -> None:
     assert "## Replay Evaluation (measured lead time)" in report
     assert "## Limitations" in report
     assert "not a benchmark claim" in report
+    # The report must name the dataset it was actually produced from.
+    assert "- Dataset: `synthetic-recon-lateral-v2`" in report
 
 
 def test_report_json_round_trip_stability(tmp_path: Path) -> None:

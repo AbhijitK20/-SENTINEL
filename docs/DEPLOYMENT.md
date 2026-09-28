@@ -306,3 +306,28 @@ boot; a window touching a listed host raises C2/exfil findings with explicit
 ```cron
 0 */6 * * *  cd /opt/sentinel && uv run python scripts/fetch_threat_feed.py --max-age-hours 5
 ```
+
+## Isolated Synthetic Lab Scenario
+
+The bounded `recon-auth-progression` scenario is enabled only with the Compose
+`lab` profile. The runner and API share the dedicated `lab-net` network; the
+synthetic target must be attached to that network separately as
+`idurar-target:8888`. The checked-in Compose file does not define or publish an
+Idurar target port.
+
+Validate the manifest without making network requests:
+
+```bash
+docker compose --profile lab run --rm lab-scenario-runner \
+  uv run --no-sync python scripts/run_lab_scenario.py \
+  --scenario recon-auth-progression \
+  --manifest /app/configs/lab/scenarios.json \
+  --target idurar-target \
+  --api api \
+  --api-key synthetic-demo-key \
+  --dry-run
+```
+
+The live runner accepts only target port `8888`, API port `8100`, the checked-in
+manifest, and the fixed scenario allowlist. It posts synthetic `UnifiedEvent`
+batches to `http://api:8100/v1/events`, then exits.

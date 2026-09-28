@@ -52,18 +52,25 @@ RECOMMENDATIONS = {
 
 
 def fuse_incident_risk(findings: list[AttackFinding], registry) -> RiskAssessment:
-    """Risk from the peak finding, +0.05 per additional chained attack type."""
+    """Risk from the peak finding, severity, and affected asset criticality.
+
+    Uses the documented formula: probability + asset criticality + severity.
+    No hand-authored technique estimates (EPSS/KEV) are added.
+    """
     peak = max(findings, key=lambda f: f.probability)
     assets = sorted({a for f in findings for a in f.affected_assets})
     risk = fuse_risk(peak.probability, peak.severity, assets, registry)
     if len(findings) > 1:
-        score = min(1.0, risk.score + 0.05 * (len(findings) - 1))
+        # Kill chain progression bonus: more distinct attack types = higher risk
+        progressions = len(set(f.attack_type for f in findings))
+        chain_bonus = min(0.15, 0.03 * (progressions - 1))
+        score = min(1.0, risk.score + chain_bonus)
         from sentinel.assets import risk_level
 
         return RiskAssessment(
             score=round(score, 3),
             level=risk_level(score),
-            formula=risk.formula + " [+0.05 per additional chained attack type]",
+            formula=risk.formula + f" [+{chain_bonus:.2f} kill chain progression]",
         )
     return risk
 
