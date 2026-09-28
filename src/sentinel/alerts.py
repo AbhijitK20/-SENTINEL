@@ -15,11 +15,11 @@ from __future__ import annotations
 import json
 import os
 import smtplib
+import urllib.parse
 import urllib.request
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
-from urllib.parse import urlparse
 
 # Severity order for threshold comparison
 _SEVERITY_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -78,18 +78,28 @@ def _format_slack_message(finding: dict[str, Any], incident: dict[str, Any] | No
 
 
 def _send_webhook(url: str, payload: dict) -> bool:
-    # The webhook target is operator-supplied configuration, so treat it as
-    # untrusted input: only http(s) may be fetched. Without this, a config
-    # value of file:// (or another handler) turns the alerting path into a
-    # local-file reader. Alert delivery failing is acceptable; reading the
-    # disk on the way out is not.
-    scheme = urlparse(url).scheme.lower()
-    if scheme not in ("http", "https"):
+    """POST the payload to an http(s) webhook, and nothing else.
+
+    The scheme is checked rather than trusted. ``urllib.request.urlopen`` will
+    happily open a ``file://`` URL, so a webhook target that is misconfigured -
+    or set from an environment variable or config file that something else wrote -
+    would otherwise turn an alert into a local file read, and a ``data:`` or
+    ``ftp:`` URL into something stranger still. An alert path is exactly the wrong
+    place for an SSRF, because it is on a timer and nobody is watching it.
+
+    Bandit flags this as B310, which is correct; the fix is the check below
+    rather than a ``# nosec``.
+    """
+    parsed = urllib.parse.urlparse(str(url))
+    if parsed.scheme not in ("http", "https"):
         return False
     try:
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=10)  # nosec B310 - scheme allowlisted above
+        # Bandit is syntactic and cannot see the scheme check above, so it reports
+        # every urlopen regardless. The validation is the real fix; this skip is
+        # scoped to this one line.
+        urllib.request.urlopen(req, timeout=10)  # nosec B310
         return True
     except Exception:
         return False
