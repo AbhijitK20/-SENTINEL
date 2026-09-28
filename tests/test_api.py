@@ -235,3 +235,39 @@ def test_navigator_export_endpoint_exists(client: TestClient) -> None:
     assert body["versions"]["navigator"] == "4.5"
     assert body["domain"] == "enterprise-attack"
     assert isinstance(body["techniques"], list)
+
+
+def test_forecast_request_carries_every_field_the_contract_documents() -> None:
+    """`ForecastRequest` must expose the fields docs/DATA_CONTRACTS.md documents.
+
+    `/v1/imagine` reads `request.horizon`, but the model had no such field, so
+    the endpoint raised AttributeError -> 500 the moment a world-model bundle
+    was actually present. A request model that silently omits a field its own
+    handlers read is a build failure, not a runtime surprise.
+    """
+    from sentinel.api.app import ForecastRequest
+
+    documented = {
+        "events",
+        "window_seconds",
+        "stride_seconds",
+        "horizon",
+        "include_explanation",
+    }
+    assert documented <= set(ForecastRequest.model_fields), (
+        "ForecastRequest is missing documented fields: "
+        f"{sorted(documented - set(ForecastRequest.model_fields))}"
+    )
+
+
+def test_imagine_never_500s_on_a_request_the_contract_accepts(client: TestClient) -> None:
+    """`/v1/imagine` must fail through a handled error, never AttributeError.
+
+    This bundle has no world model, so the endpoint legitimately refuses. What
+    it must not do is crash: the regression this pins returned 500.
+    """
+    events = [
+        _event(31.0 + k * 0.1, 200 + k, bytes=40.0, syn_count=1.0, rst_count=1.0) for k in range(24)
+    ]
+    response = client.post("/v1/imagine", json={"events": events, "horizon": 2})
+    assert response.status_code in (200, 400, 422, 503), response.text

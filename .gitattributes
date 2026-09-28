@@ -1,0 +1,9 @@
+# The release bundle is digest-checked in CI (scripts/verify_release_artifacts.py).
+# Git's text normalisation rewrote it on commit, so the recorded SHA-256 values
+# were taken over bytes that were never committed and the check failed on every
+# platform. Model artifacts are binary or line-ending-sensitive: never convert.
+models/release/** -text
+
+# Same reasoning for anything else whose bytes are checksummed.
+*.joblib -text
+*.pt -text

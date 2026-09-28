@@ -19,6 +19,7 @@ import urllib.request
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
+from urllib.parse import urlparse
 
 # Severity order for threshold comparison
 _SEVERITY_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -77,10 +78,18 @@ def _format_slack_message(finding: dict[str, Any], incident: dict[str, Any] | No
 
 
 def _send_webhook(url: str, payload: dict) -> bool:
+    # The webhook target is operator-supplied configuration, so treat it as
+    # untrusted input: only http(s) may be fetched. Without this, a config
+    # value of file:// (or another handler) turns the alerting path into a
+    # local-file reader. Alert delivery failing is acceptable; reading the
+    # disk on the way out is not.
+    scheme = urlparse(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        return False
     try:
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=10)
+        urllib.request.urlopen(req, timeout=10)  # nosec B310 - scheme allowlisted above
         return True
     except Exception:
         return False

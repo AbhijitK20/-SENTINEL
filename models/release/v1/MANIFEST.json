@@ -7,40 +7,40 @@
   "config": "configs\\default.yaml",
   "files": {
     "PROVENANCE.md": {
-      "sha256": "c0774122edda66315572a58c7861f7a09dc366f64175fae5030834d991418970",
-      "size_bytes": 209
+      "sha256": "34d89730eaa17e3fe55646e0159ba7e2b0747d1a0121319469df445d85639279",
+      "size_bytes": 202
     },
     "TRAINING_CONFIG.yaml": {
-      "sha256": "ab0cb4b7401a45697ef0f18f467c42e833cd9fa24afb296efe1fea9bcbfa1e7f",
-      "size_bytes": 666
+      "sha256": "d959dfab56c6ca692082a77777c7d327a3a19f63d78ac7782f8d146c66f1a141",
+      "size_bytes": 636
     },
     "baseline_model.joblib": {
       "sha256": "2eecf6be8be5b4e99f625c197d88e1a22b9bf99ac91fd2293be16040a8a08b50",
       "size_bytes": 1615
     },
     "baseline_report.md": {
-      "sha256": "468858d5b0afdc486920359187b36b7e468e855d7a45f0a5460c42776e6a0688",
-      "size_bytes": 4627
+      "sha256": "9ba503aa57bad0b50ae9254fe5502a855982a1596be91cc3c244c64aa116af1e",
+      "size_bytes": 4482
     },
     "baseline_result.json": {
-      "sha256": "b85e4dbca2912d27434bcbfecb2fdeb1cb724819e9c3a01fda4d10cf4b5fa691",
-      "size_bytes": 18964
+      "sha256": "93ceb34911656964e2fec11478c95cdb15397a1aba38c102ffaeeaced5292b4b",
+      "size_bytes": 18146
     },
     "calibration.json": {
-      "sha256": "c6affe042876766483aeb96179ccaa3d92b9b0c941a709ea909347050b898650",
-      "size_bytes": 4913
+      "sha256": "c942c966916b2dbf3cf75d190890d050efb64d8a96b6c1cd4fedc9aaf3d79aea",
+      "size_bytes": 4750
     },
     "feature_schema.json": {
-      "sha256": "215a44713ceb8c44eb4f4cea1c520fecd1dcb06b238e9a87e758e296cc28ca6d",
-      "size_bytes": 6763
+      "sha256": "37775f69821a426902e74874cd63ad982d611f1e26657d9681e79c5bb2a40aac",
+      "size_bytes": 6459
     },
     "split_manifest.json": {
-      "sha256": "64238db9bc2766b20c3f6cbce8593a0afc2649bd7ee4eeb0f1d72d6a037e5bad",
-      "size_bytes": 309
+      "sha256": "792312ad7cdfc29dc4f273f5ea5e08a5f154d01293f69a50e0670fad1212dccf",
+      "size_bytes": 291
     },
     "temporal_result.json": {
-      "sha256": "d41da72f8d7561315f636f0d0db93b0512c922e9a24699f83145599332ae8d38",
-      "size_bytes": 18568
+      "sha256": "00405c74a0043cd87ef8d99559123c47d537aec15217a97dfbbe2b66badd0de2",
+      "size_bytes": 17860
     },
     "weights/model_h1.pt": {
       "sha256": "0d95a80764b2db4da189c3868e1811eb27835a4bcdb4cc7d3563e93035f5503f",
@@ -67,16 +67,17 @@
       "size_bytes": 356247
     },
     "world_model.json": {
-      "sha256": "bc53f8225fb946229f2d7a73cc15f016e8bf117c3f1d80ee407beb3c64777acd",
-      "size_bytes": 21971
+      "sha256": "bf1d0b9d40e2781a47e326331f724ddaae1acb81367b327049ad7762e9713fc7",
+      "size_bytes": 21140
     },
     "world_model_report.md": {
-      "sha256": "d2c7bb26d86ef48823facb7afb7c8fecd018ae22953b6bbc3bf337b0f46a5f73",
-      "size_bytes": 2265
+      "sha256": "3bcc9a83fc710223cd4cf2caf89d6679c356a5b7e6550b03ff63d1ad18dcf2cd",
+      "size_bytes": 2223
     },
     "world_model_summary.json": {
-      "sha256": "a65664c3d5adcd28d39555b63dbd772add666fde16bf237e9158303b262e9b8a",
-      "size_bytes": 355
+      "sha256": "e5e2d42ffd241300e6927aa5c6c25154d832510b49edc8f454ae668f485b7212",
+      "size_bytes": 342
     }
-  }
+  },
+  "rehashed_note": "Digests recomputed from the committed (LF) files. The export ran on Windows where the working tree was CRLF, so every original digest was taken over bytes that were never committed."
 }

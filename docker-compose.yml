@@ -31,7 +31,12 @@ services:
     pull_policy: build
     command: ["uv", "run", "--no-sync", "uvicorn", "sentinel.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8100"]
     environment:
-      SENTINEL_ARTIFACTS_DIR: /app/reports/generated/real-benchmark/baseline
+      # The committed release bundle, not a local run directory: it is the only
+      # artifacts path that exists on a fresh clone (reports/generated/ is
+      # gitignored), and it is the only one carrying world_model.json, so
+      # /v1/imagine works. The dashboard loads the same bundle, so the console
+      # and the API report the same model and the same threshold.
+      SENTINEL_ARTIFACTS_DIR: /app/models/release/v1
       SENTINEL_THREAT_FEED_FILE: /app/reports/threat_intel/feed.json
       SENTINEL_BOOTSTRAP_KEY: ${SENTINEL_BOOTSTRAP_KEY:-sent_demo_key_2026}
     ports:

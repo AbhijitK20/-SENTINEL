@@ -1,7 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """Threat intelligence enrichment: Markov transitions and entropy analysis.
 
-Transition data is derived from MITRE ATT&CK campaign analysis.
+``TRANSITIONS`` below is a **literal prior table**, not a measurement. It is
+what the product falls back to when no ATT&CK Flow data is supplied. To get
+probabilities derived from real intrusion sequences instead, point
+``SENTINEL_ATTACK_FLOW_DIR`` at a directory of MITRE ATT&CK Flow STIX bundles
+(see ``research/ATTACK_FLOW_PROVENANCE.md``); the API then reports
+``transition_source()`` as ``attack-flow-data:N-bundles`` so a caller can tell
+the two apart. The bundles are not committed, so that path only runs for
+whoever supplies the data.
+
 Entropy functions support anomaly detection on DNS query-name labels.
 
 No hand-authored EPSS/KEV technique estimates are used for risk scoring.
@@ -9,13 +17,20 @@ No hand-authored EPSS/KEV technique estimates are used for risk scoring.
 
 from __future__ import annotations
 
+import json
 import math
+import os
 from collections import Counter
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from sentinel.attack_sequences import TransitionModel
 
 # ─── Kill chain transitions (Markov model) ──────────────────────────────
 
-# First-order Markov transition probabilities from MITRE ATT&CK
-# campaign data (8,437 real intrusion traces).
+# First-order Markov transition priors. LITERAL VALUES, not measured: see the
+# module docstring. Replace them by supplying ATT&CK Flow data.
 TRANSITIONS: dict[tuple[str, str], float] = {
     ("reconnaissance", "credential_abuse"): 0.72,
     ("reconnaissance", "lateral_movement"): 0.45,
@@ -37,7 +52,7 @@ TRANSITIONS: dict[tuple[str, str], float] = {
     ("malware_activity", "exfiltration"): 0.40,
 }
 
-# Start-state probabilities (which techniques initiate attacks)
+# Start-state priors. LITERAL VALUES, not measured: see the module docstring.
 START_PROBS: dict[str, float] = {
     "reconnaissance": 0.35,
     "ddos": 0.15,
@@ -69,24 +84,97 @@ def markov_chain_prob(sequence: list[str]) -> float:
 
 # ─── Next-technique prediction ──────────────────────────────────────────
 
+#: Populated by :func:`load_attack_flow_transitions` when the user supplies a
+#: directory of MITRE ATT&CK Flow bundles. ``None`` means "no data supplied",
+#: and the literal table above is the fallback. A prediction always reports
+#: which of the two produced it, so a number is never silently attributed to
+#: campaign data it was not derived from.
+_FLOW_MODEL: TransitionModel | None = None
+
+
+def load_attack_flow_transitions(directory: str | os.PathLike[str]) -> bool:
+    """Derive transition probabilities from local ATT&CK Flow STIX bundles.
+
+    The bundles are not committed (see ``research/ATTACK_FLOW_PROVENANCE.md``),
+    so the caller supplies the directory. Returns True when a model was built.
+    """
+    global _FLOW_MODEL  # noqa: PLW0603 - one process-wide derived model
+    from sentinel.attack_sequences import (  # noqa: PLC0415 - optional, data-dependent
+        TransitionModel,
+        extract_sequences,
+        load_attack_flow_bundle,
+    )
+
+    sequences: list[list[str]] = []
+    sources: list[str] = []
+    for path in sorted(Path(directory).glob("*.json")):
+        bundle = load_attack_flow_bundle(json.loads(path.read_text(encoding="utf-8")))
+        found = [_to_stage_names(seq) for seq in extract_sequences(bundle)]
+        found = [seq for seq in found if seq]
+        if found:
+            sequences.extend(found)
+            sources.append(bundle["source_sha256"][:12])
+    if not sequences:
+        _FLOW_MODEL = None
+        return False
+    _FLOW_MODEL = TransitionModel.from_sequences(
+        sequences,
+        min_support=1,
+        provenance={"bundles": len(sources), "sequences": len(sequences)},
+    )
+    return True
+
+
+def _to_stage_names(sequence: list[str]) -> list[str]:
+    """Map ATT&CK technique ids to the attack-type vocabulary findings use.
+
+    The bundles are keyed by technique (``T1566.001``) while detectors emit
+    attack types (``phishing``). ``detectors.MITRE`` is the existing
+    attack-type -> technique map, so inverting it keeps one vocabulary on both
+    sides. Sub-techniques match on their parent id.
+    """
+    from sentinel.detectors import MITRE  # noqa: PLC0415 - avoid an import cycle
+
+    by_technique = {technique: attack_type for attack_type, technique in MITRE.items()}
+    mapped: list[str] = []
+    for technique in sequence:
+        attack_type = by_technique.get(technique) or by_technique.get(technique.split(".")[0])
+        if attack_type and attack_type not in mapped:
+            mapped.append(attack_type)
+    return mapped
+
+
+def transition_source() -> str:
+    """Which transition table produced the current predictions."""
+    if _FLOW_MODEL is None:
+        return "literal-prior-table"
+    return f"attack-flow-data:{_FLOW_MODEL.provenance.get('bundles', 0)}-bundles"
+
 
 def predict_next_techniques(observed: list[str], top_k: int = 3) -> list[tuple[str, float]]:
     """Predict the most likely next techniques given observed sequence.
 
-    Uses the Markov transition model: for the last observed technique,
-    returns the top-k most likely next steps with probabilities.
-
-    Returns: [(technique, probability), ...] sorted by probability desc.
+    Uses ATT&CK Flow data when :func:`load_attack_flow_transitions` supplied it,
+    otherwise the literal prior table. Returns:
+    [(technique, probability), ...] sorted by probability desc.
     """
+    if _FLOW_MODEL is not None:
+        if not observed:
+            starts = {
+                technique: _FLOW_MODEL.start_counts[technique] / _FLOW_MODEL.total_starts
+                for technique in _FLOW_MODEL.start_counts
+            }
+            return sorted(starts.items(), key=lambda x: -x[1])[:top_k]
+        candidates = [(c.technique, c.probability) for c in _FLOW_MODEL.predict(observed[-1])]
+        if candidates:
+            return sorted(candidates, key=lambda x: -x[1])[:top_k]
+
     if not observed:
         # Return start-state probabilities
         return sorted(START_PROBS.items(), key=lambda x: -x[1])[:top_k]
 
     last = observed[-1]
-    candidates: dict[str, float] = {}
-    for (a, b), p in TRANSITIONS.items():
-        if a == last:
-            candidates[b] = p
+    candidates = {b: p for (a, b), p in TRANSITIONS.items() if a == last}
 
     if not candidates:
         return []

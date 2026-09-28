@@ -50,6 +50,10 @@ class ForecastRequest(BaseModel):
     window_seconds: int = Field(default=60, ge=1)
     stride_seconds: int = Field(default=30, ge=1)
     include_explanation: bool = True
+    # Documented in docs/DATA_CONTRACTS.md. /v1/forecast pins its own horizon to
+    # 1; /v1/imagine rolls the world model this many steps open-loop, so the
+    # field has to exist for that handler to run at all.
+    horizon: int = Field(default=3, ge=1, le=12)
     # The forecaster picks its own method by what the model actually is; a
     # request may ask for a specific one, and the response reports what was used.
     explanation_method: Literal["auto", "exact", "gradient", "permutation"] = "auto"
@@ -859,10 +863,20 @@ def create_app(
     def predict_next() -> dict[str, Any]:
         """Predict next likely attack techniques using Markov model.
 
-        From attack-chain-prediction: first-order Markov transition
-        forecasting for next-step prediction.
+        Transitions come from ATT&CK Flow data when
+        ``SENTINEL_ATTACK_FLOW_DIR`` is set, otherwise from the literal prior
+        table. ``transition_source`` says which, so the number is never
+        attributed to campaign data it was not derived from.
         """
-        from sentinel.threat_enrichment import predict_next_techniques
+        from sentinel.threat_enrichment import (
+            load_attack_flow_transitions,
+            predict_next_techniques,
+            transition_source,
+        )
+
+        flow_dir = os.environ.get("SENTINEL_ATTACK_FLOW_DIR")
+        if flow_dir:
+            load_attack_flow_transitions(flow_dir)
 
         push_engine.poll()
         # Extract observed attack types from recent findings
@@ -875,6 +889,7 @@ def create_app(
         return {
             "observed_sequence": recent_types,
             "predictions": [{"technique": t, "probability": round(p, 3)} for t, p in predictions],
+            "transition_source": transition_source(),
         }
 
     @app.middleware("http")
