@@ -1,0 +1,16 @@
+# The release bundle is verified by SHA-256 in CI, so it has to be byte-identical
+# everywhere. With core.autocrlf=true and no rule here, git stored the text files
+# as LF while the export had hashed the Windows working-tree copies as CRLF, so 11
+# of the 18 files failed their hash on the Linux runner while passing on Windows.
+# Marking the bundle -text pins it byte-for-byte; re-export after changing this.
+models/release/** -text
+
+# Same reasoning for the generated reports: they are inputs to the claims audit,
+# and a rewritten line ending would change bytes a report is compared on.
+reports/generated/** -text
+
+# Keep Python and YAML diffs sane everywhere else.
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.sh text eol=lf
