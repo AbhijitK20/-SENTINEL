@@ -21,7 +21,7 @@ import streamlit as st
 
 from sentinel.baseline import train_baseline
 from sentinel.cic_ids2017 import DATASET_ID as CIC_DATASET_ID
-from sentinel.cic_ids2017 import build_labelled_states, load_flow_csv
+from sentinel.cic_ids2017 import build_labelled_states, flow_labels_from_events, load_flow_csv
 from sentinel.config import BaselineConfig
 from sentinel.dashboard.screens import SCREENS, ScreenContext
 from sentinel.dashboard.tabs import live as live_tab
@@ -212,6 +212,7 @@ def cic_dataset(
             labelled.extend(
                 build_labelled_states(
                     events,
+                    flow_labels_from_events(events),
                     scenario_id=f"{stem}-{part}",
                     window_seconds=window_seconds,
                     stride_seconds=stride_seconds,
@@ -266,52 +267,62 @@ available = _available_days()
 with st.sidebar:
     ui.header("SENTINEL", "analyst console")
 
-    st.subheader("Data source")
-    mode_options = ["Synthetic replay"] + ([f"{CIC_DATASET_ID} attack days"] if available else [])
-    mode = st.radio("Dataset", mode_options, index=0)
+    st.caption(
+        "Model: the committed release bundle. Nothing is trained on open, and the "
+        "controls below re-window the displayed data, not the model."
+        if RELEASE_BUNDLE.is_dir()
+        else "No verified bundle found: this console trains on open. Pick a dataset below."
+    )
 
-    selected_days: list[str] = []
-    if mode == f"{CIC_DATASET_ID} attack days":
-        selected_days = st.multiselect(
-            "Attack days",
-            [stem for stem, _ in available],
-            default=[stem for stem, _ in available],
-            format_func=lambda s: s.replace("-WorkingHours", ""),
-            help="Different days carry different attack techniques. Pick at least "
-            "three so every split can hold an attack class.",
+    with st.expander("Data source & retraining", expanded=False):
+        st.subheader("Data source")
+        mode_options = ["Synthetic replay"] + (
+            [f"{CIC_DATASET_ID} attack days"] if available else []
         )
-        if len(selected_days) < 3:
-            st.warning("Select at least three attack days, or switch back to synthetic.")
+        mode = st.radio("Dataset", mode_options, index=0)
 
-    st.divider()
-    st.subheader("Windows")
-    scenario_count = st.slider(
-        "Scenarios",
-        3,
-        15,
-        SCENARIO_COUNT_DEFAULT,
-        disabled=mode != "Synthetic replay",
-        help="Scenarios are split whole into train/validation/test, so more "
-        "scenarios means a larger holdout rather than longer training.",
-    )
-    seed = int(st.number_input("Seed", 0, 9999, 42))
-    if mode == "Synthetic replay":
-        window_seconds = int(st.number_input("Window (s)", 10, 300, 60))
-        stride_seconds = int(st.number_input("Stride (s)", 5, 300, 30))
-    else:
-        window_seconds = int(st.number_input("Window (s)", 60, 600, 300))
-        stride_seconds = int(st.number_input("Stride (s)", 30, 600, 150))
-    sequence_length = int(st.number_input("Sequence length", 2, 16, 8))
-    forecast_horizon = int(st.number_input("Forecast horizon", 1, 10, 5))
+        selected_days: list[str] = []
+        if mode == f"{CIC_DATASET_ID} attack days":
+            selected_days = st.multiselect(
+                "Attack days",
+                [stem for stem, _ in available],
+                default=[stem for stem, _ in available],
+                format_func=lambda s: s.replace("-WorkingHours", ""),
+                help="Different days carry different attack techniques. Pick at least "
+                "three so every split can hold an attack class.",
+            )
+            if len(selected_days) < 3:
+                st.warning("Select at least three attack days, or switch back to synthetic.")
 
-    st.divider()
-    full_training = st.checkbox(
-        "Full temporal training",
-        value=False,
-        help="Trains every horizon to convergence. Slower; needed only for the "
-        "published benchmark numbers.",
-    )
-    train_clicked = st.button("Train / retrain", type="primary")
+        st.divider()
+        st.subheader("Windows")
+        scenario_count = st.slider(
+            "Scenarios",
+            3,
+            15,
+            SCENARIO_COUNT_DEFAULT,
+            disabled=mode != "Synthetic replay",
+            help="Scenarios are split whole into train/validation/test, so more "
+            "scenarios means a larger holdout rather than longer training.",
+        )
+        seed = int(st.number_input("Seed", 0, 9999, 42))
+        if mode == "Synthetic replay":
+            window_seconds = int(st.number_input("Window (s)", 10, 300, 60))
+            stride_seconds = int(st.number_input("Stride (s)", 5, 300, 30))
+        else:
+            window_seconds = int(st.number_input("Window (s)", 60, 600, 300))
+            stride_seconds = int(st.number_input("Stride (s)", 30, 600, 150))
+        sequence_length = int(st.number_input("Sequence length", 2, 16, 8))
+        forecast_horizon = int(st.number_input("Forecast horizon", 1, 10, 5))
+
+        st.divider()
+        full_training = st.checkbox(
+            "Full temporal training",
+            value=False,
+            help="Trains every horizon to convergence. Slower; needed only for the "
+            "published benchmark numbers.",
+        )
+        train_clicked = st.button("Train / retrain", type="primary")
 
     st.divider()
     st.caption(f"Python {sys.version.split()[0]} · {platform.system()} · offline")

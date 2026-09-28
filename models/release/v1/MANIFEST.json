@@ -7,8 +7,8 @@
   "config": "configs\\default.yaml",
   "files": {
     "PROVENANCE.md": {
-      "sha256": "0a0797efac31e1b4d4840942a2db563b7b3a915627aa5f649dd86e771feb0754",
-      "size_bytes": 209
+      "sha256": "11535e9f23b3c518320bc1b43d721396c3817027e183b92c9a74fe1e3d16b554",
+      "size_bytes": 242
     },
     "TRAINING_CONFIG.yaml": {
       "sha256": "ab0cb4b7401a45697ef0f18f467c42e833cd9fa24afb296efe1fea9bcbfa1e7f",
@@ -78,5 +78,6 @@
       "sha256": "a65664c3d5adcd28d39555b63dbd772add666fde16bf237e9158303b262e9b8a",
       "size_bytes": 355
     }
-  }
+  },
+  "dataset_id": "synthetic-recon-lateral-v2"
 }

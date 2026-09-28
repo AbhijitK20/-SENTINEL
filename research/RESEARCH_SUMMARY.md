@@ -2,6 +2,17 @@
 
 Cloned into `research/repos/` for reference only. Not tracked in git.
 
+For the SIH26153 competitors specifically, read
+[`COMPETITIVE_ANALYSIS.md`](COMPETITIVE_ANALYSIS.md) — it covers the scoring
+requirements, a measured comparison against our own numbers, and the
+licensing position. This file is the inventory; that one is the analysis.
+
+## Licensing position
+
+Only `sentinel-net-competitor` and `sentinel-sih-competitor` carry a licence
+(MIT). The rest have none, so read the idea and do not lift the code — the same
+rule already recorded in `ATTACK_FLOW_PROVENANCE.md`.
+
 ## Repos Overview
 
 | Repo | What it does | Closest to SENTINEL because |
@@ -18,6 +29,17 @@ Cloned into `research/repos/` for reference only. Not tracked in git.
 | zarp | Network attack framework | Attack tool |
 | slipstream | SIP VoIP toolkit | VoIP attacks |
 | nym | (unknown) | — |
+
+## SIH26153 competitors (same problem statement)
+
+| Repo | Lic | Why it matters |
+|---|---|---|
+| muthukkumaranb/ShadowCat | none | 57k LOC. Real CIC-IDS2018 PCAP pipeline, schedule-artifact leakage suite, hash-chained audit ledger. |
+| manansheth296-tech/sentinel-net | MIT | Closest analogue: Python world model, SHAP, nearest-centroid MITRE staging. |
+| bikram-341/AI-Based-Network-Attack-Forecasting-... | none | GRU world model, K=8 rollout, XGBoost type head. |
+| krishnashahane/sentinel-sih | MIT | World model in TypeScript; reports everything at a 5% FPR budget. |
+| Malini-art/sih26153 | none | Small `zynex_worldmodel`. |
+| rishikrishnan357-svg/SIH26153 | none | Pickled sklearn model + Streamlit. |
 
 ---
 

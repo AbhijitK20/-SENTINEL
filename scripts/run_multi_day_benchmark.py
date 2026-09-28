@@ -16,7 +16,7 @@ from pathlib import Path
 
 from sentinel.baseline import BaselineConfig, save_baseline_artifacts, train_baseline
 from sentinel.calibration import calibrate_threshold
-from sentinel.cic_ids2017 import build_labelled_states
+from sentinel.cic_ids2017 import build_labelled_states, flow_labels_from_events
 from sentinel.cic_ids2017 import load_flow_csv_with_stats as _load_flow
 from sentinel.evaluation import evaluate_replay
 from sentinel.features import vectorize_states
@@ -28,18 +28,13 @@ from sentinel.targets import build_sequence_samples
 SEED = 42
 
 
-def _label_of(event) -> str:
-    return event.provenance.rsplit(":", 1)[1]
-
-
 def _load_day(csv_path, scenario_id, time_window, window_seconds, stride_seconds):
     events, stats = _load_flow(csv_path, scenario_id=scenario_id, time_window=time_window)
     if not events:
         raise SystemExit(f"no flows loaded from {csv_path}")
-    flow_labels = [(event.timestamp, _label_of(event)) for event in events]
     labelled = build_labelled_states(
         events,
-        flow_labels,
+        flow_labels_from_events(events),
         window_seconds=window_seconds,
         stride_seconds=stride_seconds,
         scenario_id=scenario_id,

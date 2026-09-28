@@ -5,3 +5,4 @@
 - Python: 3.11.15
 - Platform: Windows-10-10.0.26200-SP0
 - Config: `configs\default.yaml`
+- Dataset: `synthetic-recon-lateral-v2`
