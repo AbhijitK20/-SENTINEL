@@ -67,6 +67,25 @@ ENUM_ENDPOINTS = [
 ]
 
 
+def _detector_features(features: dict[str, float]) -> dict[str, float]:
+    """Add the feature names the detectors actually read.
+
+    The detectors and the state builder read ``bytes``, ``failed_auth``,
+    ``syn_count`` and ``rst_count``. This script emitted ``bytes_sent`` /
+    ``bytes_received`` / ``failed_auth_per_min``, so the aggregates stayed at
+    zero. The originals are kept because the dashboard reports them.
+    """
+    out = dict(features)
+    if "bytes" not in out:
+        sent = out.get("bytes_sent", 0.0)
+        received = out.get("bytes_received", 0.0)
+        if sent or received:
+            out["bytes"] = sent + received
+    if "failed_auth" not in out and out.get("failed_auth_per_min"):
+        out["failed_auth"] = 1.0
+    return out
+
+
 def _make_event(
     scenario: str,
     index: int,
@@ -83,7 +102,7 @@ def _make_event(
         source_entity=source,
         destination_entity=dest,
         event_type=event_type,
-        features=features,
+        features=_detector_features(features),
         source_format="replay",
         provenance=f"attack-scenario:{scenario}:{stage}",
     )
@@ -215,7 +234,10 @@ def phase_brute_force(target: str, base_time: datetime) -> list[UnifiedEvent]:
                 i,
                 "attacker",
                 "target:8888",
-                "authentication",
+                # A login attempt is a flow: the credential detector derives its
+                # per-minute rate from flow_event_count, which only counts
+                # event_type="flow". See scripts/full_attack.py.
+                "flow",
                 features,
                 "Initial Access",
                 base_time + timedelta(seconds=i * EVENT_SPACING_SECONDS),

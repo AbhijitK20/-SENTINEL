@@ -271,3 +271,16 @@ def test_imagine_never_500s_on_a_request_the_contract_accepts(client: TestClient
     ]
     response = client.post("/v1/imagine", json={"events": events, "horizon": 2})
     assert response.status_code in (200, 400, 422, 503), response.text
+
+
+def test_attack_coverage_says_when_its_history_is_a_suffix(client: TestClient) -> None:
+    """Coverage is derived from a bounded buffer, so truncation must be visible.
+
+    Recomputing a rate over a silently-truncated buffer is how the demo suite
+    reported 0.17 coverage for a phase that measures 1.0. The response states
+    what it retained and whether anything was evicted.
+    """
+    body = client.get("/v1/attack-coverage").json()
+    assert body["findings_evicted"] == 0
+    assert body["coverage_is_partial"] is False
+    assert body["findings_retained"] >= 0

@@ -3,14 +3,16 @@
 Runs 9 distinct attack phases that produce real HTTP/socket traffic against
 the target and push the resulting UnifiedEvents to /v1/events.
 
-Honesty note: the phases issue genuine requests and the response bytes/statuses
-recorded here are real, but in isolation none of them currently trip their
-intended SENTINEL detector. The detectors read window aggregates such as
-``bytes``, ``failed_auth`` and ``tcp_flags``; these events carry
-``bytes_sent``/``bytes_received``/``failed_auth_per_min`` instead, so the
-aggregate the detector reads stays 0.  See ``src/sentinel/attack_phases.py``
-for the per-phase target detector and technique.  Coverage must be measured
-from /v1/attack-coverage, not assumed from this script.
+Honesty note: the phases issue genuine requests and the response
+bytes/statuses recorded here are real. They previously emitted
+``bytes_sent``/``bytes_received``/``failed_auth_per_min`` while the detectors
+read ``bytes``/``failed_auth``, so every aggregate stayed at zero and the suite
+scored ~1e-111 despite looking successful; ``_detector_features`` now emits
+both vocabularies. Detectors that need telemetry these HTTP phases cannot
+produce - malware process executions, DNS query names - still report that they
+lack it, and ``injection`` has no detector at all. Coverage must be read from
+``/v1/attack-coverage``, not assumed from this script. See
+``src/sentinel/attack_phases.py`` for the per-phase target detector.
 
 Attack types covered:
   1. DDoS simulation       — rapid-fire requests (flow rate spike)
@@ -52,6 +54,43 @@ EVENT_SPACING = 31  # seconds between events (must exceed stride)
 # ─── Helpers ────────────────────────────────────────────────────────────
 
 
+def _detector_features(features: dict[str, float]) -> dict[str, float]:
+    """Add the feature names the detectors actually read.
+
+    The detectors and the state builder read ``bytes``, ``failed_auth``,
+    ``syn_count`` and ``rst_count``; edge byte volume comes only from ``bytes``.
+    These phases were emitting ``bytes_sent``/``bytes_received``/
+    ``failed_auth_per_min``/``syn_ratio``/``rst_ratio`` instead, so every
+    aggregate the detectors key on stayed at zero and the suite scored near-zero
+    probability while looking successful.
+
+    The originals are kept: the dashboard's "data extracted from the target"
+    panel reports them, and they describe the HTTP exchange more precisely than
+    a per-flow total does. This only adds the names the read path needs.
+
+    A feature the telemetry cannot support is not invented - malware process
+    executions, DNS tunnel markers and query names stay absent, so those
+    detectors keep reporting that they lack the telemetry.
+    """
+    out = dict(features)
+    if "bytes" not in out:
+        sent = out.get("bytes_sent", 0.0)
+        received = out.get("bytes_received", 0.0)
+        if sent or received:
+            out["bytes"] = sent + received
+    if "failed_auth" not in out:
+        failed = out.get("failed_auth_per_min", 0.0)
+        if failed:
+            # Per-flow indicator: the credential detector converts this to a
+            # per-minute rate itself (mean x flows x 60 / window seconds).
+            out["failed_auth"] = 1.0
+    if "syn_count" not in out and out.get("syn_ratio"):
+        out["syn_count"] = 1.0
+    if "rst_count" not in out and out.get("rst_ratio"):
+        out["rst_count"] = 1.0
+    return out
+
+
 def _evt(
     idx: int,
     src: str,
@@ -68,7 +107,7 @@ def _evt(
         source_entity=src,
         destination_entity=dst,
         event_type=etype,
-        features=features,
+        features=_detector_features(features),
         source_format="replay",
         provenance=f"full-attack:{attack}:{stage}",
     )
@@ -275,7 +314,14 @@ def phase_brute_force(target: str, base: datetime) -> list[UnifiedEvent]:
                 i,
                 "attacker-brute",
                 "target:8888",
-                "authentication",
+                # A login attempt is an HTTP request/response, i.e. a flow. The
+                # credential detector derives its per-minute rate by
+                # multiplying mean(failed_auth) by flow_event_count, and
+                # flow_event_count only counts event_type="flow"; emitting
+                # "authentication" here left the rate at zero. The reference
+                # producer (apps/vulnerable/scanner.py) emits "flow" for the
+                # same reason.
+                "flow",
                 {
                     "failed_auth_per_min": 1.0 if status in (401, 403) else 0.0,
                     "auth_attempts": 1.0,

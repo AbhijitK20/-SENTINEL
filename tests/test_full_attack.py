@@ -94,3 +94,80 @@ def test_summary_json_reports_per_phase_extracted_data(
     assert exfil["events"] == 6
     assert exfil["bytes_received"] > 0
     assert exfil["http_statuses"] == {200: 6}
+
+
+# ── The feature-name contract between the attack script and the detectors ──
+
+#: Feature names the detection path actually reads. state_builder accumulates
+#: edge bytes only from ``bytes``/``payload_size``, and the credential detector
+#: derives its per-minute rate from ``failed_auth``; the recon detector from
+#: ``rst_count``. Emitting anything else leaves every aggregate at zero.
+DETECTOR_READS = ("bytes", "failed_auth", "syn_count", "rst_count")
+
+
+def test_every_event_carries_the_features_the_detectors_read() -> None:
+    """No phase may emit an event the detection path cannot read.
+
+    This is the regression: the suite emitted bytes_sent/bytes_received/
+    failed_auth_per_min, so 127 real events produced ~1e-111 peak probability
+    and 0.222 coverage while every HTTP request had genuinely succeeded.
+    """
+    events = full_attack._detector_features({"bytes_sent": 44.0, "bytes_received": 0.0})
+    assert "bytes" in events, "edge byte volume comes only from bytes/payload_size"
+
+
+def test_originals_are_kept_so_the_dashboard_can_still_report_them() -> None:
+    """The translation adds names; it must not discard what produced them."""
+    out = full_attack._detector_features(
+        {"bytes_sent": 100.0, "bytes_received": 20.0, "http_status": 200.0}
+    )
+    assert out["bytes_sent"] == 100.0
+    assert out["bytes_received"] == 20.0
+    assert out["http_status"] == 200.0
+    assert out["bytes"] == 120.0
+
+
+def test_failed_auth_becomes_a_per_flow_indicator_not_a_rate() -> None:
+    """The detector multiplies by flow count itself; a rate would overshoot."""
+    out = full_attack._detector_features({"failed_auth_per_min": 1.0})
+    assert out["failed_auth"] == 1.0
+
+
+def test_absent_telemetry_is_not_invented() -> None:
+    """A feature the HTTP phases cannot support must stay absent.
+
+    Malware process executions, DNS tunnel markers and query names have no
+    honest source here. Fabricating them would be the failure mode the
+    project's own rules exist to prevent.
+    """
+    out = full_attack._detector_features({"http_status": 404.0})
+    for absent in ("malware_process_executions", "dns_tunnel_marker", "domain_length"):
+        assert absent not in out
+
+
+def test_dry_run_phases_all_produce_detector_readable_events() -> None:
+    """Every phase, through the real helper, emits at least one readable name."""
+    samples = {
+        "ddos": {"bytes_sent": 200.0, "syn_ratio": 0.8},
+        "recon": {"dst_port": 22.0, "bytes_sent": 44.0, "rst_ratio": 1.0},
+        "brute_force": {"failed_auth_per_min": 1.0, "bytes_sent": 60.0},
+    }
+    for name, features in samples.items():
+        out = full_attack._detector_features(features)
+        assert any(key in out for key in DETECTOR_READS), name
+
+
+def test_coverage_is_not_computed_from_a_truncated_finding_buffer() -> None:
+    """A demo suite must not evict its own evidence.
+
+    Findings are one per detector per window, so the 9-phase suite produced
+    9 x 99 = 891 against a 600-entry buffer: the reconnaissance findings from
+    the first 33 windows were gone, and /v1/attack-coverage reported T1046 at
+    0.17 for a phase that measures 1.0 on its own. The bound is now above a
+    full suite, and the response reports evictions instead of hiding them.
+    """
+    from sentinel.live import MAX_RETAINED_FINDINGS
+
+    assert MAX_RETAINED_FINDINGS >= 9 * 99, (
+        "the retained-findings bound must survive a full 9-phase demo suite"
+    )

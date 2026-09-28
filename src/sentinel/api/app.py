@@ -764,6 +764,11 @@ def create_app(
         push_engine.poll()
         from sentinel.detectors import MITRE
 
+        # Findings live in a bounded buffer, so coverage is recomputed from a
+        # suffix of the run once that bound is hit. Say so rather than let a
+        # truncated number read as the whole run's coverage.
+        evicted = push_engine.poll().findings_evicted
+
         # Count findings per technique; track max probability
         technique_counts: dict[str, int] = {}
         technique_max_prob: dict[str, float] = {}
@@ -784,6 +789,9 @@ def create_app(
             "coverage_score": round(coverage, 3),
             "observed_techniques": len(observed),
             "total_techniques": len(all_techniques),
+            "findings_retained": len(push_engine._findings),
+            "findings_evicted": evicted,
+            "coverage_is_partial": evicted > 0,
             "techniques": {
                 tech: {
                     "count": technique_counts.get(tech, 0),
