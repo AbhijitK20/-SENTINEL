@@ -32,8 +32,11 @@ format:  ## auto-format code
 verify:  ## check the committed release bundle against its manifest
 	uv run python scripts/verify_release_artifacts.py $(BUNDLE)
 
+DATASET ?= synthetic-recon-lateral-v2
+
 export:  ## rebuild the release bundle from the last benchmark run
-	uv run python scripts/export_release_artifacts.py --from-benchmark --out $(BUNDLE)
+	uv run python scripts/export_release_artifacts.py --from-benchmark \
+		--dataset-id $(DATASET) --out $(BUNDLE)
 	$(MAKE) verify
 
 # ── Running the product ─────────────────────────────────────────────────

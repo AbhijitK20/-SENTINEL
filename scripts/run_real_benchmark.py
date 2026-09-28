@@ -37,7 +37,7 @@ from sentinel.baseline import (
     train_baseline,
 )
 from sentinel.calibration import calibrate_threshold
-from sentinel.cic_ids2017 import AdapterStats, build_labelled_states
+from sentinel.cic_ids2017 import AdapterStats, build_labelled_states, flow_labels_from_events
 from sentinel.cic_ids2017 import load_flow_csv_with_stats as _load_flow
 from sentinel.evaluation import evaluate_replay
 from sentinel.features import vectorize_states
@@ -79,11 +79,6 @@ def _measure_open_loop(core, states, schema, *, history: int, horizon: int, samp
     return aggregate_open_loop(errors) if errors else None
 
 
-def _label_of(event) -> str:
-    """Recover the raw CICFlowMeter label stored in event provenance."""
-    return event.provenance.rsplit(":", 1)[1]
-
-
 def _load_day(
     csv_path: Path,
     scenario_id: str,
@@ -96,10 +91,9 @@ def _load_day(
     events, stats = _load_flow(csv_path, scenario_id=scenario_id, time_window=time_window)
     if not events:
         raise SystemExit(f"no flows loaded from {csv_path}; check the time window")
-    flow_labels = [(event.timestamp, _label_of(event)) for event in events]
     labelled = build_labelled_states(
         events,
-        flow_labels,
+        flow_labels_from_events(events),
         window_seconds=window_seconds,
         stride_seconds=stride_seconds,
         scenario_id=scenario_id,

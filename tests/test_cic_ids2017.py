@@ -16,7 +16,9 @@ from sentinel.cic_ids2017 import (
     ADAPTER_VERSION,
     DATASET_ID,
     AdapterError,
+    UnifiedEvent,
     build_labelled_states,
+    flow_labels_from_events,
     load_flow_csv,
     load_flow_csv_with_stats,
     map_label,
@@ -321,3 +323,68 @@ def test_leading_space_headers_and_plural_variants(tmp_path: Path) -> None:
         events = load_flow_csv(candidate)
         assert len(events) == 3
         assert events[0].features["packets"] == 22.0  # 10 fwd + 12 bwd
+
+
+def test_flow_labels_recover_from_event_provenance(tmp_path: Path) -> None:
+    """The label argument has one source, so no call site can forget it.
+
+    The label rides on the event as ``<dataset>:<scenario>:<label>``. This existed
+    as a private ``_label_of`` in two benchmark scripts while the dashboard's CIC
+    path passed no labels at all, so every real-data selection died on
+    "missing 1 required positional argument: 'flow_labels'".
+    """
+    path = tmp_path / "provenance-flows.csv"
+    _write_csv(path, _fixture_rows())
+
+    events = load_flow_csv(path)
+    labels = flow_labels_from_events(events)
+
+    assert [label for _, label in labels] == [row["Label"] for row in _fixture_rows()]
+    assert [ts for ts, _ in labels] == [event.timestamp for event in events]
+
+
+def test_a_label_containing_a_colon_survives() -> None:
+    """Splitting provenance from the right would truncate such a label.
+
+    Built directly rather than through the loader: the loader validates the
+    label vocabulary, and this is about recovering one, not admitting one.
+    """
+    event = UnifiedEvent(
+        event_id="x",
+        timestamp=datetime(2017, 7, 3, 8, 56, 10, tzinfo=UTC),
+        source_entity="10.0.0.1",
+        destination_entity="10.0.0.2",
+        event_type="flow",
+        source_format="csv",
+        provenance="CIC-IDS2017:scenario:DoS: Hulk",
+    )
+    assert flow_labels_from_events([event])[0][1] == "DoS: Hulk"
+
+
+def test_provenance_without_a_label_is_rejected() -> None:
+    """A malformed provenance must fail loudly, not label the window Benign."""
+    event = UnifiedEvent(
+        event_id="x",
+        timestamp=datetime(2017, 7, 3, 8, 56, 10, tzinfo=UTC),
+        source_entity="10.0.0.1",
+        destination_entity="10.0.0.2",
+        event_type="flow",
+        source_format="csv",
+        provenance="no-colons-here",
+    )
+    with pytest.raises(AdapterError, match="carries no CIC label"):
+        flow_labels_from_events([event])
+
+
+def test_the_dashboard_cic_path_passes_the_labels() -> None:
+    """The dashboard's CIC call must keep satisfying the adapter's signature.
+
+    Static on purpose: the crash was a signature drift between the adapter and
+    one call site, and no fixture run catches a call that was never updated.
+    """
+    source = (Path(__file__).parents[1] / "src" / "sentinel" / "dashboard" / "app.py").read_text(
+        encoding="utf-8"
+    )
+    assert "flow_labels_from_events(events)" in source, (
+        "dashboard/app.py must pass the flow labels the adapter now requires"
+    )

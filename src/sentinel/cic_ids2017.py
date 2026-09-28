@@ -344,6 +344,27 @@ def _positive_float(row: dict[str, str], column: str, *, default: float | None =
     return value
 
 
+def flow_labels_from_events(events: list[UnifiedEvent]) -> list[tuple[datetime, str]]:
+    """The ``flow_labels`` argument :func:`build_labelled_states` requires.
+
+    The raw CICFlowMeter label rides on the event's provenance, which the adapter
+    builds as ``<dataset>:<scenario>:<label>``. Splitting on the first two colons
+    keeps a label that itself contains a colon intact, which splitting from the
+    right does not.
+
+    This lived as a private ``_label_of`` in two benchmark scripts while the
+    dashboard's CIC path passed no labels at all, so every real-data selection
+    died on a missing argument. One helper, every call site.
+    """
+    labels: list[tuple[datetime, str]] = []
+    for event in events:
+        parts = event.provenance.split(":", 2)
+        if len(parts) != 3:
+            raise AdapterError(f"event provenance carries no CIC label: {event.provenance!r}")
+        labels.append((event.timestamp, parts[2]))
+    return labels
+
+
 def build_labelled_states(
     events: list[UnifiedEvent],
     flow_labels: list[tuple[datetime, str]],
@@ -430,6 +451,7 @@ __all__ = [
     "REQUIRED_COLUMNS",
     "STAGE_RULES",
     "build_labelled_states",
+    "flow_labels_from_events",
     "load_flow_csv",
     "load_flow_csv_with_stats",
     "map_label",
