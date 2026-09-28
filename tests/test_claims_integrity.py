@@ -20,12 +20,16 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 # Markdown that legitimately talks about real data without claiming a run.
+# research/repos is third-party reference material: it is gitignored, so its
+# contents are not ours, and globbing it would let another project's README
+# decide whether this repository's gate passes. Skip it.
+IGNORED_DIRS = {".venv", "node_modules", ".git", "__pycache__", "planning"}
+FOREIGN = ("research", "repos")
 MARKDOWN = sorted(
     path
     for path in ROOT.rglob("*.md")
-    if not any(
-        part in {".venv", "node_modules", ".git", "__pycache__", "planning"} for part in path.parts
-    )
+    if not any(part in IGNORED_DIRS for part in path.parts)
+    and path.relative_to(ROOT).parts[:2] != FOREIGN
 )
 
 # Reports live under reports/generated and are deliberately not committed;
