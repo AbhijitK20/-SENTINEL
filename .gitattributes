@@ -9,6 +9,11 @@ models/release/** -text
 # and a rewritten line ending would change bytes a report is compared on.
 reports/generated/** -text
 
+# The export copies configs/default.yaml into the bundle verbatim, so this file's
+# bytes *are* the bundle's bytes. Without -text it was CRLF in one checkout and LF
+# in another, which is how the bundle ended up verifiable on one machine only.
+configs/** -text
+
 # Keep Python and YAML diffs sane everywhere else.
 *.py text eol=lf
 *.yaml text eol=lf
