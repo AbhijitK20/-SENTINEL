@@ -55,26 +55,48 @@ def method_note(text: str) -> None:
     st.markdown(f'<p class="sntl-method">{esc(text)}</p>', unsafe_allow_html=True)
 
 
-def panel(title: str, hint: str = "", *, animated: bool = True) -> None:
-    """Open a titled panel. Returns a context manager closing the div.
+#: Open ``st.container`` handles, so ``panel()`` / ``end_panel()`` can stay a
+#: two-call API while actually enclosing their content. See :func:`panel`.
+_PANEL_STACK: list = []
 
-    ``animated`` is a no-op on the markup — Streamlit sanitises each markdown
-    block separately, so an opening and closing ``div`` in two calls do not
-    enclose the content between them. The entrance is applied by the child
-    components instead. Kept as a parameter so the intent at the call site is
-    explicit and a future wrapper can honour it.
+
+def panel(title: str, hint: str = "", *, animated: bool = True) -> None:
+    """Open a titled panel; pair with :func:`end_panel`.
+
+    **This is backed by a real ``st.container``, not by an opening ``div``.** The
+    previous version emitted ``<div class="sntl-panel">`` in one ``st.markdown``
+    call and ``</div>`` in another. Streamlit sanitises each markdown block
+    independently, so the two halves never nested: every panel rendered as an
+    unclosed div, the title floated free of its content, and the page's styling
+    for anything inside a panel silently did not apply. A native bordered
+    container scopes its children for real, so the panel now contains what it
+    claims to contain.
+
+    ``animated`` stays a parameter and stays a no-op on the markup. Streamlit
+    cannot animate a container's children as one unit, so the entrance is applied
+    by the child components; the parameter is kept so the intent at the call site
+    is explicit rather than implied by a missing argument.
     """
     del animated
-    hint_html = f'<p class="sntl-panel__hint">{esc(hint)}</p>' if hint else ""
-    st.markdown(
-        f'<div class="sntl-panel"><p class="sntl-panel__title">{esc(title)}</p>{hint_html}',
-        unsafe_allow_html=True,
-    )
+    container = st.container(border=True)
+    container.__enter__()
+    _PANEL_STACK.append(container)
+    st.markdown(f'<p class="sntl-panel__title">{esc(title)}</p>', unsafe_allow_html=True)
+    if hint:
+        st.markdown(f'<p class="sntl-panel__hint">{esc(hint)}</p>', unsafe_allow_html=True)
 
 
 def end_panel() -> None:
-    """Close a panel opened by :func:`panel`."""
-    st.markdown("</div>", unsafe_allow_html=True)
+    """Close the panel opened by :func:`panel`.
+
+    Raises rather than silently doing nothing when the stack is empty, because a
+    stray ``end_panel()`` is a bug in the screen and swallowing it would leave a
+    container open and the rest of the page unbordered.
+    """
+    if not _PANEL_STACK:
+        raise RuntimeError("end_panel() called without a matching panel()")
+    container = _PANEL_STACK.pop()
+    container.__exit__(None, None, None)
 
 
 # ── Statistics ──────────────────────────────────────────────────────────

@@ -239,14 +239,12 @@ the report says so instead of publishing a capacity figure - which is what the
 deleted `scale/capacity.py` did, with invented throughput and a load test that
 was never run.
 
-### The shipped PSI bands fire on ordinary noise, so `band_of` cannot be trusted
+### The shipped PSI bands fired on ordinary noise. That is fixed; the monitor still cannot be trusted
 
-`make bench-drift`. `sentinel.drift` bands PSI at **0.10** ("moderate") and
-**0.25** ("significant"). Those are the conventional numbers and they are quoted
-without the sample size that produces them, so nothing in this codebase could say
-what false-alarm rate they buy. The API exposes them through `/compare` and the
-backtest script calls `compare_feature` directly, so this is not a dormant
-constant.
+`make bench-drift`. `sentinel.drift` used to band PSI at **0.10** ("moderate") and
+**0.25** ("significant"). Those are the conventional numbers, quoted without the
+sample size that produces them, and exposed through the API and the backtest, so
+this was not a dormant constant.
 
 Measured on **400 held-out blocks of iid Gaussian noise** - no drift in them at
 all - at 30 windows per block:
@@ -256,18 +254,23 @@ all - at 30 windows per block:
 | 0.10 | **100%** | **92%** |
 | 0.25 | **100%** | 51% |
 
-**Every block exceeds both bands.** So `band_of` answers `significant` for
-ordinary noise, and a caller cannot distinguish a real drift from a quiet Tuesday.
-The single-feature column matters: the problem is the constant, not the
-aggregation, because 0.10 already fires on 92% of one feature's own held-out
-blocks.
+**Every block exceeded both bands**, so `band_of` answered "significant" for
+ordinary noise and a caller could not distinguish a real drift from a quiet
+Tuesday. The single-feature column is the important one: the constant was the
+problem, not the aggregation, because 0.10 already fired on 92% of one feature's
+own held-out blocks.
 
-The fix is to band against a threshold calibrated to the data's own null, which is
-what `drift_monitor.DriftMonitor` does, and it is **not applied** to
-`sentinel.drift` here because that changes an API-visible value and needs a
-version bump. Until then, `band_of` should be read as a rough indicator of
-*magnitude* and never as a decision. A test pins the measured rate so a fix will
-fail loudly.
+**Fixed.** The trip point is now calibrated per feature on held-out blocks from
+the same population as the reference, and `band_of(psi, threshold)` takes a
+threshold with **no default** - the default was the bug. Without a null sample
+the API returns the statistic and **no band at all**, plus a caveat saying why,
+rather than a decorative string. `drift-report-v2`; `run_backtest.py` had the same
+unanchored 0.25 and now bands against its validation scenarios
+(`rolling-origin-backtest-v2`). A test asserts the calibrated monitor stays under
+10% on held-out noise while still catching over 90% of a real shift.
+
+What is *not* fixed is the monitor's usefulness on this data, which is the next
+section and is unchanged.
 
 ### A drift monitor on this data cannot tell a stealthier attacker from a new cohort
 
@@ -356,37 +359,66 @@ something a second campaign still teaches again. Anyone reading the Sprint 5
 result as "this needs almost no data" would be wrong in the dimension that
 actually binds.
 
-### The lateral-movement rule can be evaded by going slower, not quieter
+### The lateral-movement rule measured the wrong quantity. It now works, and it is still throttleable
 
-`make bench-evasion`, 16 real attacking windows from the test split, with six
-windows of history each. Every detector was attacked with a closed set of
-executable strategies and the alert was re-measured.
+**This is a fixed defect, and the record of how it was found is the useful part.**
 
-**Result: one of nine is evadable.**
+`make bench-evasion` originally found `lateral_movement` evadable for free: score
+bytes across internal edges *unseen* in the last five windows, send the same
+payload more slowly, every window stays under the band. Cost: 0 extra bytes, 0.8
+extra windows of dwell time. Sprint 4's detector benchmark agreed from the other
+side, at precision 0.194. The obvious repair was a **ratio**, since throttling
+moves numerator and denominator together. That made it **worse**, F1 0.222 to
+0.123, and the reason is worth keeping:
 
-| detector | cheapest feasible evasion | extra bytes | extra windows |
+    benign new-edge share  p50 = 0.185
+    lateral new-edge share p50 = 0.048
+
+The quantity moved the *wrong way*. Reconnaissance probes pre-register the
+internal edges that lateral movement later uses, so during a lateral phase most
+internal edges are already **known**, while benign browsing keeps discovering new
+ones. "New edge" was the wrong premise, not the wrong threshold.
+
+Scoring bytes on **known** internal edges instead, thresholds fitted on the
+validation split (best F1 at 55k) and the test split scored once:
+
+| rule | precision | recall | F1 |
 |---|---|---|---|
-| lateral_movement | **throttle the transfer** | **0** | **0.8** |
-| reconnaissance | none found | - | - |
-| credential_abuse | none found | - | - |
-| ddos | none found | - | - |
-| insider_threat | none found | - | - |
-| exfiltration | none found | - | - |
-| command_and_control | none found | - | - |
-| malware_activity | none found | - | - |
-| phishing | none found | - | - |
+| old: bytes on *new* internal edges | 1.000 | 0.185 | 0.312 |
+| **new: bytes on *known* internal edges** | **0.929** | **0.963** | **0.945** |
 
-`detect_lateral` scores bytes across internal edges unseen in the last five
-windows. An attacker who sends the same payload more slowly keeps every window
-under the band, and pays **nothing in bandwidth and about 0.8 windows of extra
-dwell time**. That is the whole cost.
+The old rule was precise and nearly blind: it saw 5 of 27 lateral windows.
 
-This is the same rule that scored precision 0.194 in Sprint 4's detector
-benchmark, and the two findings are the same finding from two directions: a
-narrow byte band is easy to sit under in both directions, and it fires on benign
-hops as readily as on attacks. **The rule is not fit for purpose as written** -
-either it needs a ratio or a rate rather than an absolute byte count, or it needs
-to be combined with something the attacker cannot simply slow down.
+**The published 0.194 was itself an artefact.** `detect_sequence_prediction`
+reports `attack_type=best_tech`, so it emits a *second* finding labelled
+`lateral_movement` on top of the real one. The benchmark's set-based scoring
+counted that prediction as a detection of the current window, which inflated
+recall and pushed 31 of the sequence detector's false alarms into this rule's
+bucket. The old rule's own false-positive count was **zero**; all 29 published
+ones were borrowed. Sprint 6's evasion report had already said the same thing in
+different words - it kept concluding that the lateral alert "arrives as
+sequence-prediction, not from the byte rule". Two sprints, one bug.
+
+**Still not unevadable.** Throttling works on 14 of 16 attacking windows, at
+about **0.50** extra windows and no extra bandwidth, down from 0.80. The
+`rehearse_edge_one_window_early` evasion that defeated the old rule for free is
+gone, because pre-warming an edge now hands the attacker one more *known* edge to
+be measured on. `split_the_transfer_over_more_edges` was added and does not work:
+against a byte total, the total is the total. It is reported anyway, because a
+red-team list containing only moves that succeed is not a red-team list.
+
+The absolute byte count is therefore still the weak point, and the fix for that
+is a rate the attacker cannot slow down - a bytes-per-second budget rather than a
+bytes-per-window threshold. That is not built.
+
+The general limits on the analysis, both stated in the report it produces:
+
+- The strategies are **hand-enumerated** from each rule's own definition, so
+  this prices the *known* evasions. A signature nobody anticipated is not here,
+  and "none found" means "none of the moves we thought of", not "impossible".
+- Costs are bytes and windows, not currency. Converting to money needs a
+  deployment's own numbers, and inventing a rate would be the same mistake as the
+  removed capacity table's invented throughput.
 
 Two limits on this analysis, both stated in the report it produces:
 

@@ -808,7 +808,7 @@
     }
   ],
   "best_epoch": 20,
-  "training_seconds": 7.415965400000005,
+  "training_seconds": 7.029197899999872,
   "model_sha256": "c6d7fedc87b8a83533e22219caea0ae01d9a07d85509096a27fe05f8acdcc080",
   "runtime": {
     "python": "3.11.15",

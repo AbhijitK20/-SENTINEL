@@ -28,7 +28,6 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 
 from sentinel.conformal import SplitConformal
-from sentinel.drift import PSI_MODERATE, PSI_STABLE
 from sentinel.drift_monitor import (
     DEFAULT_WINDOW,
     DRIFT_MONITOR_VERSION,
@@ -159,10 +158,15 @@ def run(seed: int = 61, coverage: float = 0.9) -> tuple[dict, ShiftOutcome]:
     delay = detection_delay(verdicts, onset)
     reported = next(row for row in sweep if row["rolling_window"] == DEFAULT_WINDOW)
 
+    # The bands that `sentinel.drift` used to hardcode, kept as literals so this
+    # report can still price them. They are not exported any more - the point of
+    # the change was that they meant nothing - but their measured false-alarm rate
+    # is the argument for the change, so the report has to be able to produce it.
+    legacy_stable, legacy_moderate = 0.10, 0.25
     shipped_bands = {
         str(threshold): rate
         for threshold, rate in false_alarm_rate_at(
-            reference, list(schema.names), baseline_rows, (PSI_STABLE, PSI_MODERATE)
+            reference, list(schema.names), baseline_rows, (legacy_stable, legacy_moderate)
         ).items()
     }
     outcome = ShiftOutcome(
@@ -294,7 +298,7 @@ def _render(payload: dict) -> str:
         "| band | worst feature | median single feature |",
         "|---|---|---|",
     ]
-    for threshold in (PSI_STABLE, PSI_MODERATE):
+    for threshold in (0.10, 0.25):  # the legacy bands, now literals
         lines.append(
             f"| {threshold} | {bands[str(threshold)]:.0%} | "
             f"{bands[f'median_single_feature_at_{threshold}']:.0%} |"

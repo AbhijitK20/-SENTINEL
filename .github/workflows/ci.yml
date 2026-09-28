@@ -74,3 +74,28 @@ jobs:
       - run: uv run python scripts/demo_script.py
       - name: smoke the backtest on a short scenario list
         run: uv run python scripts/run_backtest.py --origins 2 --scenarios 10
+
+  claims:
+    # Every figure in docs/CLAIMS.md has to have been printed by a script. The
+    # benchmark has to run first, because a number that appears in no report is
+    # exactly the case this is here to catch - an audit with no reports trivially
+    # passes everything, which is how the first version of this job was useless.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+      - run: uv sync --all-extras
+      - name: produce the reports the claims refer to
+        run: |
+          uv run python scripts/run_benchmark.py --output reports/generated/benchmark
+          uv run python scripts/run_backtest.py --output reports/generated/benchmark/backtest
+          uv run python scripts/run_detector_benchmark.py --output reports/generated/benchmark/detectors
+          uv run python scripts/run_calibration_report.py --output reports/generated/benchmark/calibration
+          uv run python scripts/run_telemetry_budget.py --output reports/generated/benchmark/telemetry
+          uv run python scripts/run_evasion_report.py --output reports/generated/benchmark/evasion
+          uv run python scripts/run_label_efficiency.py --output reports/generated/benchmark/label-efficiency
+          uv run python scripts/run_drift_report.py --output reports/generated/benchmark/drift
+      - name: audit docs/CLAIMS.md against them
+        run: uv run python scripts/check_claims.py

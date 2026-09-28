@@ -1,13 +1,13 @@
 {
   "version": "release-v1",
-  "created_at": "2026-09-27T03:07:00.405518+00:00",
-  "git_sha": "f37fbd92b2392b9af7d77d781cbc17c8ffa491cb",
+  "created_at": "2026-09-28T14:12:15.557392+00:00",
+  "git_sha": "fd4fd50eefcbeb6371bd1df33294a4f2bbbcad9b",
   "python": "3.11.15",
   "platform": "Windows-10-10.0.26200-SP0",
   "config": "configs\\default.yaml",
   "files": {
     "PROVENANCE.md": {
-      "sha256": "13e8673251ed6b2373691b62f6e2bacdfb60396b12c2c55c20872b4131e527bd",
+      "sha256": "c0774122edda66315572a58c7861f7a09dc366f64175fae5030834d991418970",
       "size_bytes": 209
     },
     "TRAINING_CONFIG.yaml": {
@@ -67,11 +67,11 @@
       "size_bytes": 356247
     },
     "world_model.json": {
-      "sha256": "3588892a78dbdff3f5d458b798d8785862c62d8de18131d48fe83e19d3b47382",
+      "sha256": "bc53f8225fb946229f2d7a73cc15f016e8bf117c3f1d80ee407beb3c64777acd",
       "size_bytes": 21971
     },
     "world_model_report.md": {
-      "sha256": "4a605d4e1054273f0f578c26ad13701b1df4506a6cb84363a698fe4bb6650486",
+      "sha256": "d2c7bb26d86ef48823facb7afb7c8fecd018ae22953b6bbc3bf337b0f46a5f73",
       "size_bytes": 2265
     },
     "world_model_summary.json": {

@@ -131,6 +131,9 @@ def main() -> None:
             "Each NOT PRODUCED figure was not printed by the script its row names. "
             "Re-measure or remove it."
         )
+    # Non-zero exit, or the CI job this runs in is decoration. "I did not check it"
+    # and "it is wrong" must not both look like success.
+    raise SystemExit(1 if (untraced or not rows or not _numbers_in(("benchmark.json",))) else 0)
 
 
 if __name__ == "__main__":

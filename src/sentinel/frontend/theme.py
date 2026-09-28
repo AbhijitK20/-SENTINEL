@@ -78,13 +78,9 @@ def _base_css() -> str:
 }}
 
 /* ── Panels ────────────────────────────────────────────────────────── */
-.sntl-panel {{
-  background: var(--bg-panel);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4) var(--space-5);
-  margin-bottom: var(--space-4);
-}}
+/* The panel box itself is a native `st.container(border=True)`, so its border,
+   background and radius come from the app's own chrome rather than from a
+   hand-rolled div - see `components.panel`. Only the text inside it is ours. */
 .sntl-panel__title {{
   font-size: var(--type-section-size);
   font-weight: 600;
@@ -730,14 +726,6 @@ hr {{ border-color: var(--hairline); }}
 .sntl-spine__tick--attack .sntl-spine__bar {{
   animation: sntl-breathe 1.8s var(--motion-easing-in-out) infinite;
 }}
-
-/* Panel: hairline brightens on pointer entry. */
-.sntl-panel {{
-  position: relative;
-  transition: border-color var(--motion-duration-fast) var(--motion-easing-out),
-              background var(--motion-duration-fast) var(--motion-easing-out);
-}}
-.sntl-panel:hover {{ border-color: var(--hairline-strong); background: var(--bg-canvas); }}
 
 /* Interactive surface: lift, press, focus. */
 .sntl-action {{

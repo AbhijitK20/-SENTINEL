@@ -224,3 +224,60 @@ def test_library_exposes_loading_and_empty_states() -> None:
 def test_empty_stats_renders_the_empty_state() -> None:
     app = ui.stats([])  # must not raise: an empty grid is a valid state
     assert app is None or app is not None  # the call itself is the assertion
+
+
+# -- 9. Panels enclose their content -----------------------------------------
+
+
+def test_a_panel_is_backed_by_a_real_container_not_a_hand_rolled_div() -> None:
+    """The bug: Streamlit sanitises each markdown block separately.
+
+    `panel()` used to emit `<div class="sntl-panel">` in one `st.markdown` call
+    and `end_panel()` emitted `</div>` in another, so the two halves never
+    nested. Nothing tested it, because the call sites look correct when read.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from sentinel.frontend import components
+
+    def code_without_docstring(func) -> str:
+        """The function's code with its docstring removed, via the AST."""
+        source = textwrap.dedent(inspect.getsource(func))
+        lines = source.splitlines()
+        node = ast.parse(source).body[0]
+        assert ast.get_docstring(node), f"{func.__name__} should explain itself"
+        return "\n".join(lines[node.body[0].end_lineno - 1 :])
+
+    panel_code = code_without_docstring(components.panel)
+    assert "st.container(border=True)" in panel_code, "panel must scope with a native container"
+    assert "<div" not in panel_code, "an opening div in its own markdown block encloses nothing"
+    assert "</div>" not in code_without_docstring(components.end_panel)
+
+
+def test_an_unmatched_end_panel_is_an_error_rather_than_a_no_op() -> None:
+    """Silently ignoring it would leave a container open and the page unbordered."""
+    from sentinel.frontend import components
+
+    components._PANEL_STACK.clear()
+    with pytest.raises(RuntimeError, match="without a matching panel"):
+        components.end_panel()
+
+
+def test_panel_and_end_panel_leave_the_stack_balanced() -> None:
+    from sentinel.frontend import components
+
+    components._PANEL_STACK.clear()
+    components.panel("Title", "hint")
+    assert len(components._PANEL_STACK) == 1
+    components.end_panel()
+    assert components._PANEL_STACK == []
+
+
+def test_the_panel_box_css_is_not_left_behind_as_dead_rules() -> None:
+    """`.sntl-panel` styles a class nothing emits any more; the title still does."""
+    css = stylesheet()
+    assert "sntl-panel__title" in css
+    assert "sntl-panel__hint" in css
+    assert ".sntl-panel {" not in css, "dead rule for a class no element carries"

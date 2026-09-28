@@ -47,7 +47,7 @@ numbers will differ by seed, and that is the point - they are not constants.
 | Claim | Command | Measured |
 |---|---|---|
 | Rolling-origin direction accuracy holds flat | `make bench-backtest` | 0.91 mean over 4 origins; the calibrated threshold swings 0.25-0.85 |
-| The lateral-movement rule is close to noise | `make bench-detectors` | precision 0.194, recall 0.259, F1 0.222 (7 TP / 29 FP / 20 FN) |
+| The lateral-movement rule now scores bytes on **known** internal edges, and works | `make bench-detectors` | precision 0.929, recall 0.963, F1 0.945 (26 TP / 2 FP / 1 FN) |
 | The reconnaissance rule is usable but noisy | `make bench-detectors` | precision 0.686, recall 1.000, F1 0.814 (24 TP / 11 FP / 0 FN) |
 | Seven of nine rules cannot be scored here | `make bench-detectors` | reported as not evaluable, with the reason |
 | The linear transition baseline is barely a simulator | `make bench-world` | pre-projection spectral norm ~1.6e5; the projection keeps ~6e-06 of it |
@@ -92,10 +92,12 @@ to be unbacked, which for a results table is the same thing.
   Those budgets are wall-clock with no unit and no machine, and run-to-run spread
   on the box moved the fitted slope from 0.87 to 1.29, so the linear/super-linear
   shape is not resolvable here. See `docs/KNOWN_LIMITATIONS.md`.
-- No usable drift alarm. `sentinel.drift.band_of` bands PSI at 0.10 and 0.25 with
-  no sample size attached; on 400 held-out blocks of iid noise at 30 windows per
-  block, 100% exceed 0.10 and 92% exceed it on a single feature. The band is a
-  magnitude indicator, not a decision. See `docs/KNOWN_LIMITATIONS.md`.
+- No usable drift alarm. `sentinel.drift.band_of` no longer hardcodes 0.10 and 0.25;
+  the trip point is calibrated per feature on held-out blocks of the same
+  population, and with no null supplied the API returns the statistic and **no
+  band** rather than a decorative one. `make bench-drift` still finds the monitor
+  unable to tell a stealthier attacker from a new cohort, so it is a tripwire to
+  investigate, not an alarm to page on.
 - No set-valued stage prediction. The stage name comes from a deterministic rule
   table applied to the infiltration probability, so there is no per-window
   probability vector over stages for a conformal set to threshold. A
