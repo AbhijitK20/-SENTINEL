@@ -63,3 +63,6 @@ UI_INTERACTION_AUDIT.md
 
 # Local research clones; never ship third-party repositories
 research/repos/
+
+# agent/editor tool state
+.codewhale/
