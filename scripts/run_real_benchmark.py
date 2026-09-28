@@ -45,8 +45,38 @@ from sentinel.predict import DECISION_THRESHOLD, load_artifacts
 from sentinel.rollout import fit_transition_model, rollout_forecast
 from sentinel.schemas import SplitManifest
 from sentinel.targets import build_sequence_samples
+from sentinel.world_model.imagine import aggregate_open_loop, imagination_forecast, open_loop_error
+from sentinel.world_model.train import (
+    WorldModelConfig,
+    load_world_model,
+    save_world_model_artifacts,
+    train_world_model,
+)
 
 SEED = 42
+
+
+def _measure_open_loop(core, states, schema, *, history: int, horizon: int, samples: int):
+    """Open-loop state error on the held-out test day, versus persistence.
+
+    The measurement that separates a world model from a classifier: burn in on
+    the observed windows, then roll the prior forward with no observations and
+    compare the imagined states with the ones that actually followed.
+    """
+    errors = []
+    for end in range(history, len(states) - horizon + 1):
+        observed = states[end - history : end]
+        realized = states[end : end + horizon]
+        errors.append(
+            open_loop_error(
+                core,
+                vectorize_states(observed, schema),
+                vectorize_states(realized, schema),
+                n_samples=samples,
+                seed=SEED + end,
+            )
+        )
+    return aggregate_open_loop(errors) if errors else None
 
 
 def _label_of(event) -> str:
@@ -95,6 +125,9 @@ def main() -> None:
         default=None,
         help="Pin the decision threshold (default: auto-resolve from calibration.json)",
     )
+    parser.add_argument("--core", default="lstm", choices=("lstm", "gru", "transformer"))
+    parser.add_argument("--world-epochs", type=int, default=40)
+    parser.add_argument("--samples", type=int, default=32)
     parser.add_argument("--output", default="reports/generated/real-benchmark")
     args = parser.parse_args()
 
@@ -203,6 +236,52 @@ def main() -> None:
             threshold=threshold,
         )[0]
 
+    # 4b. World model, also fitted on Tuesday only. The problem statement asks
+    # for a learned transition model on real telemetry, so it belongs in the
+    # real-data protocol rather than only in the synthetic benchmark.
+    world_config = WorldModelConfig(
+        core_type=args.core,
+        hidden_size=64,
+        latent_dim=16,
+        max_epochs=args.world_epochs,
+        kl_anneal_epochs=max(4, args.world_epochs // 5),
+        rollout_steps=max(1, min(3, args.sequence_length - 1)),
+    )
+    world_run = train_world_model(
+        labelled,
+        manifest,
+        feature_schema=schema,
+        config=world_config,
+        seed=SEED,
+        sequence_length=args.sequence_length,
+    )
+    save_world_model_artifacts(world_run, out / "world_model")
+    world_core = load_world_model(world_run.result, out / "world_model")
+
+    def imagination_fn(states, artifacts, *, max_horizon, threshold):
+        return imagination_forecast(
+            states,
+            world_core,
+            schema,
+            world_run.result.stage_vocabulary,
+            max_horizon=max_horizon,
+            threshold=threshold,
+            n_samples=args.samples,
+            seed=SEED,
+        )[0]
+
+    # Open-loop state error on the held-out test day, the measurement that says
+    # whether the world model simulates at all.
+    test_states = [item.state for item in by_scenario[csv_test[1]]]
+    open_loop = _measure_open_loop(
+        world_core,
+        test_states,
+        schema,
+        history=args.history,
+        horizon=args.horizon,
+        samples=args.samples,
+    )
+
     thresholds: dict[str, float | None] = {
         "calibrated": args.threshold,  # None -> auto-resolve from calibration.json
         "default_0.50": 0.50,  # pinned for like-for-like A/B
@@ -229,6 +308,16 @@ def main() -> None:
                 min_history=args.history,
                 forecast_fn=rollout_fn,
             ).model_dump(),
+            "imagination": evaluate_replay(
+                labelled,
+                loaded,
+                horizon=args.horizon,
+                threshold=threshold,
+                split_filter="test",
+                max_history=args.history,
+                min_history=args.history,
+                forecast_fn=imagination_fn,
+            ).model_dump(),
         }
 
     # 5. Persist and report.
@@ -239,7 +328,9 @@ def main() -> None:
 
     result = {
         "generated_at": datetime.now(tz=UTC).isoformat(),
-        "dataset": "CIC-IDS2017 (TrafficLabelling CICFlowMeter CSVs)",
+        "dataset": _dataset_identity(data_dir),
+        "data_dir": str(data_dir),
+        "is_synthetic_fixture": _is_fixture(data_dir),
         "citation": "Sharafaldin, Lashkari & Ghorbani, ICISSP 2018",
         "protocol": {
             "train": "Tuesday 2017-07-04 full day (FTP/SSH-Patator)",
@@ -264,6 +355,36 @@ def main() -> None:
             "validation_samples": calibration.sample_count,
             "warnings": calibration.warnings,
         },
+        "world_model": {
+            "model_version": world_run.result.model_version,
+            "core_type": world_config.core_type,
+            "best_epoch": world_run.result.best_epoch,
+            "training_seconds": world_run.result.training_seconds,
+            "model_sha256": world_run.result.model_sha256,
+            "stage_vocabulary": world_run.result.stage_vocabulary,
+            "split_metrics": {
+                name: {
+                    "reconstruction_mse": metrics.reconstruction_mse,
+                    "kl_nats": metrics.kl_nats,
+                    "open_loop_mae": metrics.open_loop_mae,
+                    "open_loop_persistence_mae": metrics.open_loop_persistence_mae,
+                    "risk_f1": metrics.risk.f1 if metrics.risk else None,
+                    "stage_macro_f1": metrics.stage_macro_f1,
+                }
+                for name, metrics in world_run.result.metrics.items()
+            },
+            "open_loop_on_test_day": (
+                {
+                    "steps": open_loop.steps,
+                    "model_mae": open_loop.model_mae,
+                    "persistence_mae": open_loop.persistence_mae,
+                    "skill": open_loop.mean_skill,
+                    "windows": open_loop.windows,
+                }
+                if open_loop is not None
+                else None
+            ),
+        },
         "evaluations": evaluations,
     }
     (out / "real_benchmark.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -271,7 +392,7 @@ def main() -> None:
 
     print(f"calibrated_threshold={calibration.best_threshold:.2f} windows={result['windows']}")
     for eval_name, pair in evaluations.items():
-        for kind in ("per_horizon", "rollout"):
+        for kind in ("per_horizon", "rollout", "imagination"):
             ev = pair[kind]
             lead = ev["measured_median_lead_windows"]
             print(
@@ -287,9 +408,49 @@ def _lead(value: float | None) -> str:
     return "none" if value is None else f"{value:.1f}"
 
 
+def _f(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.3f}"
+
+
+def _is_fixture(data_dir: Path) -> bool:
+    """True when the data directory is a synthetic stand-in, not the real capture.
+
+    The claim status is derived from this rather than hardcoded, so a run against
+    a fixture can never inherit the real-traffic claim.
+    """
+    name = data_dir.name.lower()
+    return "fixture" in name or "synthetic" in name or "sample" in name
+
+
+def _dataset_identity(data_dir: Path) -> str:
+    if _is_fixture(data_dir):
+        return f"SYNTHETIC CIC-IDS2017-schema fixture ({data_dir}) - not real traffic"
+    return f"CIC-IDS2017 (TrafficLabelling CICFlowMeter CSVs) from {data_dir}"
+
+
+def _claim_status(data_dir: Path) -> str:
+    """The claim this run is allowed to make, derived from its input."""
+    if _is_fixture(data_dir):
+        return (
+            "**SYNTHETIC INPUT. These numbers come from a generated file that only "
+            "mimics the CIC-IDS2017 schema. They prove the real-data code path — "
+            "adapter, windows, training, calibration, replay, world model — runs "
+            "end to end. They are NOT a measurement of CIC-IDS2017 and must never "
+            "be quoted as a real-traffic result.**"
+        )
+    return (
+        "**This is a real-traffic result on CIC-IDS2017 with cross-day temporal "
+        "splits. It demonstrates the pipeline end-to-end on real data. The test "
+        "phase contains a single attack family; this is NOT a general performance "
+        "claim.**"
+    )
+
+
 def _render_markdown(result: dict) -> str:
+    synthetic = result["dataset"].startswith("SYNTHETIC")
+    data_dir = Path(result["data_dir"])
     lines = [
-        "# Real-Data Benchmark — CIC-IDS2017",
+        "# Real-Data Benchmark — CIC-IDS2017" + (" (SYNTHETIC FIXTURE INPUT)" if synthetic else ""),
         "",
         f"- Generated: {result['generated_at']}",
         f"- Dataset: {result['dataset']} — citation required: {result['citation']}. "
@@ -326,7 +487,11 @@ def _render_markdown(result: dict) -> str:
         "|---|---|---:|---:|---:|",
     ]
     for eval_name, pair in result["evaluations"].items():
-        for kind, label in (("per_horizon", "Per-horizon"), ("rollout", "Recursive rollout")):
+        for kind, label in (
+            ("per_horizon", "Per-horizon"),
+            ("rollout", "Recursive rollout (linear)"),
+            ("imagination", "World model imagination"),
+        ):
             ev = pair[kind]
             lines.append(
                 f"| {eval_name} ({ev['decision_threshold']:.2f}) | {label} | "
@@ -334,14 +499,53 @@ def _render_markdown(result: dict) -> str:
                 f"{ev['forecast_crossing_rate']:.2f} | "
                 f"{ev['false_early_warning_rate']:.2f} |"
             )
+    world = result.get("world_model")
+    if world:
+        lines += [
+            "",
+            "## World Model (trained on Tuesday, scored on the Thursday test day)",
+            "",
+            f"- Model: `{world['model_version']}` · core `{world['core_type']}` · "
+            f"best epoch {world['best_epoch']} · {world['training_seconds']:.1f} s",
+            f"- SHA-256 `{world['model_sha256'][:16]}…`",
+            f"- Stage vocabulary: {', '.join(world['stage_vocabulary'])}",
+            "",
+            "| Split | Recon MSE | KL (nats) | Risk F1 | Stage macro-F1 |",
+            "|---|---:|---:|---:|---:|",
+        ]
+        for name, metrics in world["split_metrics"].items():
+            lines.append(
+                f"| {name} | {metrics['reconstruction_mse']:.4f} | "
+                f"{metrics['kl_nats']:.4f} | {_f(metrics['risk_f1'])} | "
+                f"{_f(metrics['stage_macro_f1'])} |"
+            )
+        open_loop = world.get("open_loop_on_test_day")
+        if open_loop:
+            lines += [
+                "",
+                "### Open-loop state prediction (test day)",
+                "",
+                "Burn in on the observed windows, then roll the prior forward with no "
+                "observations. Skill is `1 - model MAE / persistence MAE`; positive "
+                "beats repeating the last window.",
+                "",
+                "| Step | World model MAE | Persistence MAE | Skill |",
+                "|---:|---:|---:|---:|",
+            ]
+            for index, step in enumerate(open_loop["steps"]):
+                model_error = open_loop["model_mae"][index]
+                baseline = open_loop["persistence_mae"][index]
+                skill = 1.0 - (model_error / baseline) if baseline > 0 else 0.0
+                lines.append(f"| +{step} | {model_error:.4f} | {baseline:.4f} | {skill:+.3f} |")
+            lines.append("")
+            lines.append(
+                f"{open_loop['windows']} windows · mean skill **{open_loop['skill']:+.3f}**."
+            )
     lines += [
         "",
         "## Claim Status",
         "",
-        "**This is a real-traffic result on CIC-IDS2017 with cross-day temporal "
-        "splits. It demonstrates the pipeline end-to-end on real data. The test "
-        "phase contains a single attack family (36 Infiltration flows); this is "
-        "NOT a general performance claim.**",
+        _claim_status(data_dir),
         "",
         "## Limitations",
         "",

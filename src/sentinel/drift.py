@@ -1,10 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Feature-drift monitoring (roadmap Phase 7): PSI vs a training snapshot.
+"""Feature-drift monitoring: PSI against a training snapshot, with an honest band.
 
-The Population Stability Index compares live feature distributions against a
-reference (training) snapshot. PSI bands are conventional: < 0.1 stable,
-0.1-0.25 moderate shift, > 0.25 significant shift. Retraining is deliberately
-out of scope; this module's job is to make drift visible and auditable.
+The Population Stability Index compares a live feature distribution against a
+reference (training) snapshot. The statistic is fine. The **bands** were the
+problem, and this module used to ship them as constants.
+
+``band_of`` used to call anything above 0.10 "moderate" and above 0.25
+"significant". Those are the conventional numbers and they are quoted without the
+sample size that produces them, which makes them unfalsifiable. Sprint 8 measured
+what they actually mean here: on 400 held-out blocks of iid Gaussian noise - no
+drift at all - **100% exceeded 0.10** and 92% exceeded it on a single feature.
+So ``band_of`` answered "significant" for ordinary noise, and ``/v1/drift``
+inherited that.
+
+The fix is a band that means something: compare the observed PSI against a
+threshold calibrated on held-out blocks from the *same* population, and report
+where the observation sits in that null distribution. With no null sample there
+is nothing to compare against, so **no band is emitted at all** rather than a
+decorative one - ``band`` is ``None`` and the response says why.
+
+That is a breaking change to the response, hence ``drift-report-v2``. The old
+loader cannot be kept working honestly, because keeping it would mean keeping the
+unanchored numbers.
 """
 
 from __future__ import annotations
@@ -14,10 +31,27 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PSI_STABLE = 0.10
-PSI_MODERATE = 0.25
+DRIFT_REPORT_VERSION = "drift-report-v2"
 PSI_BINS = 10
 EPS = 1e-6
+
+#: Default level for the calibrated trip point. Named so a caller can see it, not
+#: to make it authoritative: it means "1 false alarm in 100 held-out blocks".
+DEFAULT_NULL_LEVEL = 0.99
+
+WITHIN_NULL = "within_null"
+EXCEEDS_NULL = "exceeds_null"
+
+BAND_CAVEAT = (
+    "No band is stated because no null sample was supplied, and a fixed PSI "
+    "cutoff does not correspond to a false-alarm rate at any particular sample "
+    "size. Supply `null`: held-out blocks from the same population as the "
+    "reference, and the band becomes a measured statement."
+)
+BAND_CAVEAT_CALIBRATED = (
+    "The band compares this PSI against held-out blocks from the same population "
+    "as the reference. It is a statement about that null, not a property of PSI."
+)
 
 
 class DriftReport(BaseModel):
@@ -27,9 +61,14 @@ class DriftReport(BaseModel):
 
     feature: str = Field(min_length=1)
     psi: float = Field(ge=0.0)
-    band: str
+    band: str | None = None
+    threshold: float | None = None
+    null_percentile: float | None = None
+    level: float | None = None
     reference_count: int = Field(ge=0)
     current_count: int = Field(ge=0)
+    report_version: str = DRIFT_REPORT_VERSION
+    caveat: str = BAND_CAVEAT
 
 
 def psi(reference: list[float], current: list[float], *, bins: int = PSI_BINS) -> float:
@@ -74,23 +113,76 @@ def _log(value: float) -> float:
     return math.log(value)
 
 
-def band_of(psi_value: float) -> str:
-    if psi_value >= PSI_MODERATE:
-        return "significant"
-    if psi_value >= PSI_STABLE:
-        return "moderate"
-    return "stable"
+def null_threshold(
+    reference: list[float],
+    null_blocks: list[list[float]],
+    *,
+    level: float = DEFAULT_NULL_LEVEL,
+    bins: int = PSI_BINS,
+) -> tuple[float, list[float]]:
+    """Trip point for this feature, from held-out blocks of the same population.
+
+    Each block is scored independently against ``reference`` and the ``level``
+    quantile of the resulting PSIs is the trip point. Passing the *same* sample
+    the threshold is later compared against would score blocks against bin edges
+    estimated from themselves and report a rate better than the statistic can
+    deliver, so ``null_blocks`` must be disjoint from ``reference``.
+    """
+    if not 0.5 < level < 1.0:
+        raise ValueError("level is a quantile of the null and must be in (0.5, 1)")
+    if len(null_blocks) < 2:
+        raise ValueError("at least two null blocks are required to place a threshold")
+    scores = sorted(psi(reference, block, bins=bins) for block in null_blocks)
+    index = min(len(scores) - 1, int(round(level * (len(scores) - 1))))
+    return scores[index], scores
 
 
-def compare_feature(feature: str, reference: list[float], current: list[float]) -> DriftReport:
-    """PSI report for one named feature."""
+def band_of(psi_value: float, threshold: float | None) -> str | None:
+    """Band against a calibrated threshold, or ``None`` when there is not one.
+
+    ``threshold`` is required and there is deliberately no default. The previous
+    signature took a bare PSI and banded it against 0.10 and 0.25, which is how a
+    fixed cutoff that means nothing became indistinguishable from a measurement.
+    """
+    if threshold is None:
+        return None
+    return EXCEEDS_NULL if psi_value > threshold else WITHIN_NULL
+
+
+def compare_feature(
+    feature: str,
+    reference: list[float],
+    current: list[float],
+    *,
+    null_blocks: list[list[float]] | None = None,
+    level: float = DEFAULT_NULL_LEVEL,
+) -> DriftReport:
+    """PSI report for one named feature, banded against a null when one is given.
+
+    Without ``null_blocks`` the report carries the statistic and no band. That is
+    the honest state: the caller has a number and not yet a reference for judging
+    it.
+    """
     value = psi(reference, current)
+    if not null_blocks:
+        return DriftReport(
+            feature=feature,
+            psi=value,
+            reference_count=len(reference),
+            current_count=len(current),
+        )
+    threshold, scores = null_threshold(reference, null_blocks, level=level)
+    percentile = 100.0 * sum(1 for score in scores if score <= value) / len(scores)
     return DriftReport(
         feature=feature,
         psi=value,
-        band=band_of(value),
+        band=band_of(value, threshold),
+        threshold=threshold,
+        null_percentile=round(percentile, 1),
+        level=level,
         reference_count=len(reference),
         current_count=len(current),
+        caveat=BAND_CAVEAT_CALIBRATED,
     )
 
 
@@ -136,4 +228,15 @@ class DriftSnapshot:
         ]
 
 
-__all__ = ["DriftReport", "DriftSnapshot", "band_of", "psi"]
+__all__ = [
+    "DEFAULT_NULL_LEVEL",
+    "DRIFT_REPORT_VERSION",
+    "EXCEEDS_NULL",
+    "WITHIN_NULL",
+    "DriftReport",
+    "DriftSnapshot",
+    "band_of",
+    "compare_feature",
+    "null_threshold",
+    "psi",
+]

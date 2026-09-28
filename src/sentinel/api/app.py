@@ -49,6 +49,10 @@ class ForecastRequest(BaseModel):
     events: list[UnifiedEvent] = Field(min_length=1, max_length=50_000)
     window_seconds: int = Field(default=60, ge=1)
     stride_seconds: int = Field(default=30, ge=1)
+    include_explanation: bool = True
+    # The forecaster picks its own method by what the model actually is; a
+    # request may ask for a specific one, and the response reports what was used.
+    explanation_method: Literal["auto", "exact", "gradient", "permutation"] = "auto"
 
 
 class ApiError(BaseModel):
@@ -117,13 +121,21 @@ class RegistryActionRequest(BaseModel):
 
 
 class DriftCheckRequest(BaseModel):
-    """PSI drift check for one feature against a reference sample."""
+    """PSI drift check for one feature against a reference sample.
+
+    ``null`` is the list of held-out blocks from the same population as
+    ``reference``. Supply it and the response carries a band that means
+    something; omit it and the response carries the statistic and no band, which
+    is why the previous hardcoded 0.10/0.25 cutoffs are gone.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     feature: str = Field(min_length=1)
     reference: list[float] = Field(min_length=10)
     current: list[float] = Field(min_length=1)
+    null: list[list[float]] | None = None
+    level: float = Field(default=0.99, gt=0.5, lt=1.0)
 
 
 class EventsIngestRequest(BaseModel):
@@ -333,12 +345,118 @@ def create_app(
         if not states:
             raise ValueError("no complete windows in the supplied events")
         result = run_forecast(states, artifacts, max_horizon=1, threshold=effective_threshold)
-        return {
+        payload: dict[str, Any] = {
             "windows": len(states),
             "timeline": [point.model_dump(mode="json") for point in result.probability_timeline],
             "stage": result.stage_mapping.model_dump(mode="json"),
             "driving_features": [f.model_dump(mode="json") for f in result.driving_features],
             "warnings": list(result.warnings),
+        }
+        # The request may switch the explanation off, but the response must never
+        # imply an explanation is available when it is not. A requested method the
+        # loaded model cannot support is reported as such, not silently swapped.
+        if not request.include_explanation:
+            payload["explanation"] = None
+            payload["explanation_method"] = "not requested"
+            return payload
+        explanation = result.explanation
+        if (
+            explanation is not None
+            and request.explanation_method != "auto"
+            and explanation.method != request.explanation_method
+        ):
+            payload["explanation"] = {
+                "method": "unavailable",
+                "method_detail": (
+                    f"method '{request.explanation_method}' was requested but this "
+                    f"bundle's forecaster produced '{explanation.method}'; "
+                    "attributions are model-specific and are not interchangeable"
+                ),
+            }
+            payload["explanation_method"] = "unavailable"
+            payload["warnings"] = list(result.warnings) + [
+                f"requested explanation method '{request.explanation_method}' is not "
+                f"supported by this artifact; the available method is '{explanation.method}'"
+            ]
+            return payload
+        if explanation is None:
+            payload["explanation"] = {
+                "method": "unavailable",
+                "method_detail": "the active forecaster produced no explanation",
+            }
+            payload["explanation_method"] = "unavailable"
+        else:
+            payload["explanation"] = explanation.model_dump(mode="json")
+            payload["explanation_method"] = explanation.method
+        return payload
+
+    @app.post("/v1/imagine", dependencies=[require("POST", "/v1/imagine")])
+    def imagine_endpoint(request: ForecastRequest) -> dict[str, Any]:
+        """Forward simulation: the world model rolled open-loop from the prior.
+
+        Returns the imagined timeline, the stage it predicts along the way, the
+        between-sample spread, and — because a simulation is not a measurement —
+        an explicit statement of that.
+        """
+        from sentinel.world_model.imagine import imagination_forecast
+        from sentinel.world_model.train import WorldModelResult, load_world_model
+
+        world_dir = resolved_dir / "world_model.json"
+        if not world_dir.is_file():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "no world-model artifacts in the bundle; run "
+                    "scripts/run_world_model.py and re-export the release bundle"
+                ),
+            )
+        result_contract = WorldModelResult.model_validate_json(
+            world_dir.read_text(encoding="utf-8")
+        )
+        core = load_world_model(result_contract, world_dir.parent)
+
+        states = _windowed(request)
+        if not states:
+            raise ValueError("no complete windows in the supplied events")
+        history = max(1, min(len(states), result_contract.sequence_length))
+        if len(states) < result_contract.sequence_length:
+            raise ValueError(
+                f"imagination needs {result_contract.sequence_length} observed windows, "
+                f"got {len(states)}"
+            )
+        simulated, diagnostics = imagination_forecast(
+            states[-history:],
+            core,
+            artifacts.baseline_result.feature_schema,
+            result_contract.stage_vocabulary,
+            max_horizon=request.horizon,
+            threshold=effective_threshold,
+            n_samples=32,
+            seed=0,
+        )
+        return {
+            "model_version": result_contract.model_version,
+            "history_windows": history,
+            "timeline": [p.model_dump(mode="json") for p in simulated.probability_timeline],
+            "predicted_stage": simulated.predicted_stage.model_dump(mode="json"),
+            "stage_mapping": (
+                simulated.stage_mapping.model_dump(mode="json") if simulated.stage_mapping else None
+            ),
+            "explanation": (
+                simulated.explanation.model_dump(mode="json") if simulated.explanation else None
+            ),
+            "uncertainty": {
+                "risk_spread": diagnostics["risk_spread"],
+                "latent_spread": diagnostics["latent_spread"],
+                "crossing_rate": diagnostics["crossing_rate"],
+                "samples": int(diagnostics["samples"]),
+            },
+            "flags": simulated.model_version,
+            "disclaimer": (
+                "These probabilities are simulated futures sampled from the world "
+                "model's prior, not observations of traffic. They are decision "
+                "support, not detection."
+            ),
         }
 
     @app.post("/v1/detect", dependencies=[require("POST", "/v1/detect")])
@@ -514,7 +632,16 @@ def create_app(
 
     @app.post("/v1/drift", dependencies=[require("POST", "/v1/drift")])
     def drift_check(payload: DriftCheckRequest) -> dict[str, Any]:
-        report = compare_feature(payload.feature, payload.reference, payload.current)
+        try:
+            report = compare_feature(
+                payload.feature,
+                payload.reference,
+                payload.current,
+                null_blocks=payload.null,
+                level=payload.level,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
         return report.model_dump(mode="json")
 
     @app.post("/v1/events", dependencies=[require("POST", "/v1/events")])

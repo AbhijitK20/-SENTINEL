@@ -1,4 +1,10 @@
-"""Plotly graph builders used by the dashboard's attack-story views."""
+"""Plotly graph builders used by the dashboard's attack-story views.
+
+Colours come from the design tokens. Severity maps onto the risk ramp, so an
+edge carrying attack traffic is read with the same colour language as a
+probability, and the active/attacked path is drawn in the reserved "confirmed"
+colour that sits outside the ramp.
+"""
 
 from __future__ import annotations
 
@@ -8,14 +14,21 @@ from typing import Any
 import networkx as nx
 import plotly.graph_objects as go
 
+from sentinel.frontend.tokens import color, plotly_layout
+
+# Severity is a risk statement, so it wears the risk ramp.
 SEVERITY_COLORS = {
-    "normal": "#64748b",
-    "medium": "#f59e0b",
-    "high": "#f97316",
-    "critical": "#ef4444",
-    "malicious": "#ef4444",
-    "suspicious": "#f59e0b",
+    "normal": color("risk-quiet"),
+    "medium": color("risk-concerning"),
+    "high": color("risk-critical"),
+    "critical": color("risk-severe"),
+    "malicious": color("risk-severe"),
+    "suspicious": color("risk-concerning"),
 }
+ACTIVE_COLOR = color("confirmed")
+NODE_COLOR = color("accent")
+NODE_BORDER = color("ink-muted")
+TRANSITION_COLOR = color("insufficient")
 
 
 def topology_figure(
@@ -35,9 +48,9 @@ def topology_figure(
     for edge in edges:
         x1, y1 = positions[edge["source"]]
         x2, y2 = positions[edge["destination"]]
-        color = SEVERITY_COLORS.get(str(edge.get("severity", "normal")), "#64748b")
+        edge_color = SEVERITY_COLORS.get(str(edge.get("severity", "normal")), color("risk-quiet"))
         if edge.get("label") in active_labels:
-            color = "#ef4444"
+            edge_color = ACTIVE_COLOR
         edge_traces.append(
             go.Scatter(
                 x=[x1, x2, None],
@@ -45,7 +58,7 @@ def topology_figure(
                 mode="lines",
                 line={
                     "width": max(1.5, math.log1p(float(edge.get("bytes", 1))) / 2),
-                    "color": color,
+                    "color": edge_color,
                 },
                 hoverinfo="text",
                 text=(
@@ -67,21 +80,24 @@ def topology_figure(
         textposition="bottom center",
         hovertext=[nodes[node] for node in nodes],
         hoverinfo="text",
-        marker={"size": node_sizes, "color": "#3b82f6", "line": {"width": 1, "color": "#e2e8f0"}},
+        marker={
+            "size": node_sizes,
+            "color": NODE_COLOR,
+            "line": {"width": 1, "color": NODE_BORDER},
+        },
         showlegend=False,
     )
-    fig = go.Figure(data=[*edge_traces, node_trace])
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0b0d12",
-        plot_bgcolor="#0b0d12",
-        height=520,
-        margin={"l": 10, "r": 10, "t": 20, "b": 10},
-        xaxis={"visible": False},
-        yaxis={"visible": False},
-        hovermode="closest",
+    figure = go.Figure(data=[*edge_traces, node_trace])
+    figure.update_layout(
+        **plotly_layout(
+            height=520,
+            margin={"l": 10, "r": 10, "t": 20, "b": 10},
+            xaxis={"visible": False},
+            yaxis={"visible": False},
+            hovermode="closest",
+        )
     )
-    return fig
+    return figure
 
 
 def kill_chain_figure(
@@ -105,7 +121,7 @@ def kill_chain_figure(
                 x=[x1, x2, None],
                 y=[y1, y2, None],
                 mode="lines",
-                line={"width": 1 + 5 * probability, "color": "#8b5cf6"},
+                line={"width": 1 + 5 * probability, "color": TRANSITION_COLOR},
                 hoverinfo="text",
                 text=f"{source} -> {target}: {probability:.0%}",
                 showlegend=False,
@@ -122,19 +138,18 @@ def kill_chain_figure(
             hovertext=["ACTIVE" if node in active else "transition node" for node in graph.nodes],
             marker={
                 "size": [28 if node in active else 18 for node in graph.nodes],
-                "color": ["#ef4444" if node in active else "#3b82f6" for node in graph.nodes],
+                "color": [ACTIVE_COLOR if node in active else NODE_COLOR for node in graph.nodes],
             },
             showlegend=False,
         )
     )
-    fig = go.Figure(data=traces)
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0b0d12",
-        plot_bgcolor="#0b0d12",
-        height=460,
-        margin={"l": 10, "r": 10, "t": 20, "b": 10},
-        xaxis={"visible": False},
-        yaxis={"visible": False},
+    figure = go.Figure(data=traces)
+    figure.update_layout(
+        **plotly_layout(
+            height=460,
+            margin={"l": 10, "r": 10, "t": 20, "b": 10},
+            xaxis={"visible": False},
+            yaxis={"visible": False},
+        )
     )
-    return fig
+    return figure

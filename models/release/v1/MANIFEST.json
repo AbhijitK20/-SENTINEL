@@ -1,66 +1,82 @@
 {
   "version": "release-v1",
-  "created_at": "2026-09-16T16:16:00.220303+00:00",
-  "git_sha": "7f56018472cef106388f195386fb1f4b92702874",
+  "created_at": "2026-09-28T14:12:15.557392+00:00",
+  "git_sha": "fd4fd50eefcbeb6371bd1df33294a4f2bbbcad9b",
   "python": "3.11.15",
   "platform": "Windows-10-10.0.26200-SP0",
   "config": "configs\\default.yaml",
   "files": {
     "PROVENANCE.md": {
-      "sha256": "64f668bc606113c9d79102370610740c8675cc65fad355589fb5cdfbe156f59f",
+      "sha256": "c0774122edda66315572a58c7861f7a09dc366f64175fae5030834d991418970",
       "size_bytes": 209
     },
     "TRAINING_CONFIG.yaml": {
-      "sha256": "a0792ee3312901e6090f4f57dbd42718f88028f47866e640b434e0f2e4ebdc19",
-      "size_bytes": 698
+      "sha256": "ab0cb4b7401a45697ef0f18f467c42e833cd9fa24afb296efe1fea9bcbfa1e7f",
+      "size_bytes": 666
     },
     "baseline_model.joblib": {
-      "sha256": "7b1fafedbc094b4c37747959bf01a2c80032ab01973c35a13734acb4ca8c5c43",
-      "size_bytes": 943
+      "sha256": "2eecf6be8be5b4e99f625c197d88e1a22b9bf99ac91fd2293be16040a8a08b50",
+      "size_bytes": 1615
     },
     "baseline_report.md": {
-      "sha256": "a4afda63bdb382d7d963ae6480805dcbdc201bc2bce1818f80f2b99bee9cb217",
-      "size_bytes": 2091
+      "sha256": "468858d5b0afdc486920359187b36b7e468e855d7a45f0a5460c42776e6a0688",
+      "size_bytes": 4627
     },
     "baseline_result.json": {
-      "sha256": "7e6d2a57148f2a57666fbba55649ae356b5a9c775a594b910792decb26ba9adb",
-      "size_bytes": 5131
+      "sha256": "b85e4dbca2912d27434bcbfecb2fdeb1cb724819e9c3a01fda4d10cf4b5fa691",
+      "size_bytes": 18964
     },
     "calibration.json": {
-      "sha256": "038599e659d0011a96e473b1d6f33ba835a050e4ffde6c7200d40284bdb2e3d6",
-      "size_bytes": 4727
+      "sha256": "c6affe042876766483aeb96179ccaa3d92b9b0c941a709ea909347050b898650",
+      "size_bytes": 4913
     },
     "feature_schema.json": {
-      "sha256": "7eb921c8fde3ceae363fe3d63753f4ad1b25be67184a2cfc0caca53e7bd11750",
-      "size_bytes": 1082
+      "sha256": "215a44713ceb8c44eb4f4cea1c520fecd1dcb06b238e9a87e758e296cc28ca6d",
+      "size_bytes": 6763
     },
     "split_manifest.json": {
       "sha256": "64238db9bc2766b20c3f6cbce8593a0afc2649bd7ee4eeb0f1d72d6a037e5bad",
       "size_bytes": 309
     },
     "temporal_result.json": {
-      "sha256": "4fc6d08d377cb5fb80ededf74bcb8b215aab642dab7b55f58a46594cdad6edd0",
-      "size_bytes": 10583
+      "sha256": "d41da72f8d7561315f636f0d0db93b0512c922e9a24699f83145599332ae8d38",
+      "size_bytes": 18568
     },
     "weights/model_h1.pt": {
-      "sha256": "6f252245e2f33691fcf1eb143a6d27ed92c51b07485c64ac96c6fdb9f088c76a",
-      "size_bytes": 21217
+      "sha256": "0d95a80764b2db4da189c3868e1811eb27835a4bcdb4cc7d3563e93035f5503f",
+      "size_bytes": 53857
     },
     "weights/model_h2.pt": {
-      "sha256": "2331f1ee7444373dc9dc86a2f931ad4c99ae1828650c94cb80ee2dd175b30576",
-      "size_bytes": 21217
+      "sha256": "767c7e0f7551c7633f7843639b32e7675047829c78b8b188e92b0f8ed29d94d1",
+      "size_bytes": 53857
     },
     "weights/model_h3.pt": {
-      "sha256": "96a708ab7a62eda48a7a7083942383595dc84b250260dcb13aaaab5d5cf377f1",
-      "size_bytes": 21217
+      "sha256": "1205886a7fcc7ed53d1dca22c71c06d49ef307a533ff2668a450b42a5cff1d02",
+      "size_bytes": 53857
     },
     "weights/model_h4.pt": {
-      "sha256": "0acdc2f79759083ef72a6d473fc3b7cdbfab208e7f613d4a1eb6b598602a89ed",
-      "size_bytes": 21217
+      "sha256": "deec991b6f2e55bcddb57c5f6cd9d13e0ffef9d02d6b8569d1a27e164417f0d0",
+      "size_bytes": 53857
     },
     "weights/model_h5.pt": {
-      "sha256": "053ca35025036d43dc3e9487a3714292189381d34d3b5eafff2f9ccf97a0fb54",
-      "size_bytes": 21217
+      "sha256": "0375386a369ef339f14316144a273a45937253c702c727cc058a5070cf14daa9",
+      "size_bytes": 53857
+    },
+    "weights/world_model.pt": {
+      "sha256": "f70b987bef8b8e816c5dd5fd4fb1c312ec9c89950787912131415c430873e615",
+      "size_bytes": 356247
+    },
+    "world_model.json": {
+      "sha256": "bc53f8225fb946229f2d7a73cc15f016e8bf117c3f1d80ee407beb3c64777acd",
+      "size_bytes": 21971
+    },
+    "world_model_report.md": {
+      "sha256": "d2c7bb26d86ef48823facb7afb7c8fecd018ae22953b6bbc3bf337b0f46a5f73",
+      "size_bytes": 2265
+    },
+    "world_model_summary.json": {
+      "sha256": "a65664c3d5adcd28d39555b63dbd772add666fde16bf237e9158303b262e9b8a",
+      "size_bytes": 355
     }
   }
 }

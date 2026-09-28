@@ -45,37 +45,27 @@ def frag_offset_nunique(offsets: Sequence[int]) -> float | None:
     return float(len(set(offsets)))
 
 
-def retransmission_count(
-    packets: Sequence[tuple[str, str, int, int, int, int]],
-) -> int:
-    """Count of retransmitted packets.
+def retransmission_count(flags: Sequence[float]) -> int:
+    """Count packets flagged as retransmissions in one window.
 
-    A retransmission is a repeated (src, dst, sport, dport, seq, len) tuple.
+    The per-packet duplicate-sequence decision is made once at ingestion (see
+    ``sentinel.pcap_ingestion``); a window aggregates those 0/1 flags rather than
+    re-deriving duplicates, which would be wrong across a window boundary.
     Returns 0 for empty input.
     """
-    if not packets:
+    if not flags:
         return 0
-    seen: dict[tuple, int] = {}
-    retrans = 0
-    for pkt in packets:
-        key = pkt  # (src, dst, sport, dport, seq, len)
-        count = seen.get(key, 0)
-        if count > 0:
-            retrans += 1
-        seen[key] = count + 1
-    return retrans
+    return int(sum(1 for flag in flags if flag))
 
 
-def retransmission_rate(
-    packets: Sequence[tuple[str, str, int, int, int, int]],
-) -> float | None:
-    """Fraction of packets that are retransmissions.
+def retransmission_rate(flags: Sequence[float]) -> float | None:
+    """Share of packets in the window that were retransmissions.
 
     Returns None for empty input — insufficient evidence.
     """
-    if not packets:
+    if not flags:
         return None
-    return retransmission_count(packets) / len(packets)
+    return retransmission_count(flags) / len(flags)
 
 
 def iat_stats(iats: Sequence[float]) -> dict[str, float | None]:

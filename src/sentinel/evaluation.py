@@ -274,6 +274,107 @@ def _lead_credit(timeline, threshold: float, realized_infiltration: list[bool]) 
     return onset - crossing
 
 
+def survival_records_from_replay(evaluation: ReplayEvaluation) -> list:
+    """Turn replay rows into right-censored time-to-detection records.
+
+    Each attack becomes one unit of follow-up. An attack the system warned about
+    is an *event*; an attack that ran its course without a crossing inside the
+    horizon is *censored* - we know it lasted at least that long, which is all we
+    know. Dropping those instead, as ``measured_median_lead_windows`` does by
+    averaging only over rows with lead credit, biases every reported lead time
+    towards the cases the system handled.
+
+    Duration is counted in windows between the input window and the first
+    crossing, so it shares units with ``ReplayRow.lead_windows``.
+    """
+    from sentinel.survival import SurvivalRecord
+
+    by_scenario: dict[str, list[ReplayRow]] = {}
+    for row in evaluation.rows:
+        by_scenario.setdefault(row.scenario_id, []).append(row)
+
+    records: list[SurvivalRecord] = []
+    for scenario_id, rows in by_scenario.items():
+        ordered = sorted(rows, key=lambda r: r.input_window_end)
+        for index, row in enumerate(ordered):
+            if not row.realized_future_infiltration:
+                continue  # no attack followed, so there is nothing to detect
+            crossing = next(
+                (
+                    position
+                    for position in range(index, len(ordered))
+                    if ordered[position].threshold_crossed
+                ),
+                None,
+            )
+            if crossing is None:
+                # Censored at the end of observation, not a miss.
+                records.append(
+                    SurvivalRecord(
+                        subject_id=f"{scenario_id}#{index}",
+                        duration=float(len(ordered) - index),
+                        event=False,
+                        group=scenario_id,
+                    )
+                )
+            else:
+                records.append(
+                    SurvivalRecord(
+                        subject_id=f"{scenario_id}#{index}",
+                        duration=float(crossing - index),
+                        event=True,
+                        group=scenario_id,
+                    )
+                )
+    return records
+
+
+def evaluate_detection_survival(evaluation: ReplayEvaluation) -> dict:
+    """Time-to-detection with censoring, reported alongside the existing metrics.
+
+    Returned rather than folded into ``ReplayEvaluation`` so the old field keeps
+    its meaning and the two can be compared - which is the point, because they
+    disagree whenever anything is missed.
+    """
+    from sentinel.survival import (
+        kaplan_meier,
+        median_survival,
+        naive_median_lead,
+        survival_table,
+    )
+
+    records = survival_records_from_replay(evaluation)
+    if not records:
+        return {
+            "n_attacks": 0,
+            "note": "no attack window in this split, so time-to-detection is undefined",
+        }
+    estimate = kaplan_meier(records)
+    summary = median_survival(estimate)
+    groups: dict[str, list] = {}
+    for record in records:
+        groups.setdefault(record.group, []).append(record)
+    return {
+        "n_attacks": summary["n_total"],
+        "n_detected": summary["n_events"],
+        "n_censored": summary["n_censored"],
+        "detected_fraction": summary["detected_fraction"],
+        "median_windows": summary["median"],
+        "ci_low_windows": summary["ci_low"],
+        "ci_high_windows": summary["ci_high"],
+        "confidence_level": summary["confidence_level"],
+        "naive_median_windows": naive_median_lead(records),
+        "usable": summary["usable"],
+        "note": summary["note"],
+        "per_scenario": survival_table(groups),
+        "interpretation": (
+            "Censored attacks are attacks with no crossing inside the horizon. They "
+            "are in the denominator, which is the difference from "
+            "measured_median_lead_windows."
+        ),
+    }
+
+
 def _summarize(scenario_id: str, rows: list[ReplayRow]) -> ReplayScenarioSummary:
     scenario_rows = [r for r in rows if r.scenario_id == scenario_id]
     leads = [r.lead_windows for r in scenario_rows if r.lead_windows is not None]

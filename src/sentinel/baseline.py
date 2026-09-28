@@ -23,6 +23,7 @@ import platform
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import joblib
 import numpy as np
@@ -78,6 +79,11 @@ class BaselineResult(BaseModel):
     inference_microseconds_per_sample: float = Field(ge=0)
     runtime: dict[str, str]
     model_sha256: str = Field(min_length=64, max_length=64)
+    # Split-conformal bands, keyed by horizon, fitted on the validation split.
+    # Absent for a run that was never calibrated, in which case forecasts carry
+    # no interval rather than a fabricated one.
+    conformal: dict[str, Any] | None = None
+    conformal_coverage: float | None = None
 
 
 @dataclass(frozen=True)
@@ -184,6 +190,7 @@ def train_baseline(
     checksum = hashlib.sha256(model_buffer.getvalue()).hexdigest()
 
     horizon = samples[0].target.horizon
+    conformal, conformal_coverage = _fit_conformal(model, samples, states_by_key, schema, manifest)
     result = BaselineResult(
         seed=seed,
         horizon=horizon,
@@ -197,8 +204,45 @@ def train_baseline(
         inference_microseconds_per_sample=inference_us,
         runtime=_runtime_versions(),
         model_sha256=checksum,
+        conformal=conformal,
+        conformal_coverage=conformal_coverage,
     )
     return BaselineRun(model=model, result=result)
+
+
+def _fit_conformal(
+    model: sklearn.linear_model.LogisticRegression,
+    samples: list[SequenceSample],
+    states_by_key: dict[str, LabelledState],
+    schema: FeatureSchema,
+    manifest: SplitManifest,
+) -> tuple[dict[str, Any] | None, float | None]:
+    """Calibrate split-conformal bands on the validation split only.
+
+    Returns ``(None, None)`` when the validation split cannot support the
+    requested coverage, which is the honest outcome for a small run. A forecast
+    from such a model carries no interval, and the UI says so - which is better
+    than publishing a band that cannot be justified.
+    """
+    from sentinel.conformal import (
+        COVERAGE_90,
+        HorizonCalibrator,
+        InsufficientCalibrationData,
+    )
+
+    validation = [s for s in samples if s.scenario_id in manifest.validation_scenarios]
+    if len(validation) < 10:
+        return None, None
+    states = [states_by_key[s.input_state_keys[-1]].state for s in validation]
+    matrix = vectorize_states(states, schema)
+    predictions = np.asarray(model.predict_proba(matrix)[:, 1], dtype=float)
+    truth = np.array([1.0 if s.target.target_infiltration else 0.0 for s in validation])
+    horizons = [str(s.target.horizon) for s in validation]
+    try:
+        calibrator = HorizonCalibrator.fit(horizons, predictions, truth, coverage=COVERAGE_90)
+    except InsufficientCalibrationData:
+        return None, None
+    return calibrator.to_payload(), calibrator.coverage
 
 
 def _fit_model(

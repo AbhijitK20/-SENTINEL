@@ -3,12 +3,7 @@
   "seed": 42,
   "horizon": 5,
   "config": {
-    "excluded_features": [
-      "source_port",
-      "destination_port",
-      "protocol",
-      "tcp_flags"
-    ],
+    "excluded_features": [],
     "regularization_c": 1.0,
     "class_weight": "balanced",
     "max_iterations": 1000,
@@ -18,54 +13,304 @@
     "version": "state-features-v1",
     "names": [
       "ack_count",
-      "bidirectional_ratio",
+      "ack_count_mean",
+      "ack_count_sum",
+      "bidirectional_ratio_mean",
+      "bidirectional_ratio_std",
       "bytes",
+      "bytes_max",
+      "bytes_mean",
+      "bytes_p90",
+      "bytes_std",
+      "bytes_sum",
+      "destination_port_nunique",
+      "dst_port_entropy",
+      "dst_port_low_share",
+      "dst_port_nunique",
+      "dst_port_randomness",
+      "dst_port_sequential_score",
+      "dst_port_wellknown_share",
       "duration",
+      "duration_max",
+      "duration_mean",
+      "duration_std",
       "event_count",
       "external_destination_count",
       "failed_auth",
+      "failed_auth_sum",
+      "fin_count_mean",
+      "fin_count_sum",
+      "flag_ack_ratio",
+      "flag_fin_ratio",
+      "flag_no_ack_share",
+      "flag_psh_ratio",
+      "flag_rst_ratio",
+      "flag_syn_ack_ratio",
+      "flag_syn_ratio",
+      "flag_urg_ratio",
+      "flag_xmas_share",
       "flow_event_count",
+      "frag_df_share",
+      "frag_mf_share",
+      "frag_offset_nunique",
+      "high_port_ratio",
+      "iat_cv",
+      "iat_max",
       "iat_mean",
+      "iat_mean_max",
+      "iat_mean_mean",
+      "iat_mean_min",
+      "iat_mean_p90",
+      "iat_mean_var",
+      "iat_min",
+      "iat_p90",
+      "iat_var",
+      "iat_variance_max",
+      "iat_variance_mean",
       "packet_event_count",
       "packets",
+      "packets_max",
+      "packets_mean",
+      "packets_sum",
+      "payload_size",
+      "payload_size_entropy",
+      "payload_size_mean",
+      "payload_size_p50",
+      "payload_size_p90",
+      "payload_size_std",
+      "payload_size_sum",
+      "ports_per_host_max",
+      "proto_icmp_share",
+      "proto_tcp_share",
+      "proto_udp_share",
+      "protocol_nunique",
+      "retransmission_count",
+      "retransmission_mean",
+      "retransmission_rate",
+      "retransmission_sum",
       "rst_count",
-      "syn_count"
+      "rst_count_mean",
+      "rst_count_sum",
+      "source_port_nunique",
+      "src_port_ephemeral_share",
+      "syn_count",
+      "syn_count_mean",
+      "syn_count_sum",
+      "tcp_flags_nunique",
+      "tcp_window_size_max",
+      "tcp_window_size_mean",
+      "tcp_window_size_min",
+      "tcp_window_size_std",
+      "ttl_max",
+      "ttl_mean",
+      "ttl_min",
+      "ttl_nunique",
+      "ttl_nunique_per_src",
+      "ttl_std",
+      "ttl_var",
+      "urg_count_mean",
+      "urg_count_sum"
     ],
-    "excluded": [
-      "destination_port",
-      "protocol",
-      "source_port",
-      "tcp_flags"
-    ],
+    "excluded": [],
     "means": [
-      247.13888888888889,
-      0.7052530465636961,
-      88756.26666666666,
-      1.005543850527902,
-      16.502777777777776,
+      203.22222222222223,
+      0.8266380239012097,
+      20.933333333333334,
+      0.6979298715557414,
+      0.09583699049436824,
+      53342.51409722222,
+      13329.491805555555,
+      4244.638651863354,
+      10339.85230555556,
+      4416.680709751198,
+      53342.51409722222,
+      6.233333333333333,
+      2.326241871094131,
+      0.2793934798404698,
+      6.233333333333333,
+      0.9859818422318423,
+      0.00012926887926887926,
+      0.7206065201595303,
+      1.004291498654596,
+      1.5042890410587622,
+      1.004291498654596,
+      0.29262418867296847,
+      28.155555555555555,
       0.0,
-      1.3277777777777777,
-      16.502777777777776,
-      0.0987728465034994,
+      0.8833333333333333,
+      0.8833333333333333,
       0.0,
-      263.64166666666665,
-      6.211111111111111,
-      16.502777777777776
+      0.0,
+      0.8266380239012097,
+      0.0,
+      0.17336197609879012,
+      0.0547897903573328,
+      0.21619909835890527,
+      1.3386712755840082,
+      1.0,
+      0.0,
+      0.0,
+      14.077777777777778,
+      0.9648697326757831,
+      0.0,
+      2.797222222222222,
+      1.0,
+      0.4613556623495384,
+      0.581697632546089,
+      0.2055501526458448,
+      0.581697632546089,
+      0.2055501526458448,
+      0.05185969246830625,
+      0.44857480224119556,
+      0.19392255693455177,
+      0.05185969246830625,
+      0.44857480224119556,
+      0.19392255693455177,
+      0.8982123080118453,
+      0.23961034907646758,
+      14.077777777777778,
+      217.3,
+      42.71111111111111,
+      17.312109756377748,
+      217.3,
+      13647.825,
+      1.6870454936438608,
+      1095.4018533091107,
+      1080.0027777777777,
+      1459.0344444444445,
+      373.194738860239,
+      13647.825,
+      4.166666666666667,
+      0.0,
+      1.0,
+      0.0,
+      1.0,
+      1.7666666666666666,
+      0.12621846213036927,
+      0.12621846213036927,
+      1.7666666666666666,
+      4.4944444444444445,
+      0.21619909835890527,
+      8.988888888888889,
+      28.141666666666666,
+      0.5429388877224678,
+      14.077777777777778,
+      1.0,
+      28.155555555555555,
+      1.9916666666666667,
+      65354.930555555555,
+      40460.161018078325,
+      8562.422222222222,
+      24584.97987192206,
+      64.0,
+      63.643890975367405,
+      62.044444444444444,
+      1.3416666666666666,
+      1.061256613756614,
+      0.6729832807321076,
+      3.508865555696976,
+      0.0,
+      0.0
     ],
     "scales": [
-      189.4405290406725,
-      0.02888644878646349,
-      118559.77319132695,
-      0.08723891344599786,
-      9.016958901952815,
+      124.00685713815976,
+      0.22557349200784146,
+      5.658425379712792,
+      0.029968689357878345,
+      0.019849124249392714,
+      58137.35094050785,
+      16470.128606265218,
+      4356.3258415018645,
+      12871.2817130652,
+      5794.967942201199,
+      58137.35094050785,
+      2.7092434368288143,
+      0.6278043860301077,
+      0.14037384362984454,
+      2.7092434368288143,
+      0.11702730300320019,
+      0.0017299699661194017,
+      0.14037384362984456,
+      0.09051832387057032,
+      0.17905688975420653,
+      0.09051832387057032,
+      0.06845142630804539,
+      12.692001953208447,
       1.0,
-      2.0147526883123184,
-      9.016958901952815,
-      0.009083762864265951,
+      1.3219304066402278,
+      1.3219304066402278,
       1.0,
-      190.41300707643086,
-      8.821998317897565,
-      9.016958901952815
+      1.0,
+      0.22557349200784146,
+      1.0,
+      0.22557349200784155,
+      0.11427670904279073,
+      0.27862909497695715,
+      0.4834766463653208,
+      1.0,
+      1.0,
+      1.0,
+      6.346000976604223,
+      0.09609406881615008,
+      1.0,
+      0.4089187036231535,
+      1.0,
+      0.4488051711026828,
+      1.0741073291114254,
+      0.2836815678510174,
+      1.0741073291114254,
+      0.2836815678510174,
+      0.01704861070965938,
+      0.8412670942451284,
+      0.5094158632368552,
+      0.01704861070965938,
+      0.8412670942451284,
+      0.5094158632368552,
+      0.6039174838176979,
+      0.20774959186966324,
+      6.346000976604223,
+      124.77741960965717,
+      29.782636419544282,
+      9.704278012498696,
+      124.77741960965717,
+      3860.0139996777607,
+      1.2265034287285996,
+      351.3477321593186,
+      561.2179414185373,
+      13.96584453515951,
+      234.66675819765763,
+      3860.0139996777607,
+      2.3511226632776436,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0333333333333334,
+      0.061030860090243964,
+      0.061030860090243964,
+      1.0333333333333334,
+      6.302554351850116,
+      0.27862909497695715,
+      12.605108703700232,
+      12.696212799273821,
+      0.10497991637459604,
+      6.346000976604223,
+      1.0,
+      12.692001953208447,
+      0.9234220775643885,
+      1933.2282825366658,
+      8123.78668751263,
+      5735.308310956658,
+      3242.2905491083407,
+      1.0,
+      1.0100005156081209,
+      4.985336522935383,
+      0.9082568775162446,
+      0.16800046520356451,
+      1.7481301609296782,
+      9.981150705828531,
+      1.0,
+      1.0
     ],
     "missing_value": 0.0
   },
@@ -112,110 +357,463 @@
     "train": {
       "sample_count": 360,
       "positive_count": 108,
-      "precision": 0.782258064516129,
-      "recall": 0.8981481481481481,
-      "f1": 0.8362068965517242,
-      "false_positive_rate": 0.10714285714285714,
-      "pr_auc": 0.9502144034592492,
+      "precision": 0.9557522123893806,
+      "recall": 1.0,
+      "f1": 0.9773755656108597,
+      "false_positive_rate": 0.01984126984126984,
+      "pr_auc": 0.99618063048152,
       "counts": {
-        "true_positive": 97,
-        "false_positive": 27,
-        "true_negative": 225,
-        "false_negative": 11
+        "true_positive": 108,
+        "false_positive": 5,
+        "true_negative": 247,
+        "false_negative": 0
       }
     },
     "validation": {
       "sample_count": 120,
       "positive_count": 36,
-      "precision": 0.7209302325581395,
-      "recall": 0.8611111111111112,
-      "f1": 0.7848101265822784,
-      "false_positive_rate": 0.14285714285714285,
-      "pr_auc": 0.9253257539283684,
+      "precision": 0.8717948717948718,
+      "recall": 0.9444444444444444,
+      "f1": 0.9066666666666667,
+      "false_positive_rate": 0.05952380952380952,
+      "pr_auc": 0.9703538256303608,
       "counts": {
-        "true_positive": 31,
-        "false_positive": 12,
-        "true_negative": 72,
-        "false_negative": 5
+        "true_positive": 34,
+        "false_positive": 5,
+        "true_negative": 79,
+        "false_negative": 2
       }
     },
     "test": {
       "sample_count": 120,
       "positive_count": 36,
-      "precision": 0.7837837837837838,
-      "recall": 0.8055555555555556,
-      "f1": 0.7945205479452055,
-      "false_positive_rate": 0.09523809523809523,
-      "pr_auc": 0.9319111540837329,
+      "precision": 0.868421052631579,
+      "recall": 0.9166666666666666,
+      "f1": 0.8918918918918918,
+      "false_positive_rate": 0.05952380952380952,
+      "pr_auc": 0.9784202466874986,
       "counts": {
-        "true_positive": 29,
-        "false_positive": 8,
-        "true_negative": 76,
-        "false_negative": 7
+        "true_positive": 33,
+        "false_positive": 5,
+        "true_negative": 79,
+        "false_negative": 3
       }
     }
   },
   "feature_weights": [
     {
-      "name": "bytes",
-      "coefficient": 2.609616641194318
+      "name": "packets_max",
+      "coefficient": 1.5099314410080822
     },
     {
-      "name": "rst_count",
-      "coefficient": 1.1263118571987982
+      "name": "flag_syn_ack_ratio",
+      "coefficient": 0.9923785299127551
     },
     {
-      "name": "ack_count",
-      "coefficient": 1.007759621519388
+      "name": "duration_max",
+      "coefficient": -0.9567728993185586
     },
     {
-      "name": "packets",
-      "coefficient": 0.9984581449923611
+      "name": "packets_mean",
+      "coefficient": 0.8803841901573273
     },
     {
       "name": "failed_auth",
-      "coefficient": 0.7816699154644006
+      "coefficient": 0.8058225061165974
     },
     {
-      "name": "bidirectional_ratio",
-      "coefficient": -0.14684773962078618
+      "name": "failed_auth_sum",
+      "coefficient": 0.8058225061165974
     },
     {
-      "name": "duration",
-      "coefficient": -0.1153011584868262
+      "name": "flag_psh_ratio",
+      "coefficient": 0.780777985628082
     },
     {
-      "name": "event_count",
-      "coefficient": -0.087734459823138
+      "name": "packets",
+      "coefficient": 0.7203460464916557
     },
     {
-      "name": "flow_event_count",
-      "coefficient": -0.087734459823138
+      "name": "packets_sum",
+      "coefficient": 0.7203460464916557
+    },
+    {
+      "name": "rst_count_sum",
+      "coefficient": 0.7189888259215342
+    },
+    {
+      "name": "rst_count",
+      "coefficient": 0.7189888259215342
+    },
+    {
+      "name": "ack_count",
+      "coefficient": 0.7129016818580693
+    },
+    {
+      "name": "ack_count_sum",
+      "coefficient": -0.7026693313517736
+    },
+    {
+      "name": "bytes_max",
+      "coefficient": 0.6974320514381654
+    },
+    {
+      "name": "bytes_std",
+      "coefficient": 0.5946905577256419
+    },
+    {
+      "name": "iat_variance_max",
+      "coefficient": 0.577943041502276
+    },
+    {
+      "name": "bytes_p90",
+      "coefficient": 0.5702811188567846
+    },
+    {
+      "name": "bytes_mean",
+      "coefficient": 0.5206402627987253
+    },
+    {
+      "name": "bidirectional_ratio_std",
+      "coefficient": 0.5055118460927943
+    },
+    {
+      "name": "payload_size_entropy",
+      "coefficient": -0.5027971352741096
+    },
+    {
+      "name": "tcp_window_size_std",
+      "coefficient": 0.4713996203921155
+    },
+    {
+      "name": "bytes_sum",
+      "coefficient": 0.44630338982197415
+    },
+    {
+      "name": "bytes",
+      "coefficient": 0.44630338982197415
+    },
+    {
+      "name": "bidirectional_ratio_mean",
+      "coefficient": -0.4138278993629464
+    },
+    {
+      "name": "duration_std",
+      "coefficient": -0.39728306095405685
+    },
+    {
+      "name": "payload_size_p50",
+      "coefficient": 0.3647711830491867
+    },
+    {
+      "name": "payload_size_std",
+      "coefficient": -0.35648316686045695
+    },
+    {
+      "name": "dst_port_entropy",
+      "coefficient": 0.3512242800242391
+    },
+    {
+      "name": "dst_port_wellknown_share",
+      "coefficient": -0.3290385459088098
+    },
+    {
+      "name": "dst_port_low_share",
+      "coefficient": 0.32903854590880943
+    },
+    {
+      "name": "payload_size_sum",
+      "coefficient": -0.272021727595548
+    },
+    {
+      "name": "payload_size",
+      "coefficient": -0.272021727595548
+    },
+    {
+      "name": "iat_mean_max",
+      "coefficient": -0.26547565483930374
+    },
+    {
+      "name": "iat_max",
+      "coefficient": -0.26547565483930374
+    },
+    {
+      "name": "source_port_nunique",
+      "coefficient": 0.2438591249496026
+    },
+    {
+      "name": "tcp_window_size_max",
+      "coefficient": 0.23660661115036594
+    },
+    {
+      "name": "syn_count_sum",
+      "coefficient": 0.23293786070459602
     },
     {
       "name": "syn_count",
-      "coefficient": -0.08773445982313668
+      "coefficient": 0.23293786070459602
     },
     {
-      "name": "iat_mean",
-      "coefficient": 0.06931520039279206
+      "name": "flow_event_count",
+      "coefficient": 0.23293786070459602
+    },
+    {
+      "name": "event_count",
+      "coefficient": 0.23293786070459602
     },
     {
       "name": "packet_event_count",
+      "coefficient": 0.23293786070459602
+    },
+    {
+      "name": "ports_per_host_max",
+      "coefficient": -0.2179122308376517
+    },
+    {
+      "name": "tcp_window_size_mean",
+      "coefficient": -0.2091583475027081
+    },
+    {
+      "name": "ttl_min",
+      "coefficient": 0.20728201289132311
+    },
+    {
+      "name": "payload_size_mean",
+      "coefficient": 0.20294523048342358
+    },
+    {
+      "name": "iat_cv",
+      "coefficient": -0.19143388276891038
+    },
+    {
+      "name": "retransmission_mean",
+      "coefficient": 0.18708222155867693
+    },
+    {
+      "name": "retransmission_rate",
+      "coefficient": 0.18708222155867693
+    },
+    {
+      "name": "ttl_nunique",
+      "coefficient": -0.17387639885325265
+    },
+    {
+      "name": "ttl_std",
+      "coefficient": -0.17035074000851153
+    },
+    {
+      "name": "payload_size_p90",
+      "coefficient": 0.16599691521858137
+    },
+    {
+      "name": "ttl_nunique_per_src",
+      "coefficient": -0.15385014880842351
+    },
+    {
+      "name": "iat_var",
+      "coefficient": -0.14681810356013644
+    },
+    {
+      "name": "iat_mean_var",
+      "coefficient": -0.14681810356013644
+    },
+    {
+      "name": "duration_mean",
+      "coefficient": 0.13007177694579927
+    },
+    {
+      "name": "duration",
+      "coefficient": 0.13007177694579927
+    },
+    {
+      "name": "ttl_var",
+      "coefficient": -0.1286165332015652
+    },
+    {
+      "name": "ttl_mean",
+      "coefficient": 0.11040607195650283
+    },
+    {
+      "name": "frag_df_share",
+      "coefficient": 0.10707921522953459
+    },
+    {
+      "name": "tcp_flags_nunique",
+      "coefficient": -0.105904997868926
+    },
+    {
+      "name": "iat_mean_p90",
+      "coefficient": -0.10093073895599305
+    },
+    {
+      "name": "iat_p90",
+      "coefficient": -0.10093073895599305
+    },
+    {
+      "name": "retransmission_sum",
+      "coefficient": 0.09843540860880923
+    },
+    {
+      "name": "retransmission_count",
+      "coefficient": 0.09843540860880923
+    },
+    {
+      "name": "iat_mean_mean",
+      "coefficient": -0.09477038353148966
+    },
+    {
+      "name": "iat_mean",
+      "coefficient": -0.09477038353148966
+    },
+    {
+      "name": "tcp_window_size_min",
+      "coefficient": 0.0898194866156567
+    },
+    {
+      "name": "dst_port_nunique",
+      "coefficient": 0.08609560256196602
+    },
+    {
+      "name": "destination_port_nunique",
+      "coefficient": 0.08609560256196602
+    },
+    {
+      "name": "rst_count_mean",
+      "coefficient": 0.04764609283784445
+    },
+    {
+      "name": "flag_rst_ratio",
+      "coefficient": 0.04764609283784445
+    },
+    {
+      "name": "src_port_ephemeral_share",
+      "coefficient": -0.040166978920724856
+    },
+    {
+      "name": "iat_min",
+      "coefficient": 0.03470318049637808
+    },
+    {
+      "name": "iat_mean_min",
+      "coefficient": 0.03470318049637808
+    },
+    {
+      "name": "frag_offset_nunique",
+      "coefficient": -0.02880512869842026
+    },
+    {
+      "name": "iat_variance_mean",
+      "coefficient": 0.027105527285862258
+    },
+    {
+      "name": "dst_port_sequential_score",
+      "coefficient": 0.005716683705907194
+    },
+    {
+      "name": "flag_no_ack_share",
+      "coefficient": 0.004653189221963604
+    },
+    {
+      "name": "ack_count_mean",
+      "coefficient": -0.004653189221963551
+    },
+    {
+      "name": "flag_ack_ratio",
+      "coefficient": -0.004653189221963551
+    },
+    {
+      "name": "dst_port_randomness",
+      "coefficient": 0.004160153790631008
+    },
+    {
+      "name": "urg_count_mean",
+      "coefficient": 0.0
+    },
+    {
+      "name": "protocol_nunique",
+      "coefficient": 0.0
+    },
+    {
+      "name": "proto_udp_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "proto_tcp_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "proto_icmp_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "ttl_max",
+      "coefficient": 0.0
+    },
+    {
+      "name": "syn_count_mean",
+      "coefficient": 0.0
+    },
+    {
+      "name": "urg_count_sum",
+      "coefficient": 0.0
+    },
+    {
+      "name": "high_port_ratio",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_urg_ratio",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_syn_ratio",
+      "coefficient": 0.0
+    },
+    {
+      "name": "frag_mf_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_xmas_share",
       "coefficient": 0.0
     },
     {
       "name": "external_destination_count",
       "coefficient": 0.0
+    },
+    {
+      "name": "flag_fin_ratio",
+      "coefficient": 0.0
+    },
+    {
+      "name": "fin_count_mean",
+      "coefficient": 0.0
+    },
+    {
+      "name": "fin_count_sum",
+      "coefficient": 0.0
     }
   ],
-  "training_seconds": 0.014767899992875755,
-  "inference_microseconds_per_sample": 1.631166475514571,
+  "training_seconds": 0.01693599999998696,
+  "inference_microseconds_per_sample": 1.3291666671951436,
   "runtime": {
     "python": "3.11.15",
     "scikit_learn": "1.9.0",
     "numpy": "2.4.6",
     "platform": "Windows-10-10.0.26200-SP0"
   },
-  "model_sha256": "7b1fafedbc094b4c37747959bf01a2c80032ab01973c35a13734acb4ca8c5c43"
+  "model_sha256": "2eecf6be8be5b4e99f625c197d88e1a22b9bf99ac91fd2293be16040a8a08b50",
+  "conformal": {
+    "conformal_version": "conformal-prediction-v1",
+    "coverage": 0.9,
+    "quantiles": {
+      "5": 0.3141746791460238
+    },
+    "calibration_sizes": {
+      "5": 120
+    },
+    "pooled_quantile": 0.3141746791460238,
+    "pooled_size": 120
+  },
+  "conformal_coverage": 0.9
 }

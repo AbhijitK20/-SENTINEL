@@ -100,12 +100,54 @@ def split_assignment(manifest: SplitManifest) -> dict[str, str]:
     return assignment
 
 
+class ProbabilityInterval(BaseModel):
+    """A coverage-guaranteed band around one probability estimate.
+
+    Produced by split conformal prediction. ``nominal_coverage`` is a promise with
+    a finite-sample guarantee on exchangeable data - not a score, and not a
+    posterior interval. The guarantee is marginal: it holds averaged over the data
+    distribution, not for any particular window, and not under distribution shift.
+    ``width`` and ``clipped`` are carried so a consumer can tell an informative
+    band from one that has been trimmed against the [0, 1] bounds.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    lower: float = Field(ge=0.0, le=1.0)
+    upper: float = Field(ge=0.0, le=1.0)
+    nominal_coverage: float = Field(gt=0.0, lt=1.0)
+    method: str = Field(min_length=1)
+    calibration_size: int = Field(ge=1)
+    quantile: float = Field(ge=0.0)
+    clipped: bool = False
+    caveat: str = Field(
+        min_length=1,
+        default=(
+            "Marginal coverage on exchangeable data. Not conditional on this window, "
+            "and not valid under distribution shift."
+        ),
+    )
+
+
 class ProbabilityPoint(BaseModel):
-    """One point in a future infiltration probability timeline."""
+    """One point in a future infiltration probability timeline.
+
+    ``confidence`` is per-window: it composes this horizon's own test skill,
+    how far the per-horizon model and the baseline disagree on this window, and
+    how far the probability sits from the decision boundary. It is a score, not
+    a posterior interval - nothing here is sampled. ``0.0`` means there was no
+    measurement to stand on.
+
+    ``interval`` is the stronger object: a split-conformal band whose
+    ``nominal_coverage`` is a finite-sample guarantee. It is ``None`` when no
+    calibration split is available, which is the normal case for a freshly
+    trained model and is stated rather than papered over.
+    """
 
     window: int = Field(ge=1)
     infiltration_probability: float = Field(ge=0, le=1)
     confidence: float = Field(ge=0, le=1)
+    interval: ProbabilityInterval | None = None
 
 
 class PredictedStage(BaseModel):
@@ -286,6 +328,43 @@ class SignedFeedback(BaseModel):
     key_version: str = Field(min_length=1)
 
 
+class HorizonAttribution(BaseModel):
+    """Why one point of the probability timeline reads the way it does.
+
+    ``method`` names the technique that produced the values, so a reader always
+    knows whether they are exact Shapley values or a local approximation. A
+    ``spread`` is present when the forecast came from sampled simulation.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    window: int = Field(ge=1)
+    probability: float = Field(ge=0.0, le=1.0)
+    method: str = Field(min_length=1)
+    top_features: list[DrivingFeature] = Field(default_factory=list)
+    spread: float | None = None
+
+
+class ForecastExplanation(BaseModel):
+    """Attribution for a whole forecast: per-step drivers plus a counterfactual.
+
+    Every prediction this product emits carries one of these, or an explicit
+    ``unavailable_reason``. A forecast with no explanation is a black box.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: str = Field(min_length=1)
+    method_detail: str = ""
+    horizon: list[HorizonAttribution] = Field(default_factory=list)
+    current_window: list[DrivingFeature] = Field(default_factory=list)
+    counterfactual: str | None = None
+    caveat: str = (
+        "Model evidence, not causation: these attributions explain this model, "
+        "not the attacker's intent."
+    )
+
+
 class Forecast(BaseModel):
     """Serializable inference output shown to an analyst."""
 
@@ -304,3 +383,4 @@ class Forecast(BaseModel):
     supporting_events: list[str] = Field(default_factory=list)
     coverage: dict[str, bool] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
+    explanation: ForecastExplanation | None = None

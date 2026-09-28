@@ -16,17 +16,37 @@ SENTINEL treats network traffic as a **trajectory, not a snapshot**. Flows are i
 
 Every prediction carries its evidence; every metric in the UI is labelled **OBSERVED vs FORECAST**. The pipeline runs fully offline — no cloud AI, no data leaves the machine.
 
-## Validation on Real Data
+## Validation — what is actually measured
 
-We benchmarked on **CIC-IDS2017** (~900k real flows; UNB licence reviewed and cited, Sharafaldin et al., ICISSP 2018; checksums verified; dataset never committed to the repo). Evaluation used **strict cross-day temporal splits**: Tuesday for training, Thursday morning for calibration, Thursday afternoon for testing — an **attack family (Infiltration) never seen during training**, a zero-day-style test.
+**On synthetic data, which is what this repository can currently reproduce.**
+Every number below is printed by a script in this repo; see `docs/CLAIMS.md` for
+the command behind each one.
 
-**Results (measured, reproducible via `run_all.sh`):**
+- Baseline F1 **0.892**, per-horizon GRU F1 **0.957** on the held-out split
+- World-model open-loop skill **+0.189** against persistence, **-0.429** against
+  the linear transition baseline and **-0.095** under the ablation
+- Rolling-origin backtest: direction accuracy **0.91** mean across 4 origins
+- Per-rule detector precision/recall on held-out windows, including the
+  unflattering parts
 
-- **23 of 34 attack windows** caught (per-horizon) and **25 of 34** (rollout forecaster) at the pinned 0.5 threshold
-- **False-early rate 0.12–0.18** — the model stays quiet on benign traffic
-- A full threshold A/B (validation-calibrated vs pinned default) is reported rather than cherry-picked
+**On real CIC-IDS2017 traffic: not measured.** No CIC-IDS2017 CSV is present in
+this repository and none is downloaded by it; `data/raw/` holds only a synthetic
+schema fixture. An earlier draft of this abstract quoted ~900k real flows and a
+cross-day benchmark with a false-early rate of 0.12-0.18. Those numbers have been
+withdrawn: they were not backed by a committed artifact, and this project does
+not publish a measurement it cannot reproduce. The dataset's licence is
+research-use and it is cited correctly (Sharafaldin et al., ICISSP 2018) — a
+correct citation is not evidence that the run happened.
 
-**Documented limitation:** median lead time is 0.0 windows — detection fires within the same window the attack becomes observable. We state this everywhere rather than overclaim, and identify the cause (lab granularity vs attack duration) with clear paths to improve it (longer-dwell datasets, finer windows).
+To make the real-data claim: place the licensed CSVs in
+`data/raw/cic-ids2017/TrafficLabelling/` and run `make bench-real`.
+
+**Also worth stating plainly:** the linear transition baseline that the world
+model is compared against is barely a simulator — its stability projection
+discards ~99.999% of the fitted map — so that comparison is not like-for-like,
+and the forecast says so on its face. The lateral-movement detector rule has
+precision 0.194 on held-out windows. Neither is hidden. See
+`docs/KNOWN_LIMITATIONS.md`.
 
 ## Engineering Discipline
 

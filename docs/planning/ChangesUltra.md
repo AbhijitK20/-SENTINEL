@@ -581,11 +581,16 @@ No relational modelling between entities in the network.
 
 #### Files Created
 - `src/sentinel/graph/state.py`: `NetworkGraph` dataclass, `build_network_graph()` from NetworkState windows
-- `src/sentinel/graph/gnn.py`: hand-rolled GAT encoder (no PyTorch Geometric dependency), multi-head attention, edge features
-- `src/sentinel/graph/fusion.py`: graph embedding → feature vector for temporal model input
+- `src/sentinel/graph/gnn.py`: hand-rolled GAT encoder — **later deleted**, see below
+- `src/sentinel/graph/fusion.py`: graph embedding → feature vector for temporal model input — **planned, never written**
 
-#### Files Modified
-- `src/sentinel/temporal.py`: accepts optional graph embeddings
+#### Outcome (corrected)
+Only `graph/state.py` shipped and is used. The GAT in `gnn.py` had no caller,
+no trained weights, and no path to a forecast; the fusion layer was never
+written, and `temporal.py` never accepted graph embeddings. All of it has been
+removed rather than left looking like a capability. The graph builder remains as
+a view of a window. A graph encoder, if ever added, must arrive with weights, a
+measured result, and a place in the forecast path.
 
 #### Constraint
 Do NOT take PyTorch Geometric dependency — hand-rolled GAT.
@@ -614,12 +619,17 @@ No predictive simulation of future network states.
 No driving-feature attribution or counterfactual explanations.
 
 #### Files Created
-- `src/sentinel/explain/contracts.py`: `Explanation`, `FeatureAttribution`, `Counterfactual` Pydantic models
-- `src/sentinel/explain/attribution.py`: SHAP exact-linear, kernel, gradient, attention methods
+- `src/sentinel/explain/contracts.py`: `Explanation`, `FeatureAttribution`, `Counterfactual`
+- `src/sentinel/explain/shap_engine.py`: exact Shapley, permutation, integrated gradients
 - `src/sentinel/explain/counterfactual.py`: counterfactual generation
-- `src/sentinel/explain/temporal_attention.py`: temporal attention weight extraction
-- `src/sentinel/explain/graph_attention.py`: graph attention weight extraction
-- `src/sentinel/explain/pipeline.py`: unified explanation pipeline
+- `src/sentinel/explain/service.py`: the single place an explanation is produced
+- attention-weight extraction — **planned, never reachable**: no attention tensor had a producer, so the helpers were deleted
+
+#### Note on the "kernel" method
+The original plan listed a kernel-SHAP method. It was never implemented, and a
+placeholder that reported kernel-shaped numbers without running a kernel was
+removed. A method the model cannot support now raises rather than substituting
+another one.
 
 #### Files Modified
 - `src/sentinel/predict.py`: `explain()` entry point added
@@ -1081,9 +1091,9 @@ Pre-existing skips (not caused by us):
 | S9: Live Demo | Complete | live.py, attack_demo.py, Grafana |
 | S10: Submission | Pending | README, architecture doc, slides |
 | P1: Feature Enrichment v3 | Complete | 26 features, FeatureRegistry, F1 0.861 |
-| P2: Graph Neural Network | Complete | NetworkGraph, hand-rolled GAT, fusion |
+| P2: Graph Neural Network | Not shipped | `build_network_graph` only; the GAT was written, never wired, and was deleted |
 | P3: World Model | Complete | RSSM, imagine(), uncertainty |
-| P4: Explainability | Complete | SHAP, attention, counterfactuals, contracts |
+| P4: Explainability | Complete | SHAP (exact/permutation/gradient), counterfactuals, contracts |
 | P5: MITRE ATT&CK | Complete | Tactics, techniques, Navigator export |
 | P6: Persistence | Complete | SQLAlchemy models, Repository, migrations |
 | P7: Event Bus | Complete | InProcessBus, EventTimeWindower |

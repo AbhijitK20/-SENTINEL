@@ -35,8 +35,16 @@ PROBE_BYTES = 200.0
 PROBE_MIN_EDGES = 6.0  # a scan is many probe edges; a few tiny flows are not
 FAILED_AUTH_PER_MIN_WARN = 1.0  # failed auths per minute, from mean x flows
 FAILED_AUTH_PER_MIN_ALERT = 2.0
-NEW_EDGE_BYTES_WARN = 25_000.0  # bytes on internal edges unseen in history
-NEW_EDGE_BYTES_ALERT = 50_000.0
+# Bytes on internal edges that history has already seen. The old 25k/50k band was
+# on *new* edges, which this attack chain makes the wrong quantity - see
+# `detect_lateral`.
+#
+# Fitted on the **validation** split by sweeping for the best F1, which lands at
+# 55,000; the band is placed so the 0.5 crossing sits there and full confidence at
+# 60,000, where the classes separate (validation benign p99 61k, lateral p10
+# 63k). The test split was scored once, afterwards. See `make bench-detectors`.
+KNOWN_EDGE_BYTES_WARN = 50_000.0
+KNOWN_EDGE_BYTES_ALERT = 60_000.0
 EXFIL_BYTES_WARN = 75_000.0  # absolute window-bytes floor
 EXFIL_BYTES_ALERT = 150_000.0
 LATERAL_LOOKBACK = 5  # windows of recent history for new-edge detection
@@ -306,39 +314,82 @@ def detect_credential(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFi
 
 
 def detect_lateral(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
-    """Volume moving across internal edges unseen in recent history.
+    """Sustained volume on internal edges that history has already seen.
 
-    Edges are compared against a bounded lookback (LATERAL_LOOKBACK windows),
-    not all history: recon-phase probes pre-register the very edges lateral
-    movement later uses, so unbounded history suppresses the signal. New-edge
-    counts overlap between benign browsing and lateral hops (benign max 4,
-    lateral max 5 on validation data), so the count is evidence only; the
-    score keys on bytes across new edges (benign max 20k, lateral up to 81k).
+    **This rule used to score the opposite thing and measured the wrong
+    quantity.** It scored bytes across internal edges *unseen* in the last
+    ``LATERAL_LOOKBACK`` windows, on the premise that lateral movement shows up as
+    new connections. Two measurements killed that premise:
+
+    - Sprint 6 red-teamed the byte-count rule and found it evadable for free: send
+      the same payload more slowly, every window stays under the band, cost 0
+      bytes and 0.8 windows of dwell time.
+    - The detector benchmark scored it at precision 0.194, recall 0.259, F1 0.222
+      against 29 false positives - a narrow absolute band that is easy to sit
+      under in both directions.
+
+    Replacing the count with a *share* of window bytes, which is scale-invariant
+    and therefore survives throttling, made it **worse**, not better: F1 0.123.
+    The reason is the generator's own attack chain. Reconnaissance probes
+    pre-register the internal edges that lateral movement later uses, so by the
+    lateral phase most internal edges are *known*, while benign browsing keeps
+    discovering genuinely new ones. Measured: benign new-edge share p50 0.185,
+    lateral p50 0.048 - the quantity the old rule scored moved the wrong way.
+
+    So the premise, not the threshold, was the bug. Volume on **known** internal
+    edges separates the classes almost completely. Measured on the test split
+    under the corrected harness:
+
+        old rule (new-edge bytes):  precision 1.000  recall 0.185  F1 0.312
+        new rule (known-edge bytes): precision 0.929  recall 0.963  F1 0.945
+
+    The old rule was precise and nearly blind - it saw 5 of 27 lateral windows -
+    and the precision 0.194 previously published for it was an artefact of the
+    benchmark bug described in `scripts/run_detector_benchmark.py`, which counted
+    the sequence detector's predictions as detections and put 29 of its own false
+    alarms in this rule's bucket.
+
+    Honest limit: this is still an absolute byte count, so throttling still
+    evades it. `make bench-evasion` measures the current price: 14 of 16 attacking
+    windows, about 0.50 extra windows of dwell time and no extra bandwidth, down
+    from 0.80 before. The `rehearse_edge_one_window_early` evasion that defeated
+    the old rule for free no longer works, because pre-warming an edge now hands
+    the attacker one more known edge to be measured on.
     """
     lookback = ctx.history[-LATERAL_LOOKBACK:]
     prior_edges: set[tuple[str, str]] = set()
     for prior in lookback:
         prior_edges.update((edge["source"], edge["destination"]) for edge in prior.edge_summary)
-    new_edges = [
+    known_edges = [
         edge
         for edge in ctx.state.edge_summary
-        if (edge["source"], edge["destination"]) not in prior_edges
+        if (edge["source"], edge["destination"]) in prior_edges
     ]
-    new_bytes = sum(edge["bytes"] for edge in new_edges)
-    probability = _band_score(new_bytes, NEW_EDGE_BYTES_WARN, NEW_EDGE_BYTES_ALERT)
+    known_bytes = sum(edge["bytes"] for edge in known_edges)
+    new_edges = sum(
+        1
+        for edge in ctx.state.edge_summary
+        if (edge["source"], edge["destination"]) not in prior_edges
+    )
+    # Cold start: with no baseline there are no known edges, so the score is
+    # necessarily zero rather than accidentally high. Stated rather than capped,
+    # because the new rule cannot fire on an empty history at all.
+    cold = len(ctx.history) < MIN_HISTORY
+    probability = (
+        0.0 if cold else _band_score(known_bytes, KNOWN_EDGE_BYTES_WARN, KNOWN_EDGE_BYTES_ALERT)
+    )
     warnings: list[str] = []
-    # "New edge" is defined against history: with no baseline every edge looks
-    # new, so cold-start windows are capped sub-alert (busy benign minutes
-    # would otherwise alert).
-    if len(ctx.history) < MIN_HISTORY:
-        probability = min(probability, 0.5)
+    if cold:
         warnings.append(
-            "benign history is too short for a new-edge baseline — lateral "
-            "movement is scored conservatively until a baseline exists"
+            "benign history is too short to establish which internal edges are "
+            "known — lateral movement is scored zero until a baseline exists"
         )
     evidence = [
-        _evidence("new_internal_edges", "internal edges unseen in history", len(new_edges)),
-        _evidence("new_edge_bytes", "bytes on new internal edges", round(new_bytes, 0)),
+        _evidence(
+            "known_internal_edges", "internal edges already seen in history", len(known_edges)
+        ),
+        _evidence("known_edge_bytes", "bytes on known internal edges", round(known_bytes, 0)),
+        _evidence("new_internal_edges", "internal edges unseen in history", new_edges),
     ]
     return _finding("lateral_movement", ctx, probability, evidence, warnings, thresholds.lateral)
 

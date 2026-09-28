@@ -2,11 +2,23 @@
 
 ## Current Milestone
 
-**Sprints 0-8 complete. The full backlog (PB-001..PB-012) is implemented,
-tested, and audited against the Definition of Done — including the licensed
-real-data run (PB-001): CIC-IDS2017 downloaded with licence review, and a
-cross-day temporal benchmark executed end-to-end on real traffic.
-See `reports/generated/real-benchmark/REAL_BENCHMARK.md`.
+**Sprints 0-8 implemented, tested, and audited against the Definition of Done —
+with one exception that is now stated plainly: the licensed CIC-IDS2017 run
+(PB-001) has NOT been executed.** No CIC-IDS2017 CSV is present in this
+repository and none is downloaded by it; `data/raw/` holds only `fixture-lab/`,
+a synthetic file this project generates to exercise the adapter's column
+handling. `reports/generated/real-benchmark/` does not exist.
+
+Everything else below was produced by a script in this repository. The real-data
+forecast table that used to be published in `docs/RESULTS.md` has been
+**withdrawn to PENDING**, because it was not backed by a committed artifact.
+`docs/CLAIMS.md` is the authority on what is and is not currently evidenced;
+`docs/KNOWN_LIMITATIONS.md` records what the measurements actually show,
+including two results that are unflattering.
+
+To close PB-001: place the licensed CSVs in
+`data/raw/cic-ids2017/TrafficLabelling/`, run `make bench-real`, and commit the
+report.
 
 Sprint 9 (live demo) adds real-time detection: `sentinel/live.py` runs
 rolling event-time windows from four sources (CSV replay, JSONL sensor,
@@ -355,7 +367,7 @@ Lateral Movement ~61 s).
 Roadmap phases 7-11 gained honest in-process implementations: model registry
 with approve/rollback (`registry.py`), PSI drift monitoring (`drift.py`),
 case lifecycle with SLA (`cases.py`), NIST/ISO/SOC2 control reporting with
-gaps listed (`compliance.py`), FedAvg federated simulation (`federated.py`),
+gaps listed (`compliance.py`),
 HMAC-signed analyst feedback, org_id tenant fields on API keys, four
 telemetry-gated detectors (C2/phishing/insider/malware), a Prometheus
 `/metrics` endpoint, `POST /v1/events` live push, GitHub Actions CI, and a

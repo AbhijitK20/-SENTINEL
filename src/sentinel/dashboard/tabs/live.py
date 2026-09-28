@@ -20,6 +20,7 @@ from sentinel.attack_phases import PHASE_NAMES, PHASES, parse_summary
 from sentinel.dashboard.live_artifacts import select_live_artifacts
 from sentinel.feedback import VERDICTS as FEEDBACK_VERDICTS
 from sentinel.feedback import FeedbackStore
+from sentinel.frontend.tokens import color, plotly_layout
 from sentinel.live import (
     CsvReplaySource,
     EventReplaySource,
@@ -37,6 +38,17 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[4]
 REPORTS_DIR = ROOT / "reports" / "generated"
 LOCAL_ATTACK_SPEED = 2.0
+
+# The live timeline re-renders on a timer. A new window animates in rather than
+# cutting to it, and the camera is held still so the eye can follow the shape of
+# the curve instead of re-finding it.
+LIVE_CHART_CONFIG = {
+    "displayModeBar": False,
+    "scrollZoom": False,
+    "doubleClick": False,
+    "transition": {"duration": 500, "easing": "cubic-in-out"},
+    "frame": {"duration": 420, "redraw": False},
+}
 
 
 @st.fragment(run_every=2.0)
@@ -113,8 +125,8 @@ def _render_live_status(status: Any) -> None:
                     "Stage: %{customdata[0]}<br>"
                     "Events: %{customdata[1]}<extra></extra>"
                 ),
-                line=dict(color="#6dd3a8", width=3),
-                marker=dict(size=8),
+                line={"color": color("risk-elevated"), "width": 3},
+                marker={"size": 8},
             )
         )
         if peak is not None:
@@ -126,21 +138,24 @@ def _render_live_status(status: Any) -> None:
                     name="Peak observed",
                     text=[f"Peak {peak.probability:.2f}"],
                     textposition="bottom center",
-                    marker=dict(color="#ef6f6f", size=14, symbol="star"),
+                    marker={"color": color("confirmed"), "size": 14, "symbol": "star"},
                     hovertemplate="Peak observed: %{y:.3f}<extra></extra>",
                 )
             )
         fig.add_hline(y=status.threshold, line_dash="dot", annotation_text="threshold")
         fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0b0d12",
-            plot_bgcolor="#0b0d12",
-            title="Live probability timeline",
-            xaxis_title="Event time",
-            yaxis=dict(range=[0, 1], title="P(infiltration)"),
-            height=380,
+            **plotly_layout(
+                title="Live probability timeline",
+                xaxis={"title": {"text": "event time"}},
+                yaxis={"range": [0, 1], "title": {"text": "P(infiltration)"}},
+                height=380,
+                # uirevision keeps the camera still while new windows arrive, so
+                # the trace animates in without the view jumping.
+                uirevision="live-timeline",
+                transitions={"x": {"duration": 0}, "y": {"duration": 0}},
+            )
         )
-        st.plotly_chart(fig, use_container_width=True, key="live-timeline")
+        st.plotly_chart(fig, width="stretch", key="live-timeline", config=LIVE_CHART_CONFIG)
 
         with st.expander("Stage evidence (latest window)", expanded=alert):
             if latest.stage_evidence:
@@ -358,7 +373,17 @@ def _stop_local_attack_demo() -> None:
 
 def render(seed: int = 42, loaded: Any = None, baseline_run: Any = None) -> None:
     """Render the Live Detection tab."""
-    st.subheader("Live Detection")
+    engine = st.session_state.get("live_engine")
+    # The streaming marker only shows when something is actually running, so it
+    # never becomes decoration on a static screen.
+    if engine is not None:
+        st.markdown(
+            '<div class="sntl-lede"><span class="sntl-live-dot"></span>'
+            "Streaming — windows below update as events arrive.</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.subheader("Live Detection")
     st.caption(
         "Rolling windows over streaming events, scored by the same trained "
         "models as every other tab. OBSERVED = aggregated window features; "

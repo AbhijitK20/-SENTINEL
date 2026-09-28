@@ -35,7 +35,11 @@ def select_live_artifacts(
     if attack_requested:
         # The live attack story is scored with the transparent baseline
         # so its observable attack-shaped spike is not smoothed away by
-        # the lightweight hosted GRU profile.
+        # the lightweight hosted GRU profile. When the console loaded a
+        # release bundle instead of training in-session there is no in-memory
+        # run, and the loaded artifacts are already the shipped baseline.
+        if baseline_run is None:
+            return loaded
         return artifacts_from_runs(baseline_run)
 
     real_baseline_dir = reports_dir / "real-benchmark" / "baseline"

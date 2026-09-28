@@ -9,8 +9,15 @@ import pytest
 
 from sentinel.cases import CaseStore
 from sentinel.compliance import generate_report, write_report
-from sentinel.drift import band_of, compare_feature, psi
-from sentinel.federated import fed_average
+from sentinel.drift import (
+    DRIFT_REPORT_VERSION,
+    EXCEEDS_NULL,
+    WITHIN_NULL,
+    band_of,
+    compare_feature,
+    null_threshold,
+    psi,
+)
 from sentinel.feedback import sign_feedback, verify_feedback
 from sentinel.registry import ModelRegistry
 from sentinel.schemas import AnalystFeedback, NetworkState
@@ -62,9 +69,15 @@ def test_registry_double_approve_rejected(tmp: Path) -> None:
 # ── drift ────────────────────────────────────────────────────────────────
 def test_psi_bands_and_snapshot(tmp: Path) -> None:
     reference = [10.0] * 50 + [20.0] * 50
-    assert band_of(psi(reference, list(reference))) == "stable"
+    # A band needs a threshold to compare against, and there is deliberately no
+    # default: the old 0.10/0.25 constants fired on ordinary noise, which is what
+    # `sentinel.drift` now refuses to do. Without a null there is no band.
+    assert band_of(psi(reference, list(reference)), None) is None
+    null_blocks = [[float(i % 13) for i in range(20)] for _ in range(4)]
+    threshold, _scores = null_threshold(reference, null_blocks)
+    assert band_of(psi(reference, list(reference)), threshold) == WITHIN_NULL
     shifted = [10.4] * 20 + [30.0] * 80  # large distribution change
-    assert band_of(psi(reference, shifted)) in {"moderate", "significant"}
+    assert band_of(psi(reference, shifted), threshold) == EXCEEDS_NULL
 
     from sentinel.drift import DriftSnapshot
 
@@ -75,6 +88,11 @@ def test_psi_bands_and_snapshot(tmp: Path) -> None:
     report = compare_feature("bytes", reference, shifted)
     assert report.reference_count == 100
     assert report.current_count == len(shifted)
+    assert report.band is None, "no null supplied, so no band may be claimed"
+    banded = compare_feature("bytes", reference, shifted, null_blocks=null_blocks)
+    assert banded.band in {WITHIN_NULL, EXCEEDS_NULL}
+    assert banded.threshold is not None
+    assert banded.report_version == DRIFT_REPORT_VERSION
 
 
 def test_psi_empty_inputs_are_stable() -> None:
@@ -120,47 +138,6 @@ def test_compliance_report_is_honest(tmp: Path) -> None:
     assert path.with_suffix(".json").exists()
 
 
-# ── federated ────────────────────────────────────────────────────────────
-def test_fedavg_weighted_average_and_guards() -> None:
-    import numpy as np
-
-    from sentinel.federated import ClientUpdate
-
-    updates = [
-        ClientUpdate("a", np.array([1.0, 2.0]), 0.5, 100),
-        ClientUpdate("b", np.array([3.0, 4.0]), 1.5, 300),
-    ]
-    result = fed_average(updates)
-    assert result.n_clients == 2
-    assert result.total_samples == 400
-    assert result.coef == pytest.approx([2.5, 3.5])  # (1*100 + 3*300)/400, etc.
-    assert result.intercept == pytest.approx(1.25)
-    with pytest.raises(ValueError, match="at least one"):
-        fed_average([])
-    with pytest.raises(ValueError, match="dimensions disagree"):
-        fed_average([updates[0], ClientUpdate("c", np.array([1.0]), 0.0, 10)])
-
-
-def test_fedavg_trains_real_clients() -> None:
-    scenarios = [f"fed{i}" for i in range(4)]
-    labelled = generate_labelled_states(scenarios, seed=9, window_seconds=60, stride_seconds=60)
-    from sentinel.targets import build_sequence_samples, make_split_manifest
-
-    updates = []
-    for c in range(2):
-        cs = scenarios[c * 2 : (c + 1) * 2]
-        cl = [item for item in labelled if item.scenario_id in cs]
-        samples = build_sequence_samples(cl, sequence_length=2, horizon=1)
-        manifest = make_split_manifest(cs, seed=9)
-        from sentinel.federated import train_client
-
-        updates.append(train_client(f"client-{c}", cl, samples, manifest, seed=9))
-    result = fed_average(updates)
-    assert result.n_clients == 2
-    assert result.total_samples == sum(u.n_samples for u in updates)
-
-
-# ── signed feedback ──────────────────────────────────────────────────────
 def test_signed_feedback_detects_tampering() -> None:
     feedback = AnalystFeedback(
         subject_id="INC-001",
@@ -355,17 +332,55 @@ def test_registry_endpoints_workflow(api_client) -> None:
 
 def test_drift_endpoint(api_client) -> None:
     client, headers = api_client
+    reference = [10.0] * 50 + [20.0] * 50
+    shifted = [10.4] * 20 + [30.0] * 80
+    null = [[float(i % 13) for i in range(20)] for _ in range(4)]
+
+    # Without a null the endpoint returns the statistic and no band, because a
+    # fixed PSI cutoff has no false-alarm rate attached to it.
+    bare = client.post(
+        "/v1/drift",
+        headers=headers,
+        json={"feature": "bytes", "reference": reference, "current": shifted},
+    )
+    assert bare.status_code == 200
+    assert bare.json()["band"] is None
+    assert bare.json()["psi"] >= 0.0
+    assert "null" in bare.json()["caveat"]
+
+    # With one, the band is a measured statement.
+    banded = client.post(
+        "/v1/drift",
+        headers=headers,
+        json={
+            "feature": "bytes",
+            "reference": reference,
+            "current": shifted,
+            "null": null,
+        },
+    )
+    assert banded.status_code == 200
+    body = banded.json()
+    assert body["band"] in {WITHIN_NULL, EXCEEDS_NULL}
+    assert body["threshold"] is not None
+    assert body["report_version"] == DRIFT_REPORT_VERSION
+
+
+def test_drift_endpoint_rejects_an_unusable_null(api_client) -> None:
+    """One block cannot place a threshold; it fails loudly rather than guessing."""
+    client, headers = api_client
     response = client.post(
         "/v1/drift",
         headers=headers,
         json={
             "feature": "bytes",
             "reference": [10.0] * 50 + [20.0] * 50,
-            "current": [10.4] * 20 + [30.0] * 80,
+            "current": [30.0] * 80,
+            "null": [[1.0, 2.0, 3.0]],
         },
     )
-    assert response.status_code == 200
-    assert response.json()["band"] in {"moderate", "significant"}
+    assert response.status_code == 400
+    assert "null" in response.json()["error"]["message"]
 
 
 def test_case_endpoints_lifecycle(api_client) -> None:

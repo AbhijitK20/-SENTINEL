@@ -87,17 +87,55 @@ def test_credential_fires_on_recon_stage_windows(labelled) -> None:
     assert hits >= 3, f"credential detector too quiet: {hits}"
 
 
-def test_lateral_fires_only_on_lateral_windows(labelled) -> None:
-    fired = 0
+def test_lateral_fires_mostly_on_lateral_windows(labelled) -> None:
+    """The rule is no longer precision-1.0, and that is the trade that was made.
+
+    This test used to assert that the lateral rule *never* fired outside the
+    lateral stage. That was true of the old rule, which scored bytes on *new*
+    internal edges: it was precise and nearly blind, seeing 5 of 27 lateral
+    windows. The rule now scores bytes on *known* internal edges, because recon
+    pre-registers the edges lateral movement later uses and "new" measured the
+    wrong quantity. It sees 26 of 27 and misses precision on 2 windows.
+
+    The floors below are the measured behaviour with headroom, not the measured
+    values, so a small seed-to-seed wobble does not fail the suite. The exact
+    figures come from `make bench-detectors`, which scores a held-out test split
+    rather than the training windows this fixture is built from.
+    """
+    lateral_total = sum(1 for i in labelled if i.label.attack_stage == "Lateral Movement")
+    true_positive = false_positive = 0
     for index, item in enumerate(labelled):
         history = [x.state for x in labelled[max(0, index - 6) : index]]
         finding = detect_lateral(_ctx(item.state, history), DetectorSet())
-        if finding.is_alert:
-            fired += 1
-            assert item.label.attack_stage == "Lateral Movement", (
-                f"lateral alert on {item.label.attack_stage}"
-            )
-    assert fired >= 1, "lateral detector never fires"
+        if not finding.is_alert:
+            continue
+        if item.label.attack_stage == "Lateral Movement":
+            true_positive += 1
+        else:
+            false_positive += 1
+    assert lateral_total > 0
+    recall = true_positive / lateral_total
+    precision = true_positive / max(1, true_positive + false_positive)
+    assert recall >= 0.80, f"lateral recall {recall:.2f} too low"
+    assert precision >= 0.70, f"lateral precision {precision:.2f} too low"
+
+
+def test_lateral_scores_known_edges_not_new_ones(labelled) -> None:
+    """The premise, pinned so it cannot be silently reverted.
+
+    The old rule keyed on edges *unseen* in the lookback. Reconnaissance probes
+    pre-register the internal edges lateral movement later uses, so during a lateral
+    phase most internal edges are already known - the quantity the old rule scored
+    moved the wrong way, and a share-based replacement was worse still (F1 0.123
+    against 0.312). Volume on known edges is what separates the classes.
+    """
+    history = [x.state for x in labelled[:6]]
+    ctx = _ctx(labelled[6].state, history)
+    finding = detect_lateral(ctx, DetectorSet())
+    names = {item.name for item in finding.evidence}
+    assert "known_edge_bytes" in names
+    assert "known_internal_edges" in names
+    assert "new_edge_bytes" not in names, "the old, backwards quantity is back"
 
 
 def test_exfil_alerts_only_on_attack_windows(labelled) -> None:

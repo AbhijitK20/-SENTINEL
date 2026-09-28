@@ -27,7 +27,10 @@ from sentinel.feature_computes.flags import (
 from sentinel.feature_computes.packets import (
     frag_df_share,
     frag_mf_share,
+    frag_offset_nunique,
     iat_stats,
+    retransmission_count,
+    retransmission_rate,
     ttl_nunique_per_src,
 )
 from sentinel.feature_computes.ports import (
@@ -41,7 +44,7 @@ from sentinel.feature_computes.ports import (
 )
 from sentinel.schemas import NetworkState, UnifiedEvent
 
-FEATURE_VERSION = "state-features-v3"
+FEATURE_VERSION = "state-features-v4"
 
 
 class Agg(StrEnum):
@@ -75,6 +78,7 @@ AGGREGATION_POLICY: dict[str, tuple[Agg, ...]] = {
     "iat_mean": (Agg.MEAN, Agg.VAR, Agg.MAX, Agg.MIN, Agg.P90),
     "iat_variance": (Agg.MEAN, Agg.MAX),
     "iat_max": (Agg.MEAN, Agg.MAX),
+    "retransmission": (Agg.SUM, Agg.MEAN),
     "bidirectional_ratio": (Agg.MEAN, Agg.STD),
     "syn_count": (Agg.SUM, Agg.MEAN),
     "ack_count": (Agg.SUM, Agg.MEAN),
@@ -88,6 +92,11 @@ AGGREGATION_POLICY: dict[str, tuple[Agg, ...]] = {
     "protocol": (Agg.NUNIQUE,),
     "tcp_flags": (Agg.NUNIQUE,),
 }
+
+# Raw per-event header values consumed by the explicit packet computes below.
+# Aggregating them (e.g. summing IP flag words) would be meaningless, so they
+# never reach the generic sum fallback.
+RAW_ONLY_FEATURES = frozenset({"fragment_flags", "ip_flags", "frag_offset"})
 
 # Aggregation types that are undefined for single-event windows.
 _UNDEFINED_FOR_SINGLE = {Agg.STD, Agg.VAR, Agg.P50, Agg.P90, Agg.P99, Agg.ENTROPY}
@@ -198,6 +207,8 @@ def _build_state(
 
     # Apply the aggregation policy to each feature present in the window.
     for name, values in feature_values.items():
+        if name in RAW_ONLY_FEATURES:
+            continue
         aggs = AGGREGATION_POLICY.get(name)
         if aggs is None:
             # Unknown feature: fall back to sum (count-like) if all non-negative,
@@ -385,8 +396,10 @@ def _build_state(
             features[name] = 0.0
 
     # Packet-level features (P1-T3) — fragment flags, retransmissions, IAT, TTL
-    # Fragment features from IP flags (if available)
-    ip_flags = feature_values.get("ip_flags", [])
+    # Fragment features come from the IP header flags. PCAP ingestion emits
+    # `fragment_flags`; other producers may use `ip_flags` — accept both so a
+    # real capture and a replay produce identical feature names.
+    ip_flags = feature_values.get("fragment_flags") or feature_values.get("ip_flags") or []
     if ip_flags:
         int_ip_flags = [int(f) for f in ip_flags]
 
@@ -399,6 +412,21 @@ def _build_state(
     else:
         features["frag_df_share"] = 0.0
         features["frag_mf_share"] = 0.0
+
+    # Distinct fragment offsets: high alongside MF means fragmentation abuse.
+    frag_offsets = feature_values.get("frag_offset", [])
+    if frag_offsets:
+        result = frag_offset_nunique([int(offset) for offset in frag_offsets])
+        features["frag_offset_nunique"] = result if result is not None else 0.0
+    else:
+        features["frag_offset_nunique"] = 0.0
+
+    # Retransmissions: the per-packet duplicate flag is set at ingestion and
+    # aggregated per window here.
+    retrans = feature_values.get("retransmission", [])
+    features["retransmission_count"] = float(retransmission_count(retrans))
+    retrans_rate = retransmission_rate(retrans)
+    features["retransmission_rate"] = retrans_rate if retrans_rate is not None else 0.0
 
     # IAT statistics from iat_mean values already collected
     iat_vals = feature_values.get("iat_mean", [])

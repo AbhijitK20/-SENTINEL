@@ -2,7 +2,7 @@
 
 | ID | Type | Item | Priority | Sprint | Status |
 |---|---|---|---:|---:|---|
-| PB-001 | Spike | Confirm dataset availability and licenses | P0 | 0 | Done (CIC-IDS2017 licensed for research with citation; downloaded, licence reviewed, cross-day real-data benchmark executed) |
+| PB-001 | Spike | Confirm dataset availability and licenses | P0 | 0 | PARTIAL - licence and citation confirmed; the dataset is NOT present in the repo and the cross-day real-data benchmark has NOT been run. See docs/CLAIMS.md. |
 | PB-002 | Task | Freeze event, state, and prediction contracts | P0 | 0 | Done |
 | PB-003 | Feature | CSV and PCAP ingestion | P0 | 1 | Done |
 | PB-004 | Feature | Required flow and packet features | P0 | 1 | Done |
@@ -12,8 +12,8 @@
 | PB-008 | Feature | K-step rollout and probability timeline | P0 | 5 | Done (timeline + recursive rollout implemented; lead on synthetic data limited by window granularity) |
 | PB-009 | Feature | Stage mapping and explanations | P0 | 6 | Done (rule-based; synthetic data) |
 | PB-010 | Feature | Offline interface and replay | P0 | 7 | Done (replay eval, report export, guided Demo tab with observed/forecast separation) |
-| PB-011 | Task | Run leakage-safe benchmark | P0 | 7 | Done (synthetic benchmark + CIC-IDS2017 real-data benchmark with cross-day temporal splits; see REAL_BENCHMARK.md) |
-| PB-012 | Task | Produce final SIH materials | P0 | 8 | Done (RESULTS.md, BENCHMARK.md, QUALITY_GATES.md, run_all.sh, Demo tab; real-data report added) |
+| PB-011 | Task | Run leakage-safe benchmark | P0 | 7 | PARTIAL - synthetic benchmark done (`make bench-backtest`, `make bench-detectors`, `make bench-world`); the CIC-IDS2017 real-data benchmark is PENDING. |
+| PB-012 | Task | Produce final SIH materials | P0 | 8 | PARTIAL - materials exist; the real-data section of RESULTS.md is PENDING and the abstract's real-data claim was withdrawn. |
 
 ## Prioritization
 
