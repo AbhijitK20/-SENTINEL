@@ -97,5 +97,13 @@ jobs:
           uv run python scripts/run_evasion_report.py --output reports/generated/benchmark/evasion
           uv run python scripts/run_label_efficiency.py --output reports/generated/benchmark/label-efficiency
           uv run python scripts/run_drift_report.py --output reports/generated/benchmark/drift
+          # The world-model skill claim names `make bench-world`, so the job has to
+          # run what that runs. Without this the audit was reading a report left
+          # behind by a previous local run, and passed here only because the file
+          # happened to be on disk.
+          uv run python scripts/run_world_model.py \
+            --output reports/generated/benchmark/world_model \
+            --baseline reports/generated/benchmark/pipeline/baseline \
+            --compare-cores
       - name: audit docs/CLAIMS.md against them
         run: uv run python scripts/check_claims.py
