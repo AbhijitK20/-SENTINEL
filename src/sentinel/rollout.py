@@ -137,12 +137,29 @@ def fit_transition_model(
     ridge: float = 1.0,
     stability_limit: float = 0.98,
     fit_steps: int = 3,
+    feature_names: list[str] | None = None,
 ) -> RolloutTransitionModel:
     """Fit the linear next-state map on labelled states from given scenarios.
 
     Callers pass training scenarios via ``scenario_ids`` to keep the fit
     leakage-safe. Each sample maps a contiguous history of ``history_length``
     windows to the next window's state features.
+
+    ``feature_names`` pins the feature space. It should be the fitted
+    ``FeatureSchema.names``, which is the same space every other model in the
+    pipeline uses. **It became necessary on 2026-09-29**: ``state_builder`` now
+    omits a window feature whose telemetry the window does not carry (an absent
+    ``frag_df_share`` means "no packet evidence", not "measured zero"), so two
+    windows from the same scenario can legitimately have different key sets and
+    the old all-states-must-agree check rejected them with
+    ``inconsistent feature sets across states``. Reading through a pinned name
+    list with ``.get(name, 0.0)`` is exactly what ``vectorize_states`` does, so
+    the transition model is no longer in a different feature space from the
+    models it is compared against.
+
+    Without ``feature_names`` the strict check is kept, because a genuine
+    mismatch there means the caller has no authoritative feature order and
+    silently filling would misalign the fit.
     """
     if history_length < 1:
         raise ValueError("history_length must be positive")
@@ -161,21 +178,24 @@ def fit_transition_model(
         if item.scenario_id in allowed:
             by_scenario.setdefault(item.scenario_id, []).append(item)
 
-    feature_names: list[str] | None = None
-    for scenario_id in sorted(by_scenario):
-        states = sorted(by_scenario[scenario_id], key=lambda item: item.state.window_start)
-        for history in states:
-            names = sorted(history.state.features)
-            if feature_names is None:
-                feature_names = names
-            elif names != feature_names:
-                raise ValueError(
-                    "inconsistent feature sets across states; refit the feature schema first"
-                )
-
     if feature_names is None:
-        raise ValueError("not enough contiguous history to fit the transition model")
-    names = feature_names
+        resolved: list[str] | None = None
+        for scenario_id in sorted(by_scenario):
+            states = sorted(by_scenario[scenario_id], key=lambda item: item.state.window_start)
+            for history in states:
+                current = sorted(history.state.features)
+                if resolved is None:
+                    resolved = current
+                elif current != resolved:
+                    raise ValueError(
+                        "inconsistent feature sets across states; pass the fitted "
+                        "schema's feature_names"
+                    )
+        if resolved is None:
+            raise ValueError("not enough contiguous history to fit the transition model")
+        names = resolved
+    else:
+        names = list(feature_names)
 
     if fit_steps < 1:
         raise ValueError("fit_steps must be positive")
@@ -192,7 +212,9 @@ def fit_transition_model(
                 np.concatenate(
                     [
                         np.fromiter(
-                            (s.state.features[n] for n in names), dtype=float, count=len(names)
+                            (s.state.features.get(n, 0.0) for n in names),
+                            dtype=float,
+                            count=len(names),
                         )
                         for s in history
                     ]
@@ -201,7 +223,8 @@ def fit_transition_model(
             for step in range(fit_steps):
                 step_targets[step].append(
                     np.fromiter(
-                        (states[index + 1 + step].state.features[n] for n in names), dtype=float
+                        (states[index + 1 + step].state.features.get(n, 0.0) for n in names),
+                        dtype=float,
                     )
                 )
     if not kept_rows:
@@ -248,7 +271,7 @@ def fit_transition_model(
     return RolloutTransitionModel(
         model_version=ROLLOUT_MODEL_VERSION,
         history_length=history_length,
-        feature_names=feature_names,
+        feature_names=names,
         coefficients=coefficients.tolist(),
         intercept=intercept.tolist(),
         residual_scale=residual_scale.tolist(),

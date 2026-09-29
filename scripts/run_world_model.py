@@ -143,12 +143,16 @@ def main() -> None:
     grouped = _by_scenario(labelled)
     world_error = _measure_world(reloaded, grouped, manifest.test_scenarios, schema, args)
     transition = fit_transition_model(
-        labelled, history_length=args.history, scenario_ids=manifest.train_scenarios
+        labelled,
+        history_length=args.history,
+        scenario_ids=manifest.train_scenarios,
+        feature_names=schema.names,
     )
     transition_unclipped = fit_transition_model(
         labelled,
         history_length=args.history,
         scenario_ids=manifest.train_scenarios,
+        feature_names=schema.names,
         stability_limit=0.0,
     )
     ridge_error = _measure_ridge(transition, grouped, manifest.test_scenarios, schema, args)

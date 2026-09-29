@@ -51,12 +51,10 @@ def minimal_counterfactual(
         Counterfactual with modified features and predicted impact.
     """
     if prediction <= target_probability:
-        return Counterfactual(
-            original=prediction,
-            target=target_probability,
-            features=[],
-            predicted_impact=prediction,
-        )
+        # Already at or below the target: there is nothing to move. `None` says
+        # "no counterfactual needed" unambiguously, where an empty feature list
+        # reads as "a move was found and it touches nothing".
+        return None
 
     # For logistic regression with exact linear
     if model_coefs is not None:
@@ -133,6 +131,15 @@ def _counterfactual_logistic(
         remaining_gap -= coef * actual_reduction
 
         modified.append((idx, val, new_val))
+
+    if not modified:
+        # No feasible move within `max_features`: no feature in the candidate set
+        # has a coefficient that moves the logit toward the target, or none has
+        # enough room to close the gap on its own. This is a real answer - the
+        # score cannot be brought below the target by touching these features -
+        # so it is reported as `None` rather than as a result carrying an empty
+        # feature list, which a caller cannot distinguish from a real move.
+        return None
 
     # Compute predicted impact
     new_logit = current_logit - (logit_gap - remaining_gap)

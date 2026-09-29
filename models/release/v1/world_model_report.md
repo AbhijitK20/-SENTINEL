@@ -6,26 +6,26 @@
 - Core: `lstm` (hidden 64, latent 16, layers 1)
 - Observation dim: 98 · sequence length: 8
 - Stage vocabulary: Benign, Lateral Movement, Reconnaissance
-- Feature version: state-features-v1
-- Best epoch: 20 · training time: 7.0 s
-- Model SHA-256: `c6d7fedc87b8a83533e22219caea0ae01d9a07d85509096a27fe05f8acdcc080`
+- Feature version: state-features-v2
+- Best epoch: 12 · training time: 6.3 s
+- Model SHA-256: `c3fdb3ae073fe651e881fb7c0b265bdf93fbd0cd33f4f08a1ed340400af5479b`
 - Configuration: `{"core_type":"lstm","hidden_size":64,"latent_dim":16,"num_layers":1,"num_heads":4,"learning_rate":0.003,"weight_decay":0.00001,"batch_size":32,"max_epochs":40,"early_stopping_patience":12,"grad_clip":5.0,"kl_free_nats":1.0,"kl_anneal_epochs":8,"risk_loss_weight":1.0,"stage_loss_weight":0.5,"imagination_samples":64,"rollout_steps":3,"rollout_loss_weight":1.0,"imagined_risk_weight":0.0}`
 
 ## Split Metrics
 
 | Split | Windows | Recon MSE | KL (nats) | F1 | FPR | PR-AUC | Stage acc | Stage macro-F1 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| train | 390 | 0.2776 | 0.0045 | 1.0000 | 0.0000 | 1.0000 | 0.9997 | 0.9997 |
-| validation | 130 | 0.3562 | 0.0060 | 1.0000 | 0.0000 | 1.0000 | 0.9875 | 0.9876 |
-| test | 130 | 0.3447 | 0.0053 | 1.0000 | 0.0000 | 1.0000 | 0.9856 | 0.9855 |
+| train | 351 | 0.4047 | 0.0645 | 0.9251 | 0.0314 | 0.9902 | 0.9580 | 0.9453 |
+| validation | 113 | 0.4876 | 0.0664 | 0.7922 | 0.0365 | 0.8894 | 0.9071 | 0.8902 |
+| test | 114 | 0.4110 | 0.0712 | 0.8256 | 0.0949 | 0.9185 | 0.8805 | 0.8771 |
 
 ## Open-Loop State Prediction (per step, imagined vs realized)
 
 | Step | World model MAE | Persistence MAE | Skill |
 |---:|---:|---:|---:|
-| +1 | 0.3116 | 0.2991 | -0.042 |
-| +2 | 0.3210 | 0.4394 | +0.270 |
-| +3 | 0.3517 | 0.4703 | +0.252 |
+| +1 | 0.4443 | 0.3465 | -0.282 |
+| +2 | 0.4570 | 0.5208 | +0.122 |
+| +3 | 0.4903 | 0.5812 | +0.156 |
 
 ## Interpretation
 

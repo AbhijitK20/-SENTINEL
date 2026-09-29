@@ -18,6 +18,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from sentinel.detectors import KNOWN_EDGE_BYTES_PER_SEC_WARN
 from sentinel.evasion import (
     EvasionMove,
     RedTeamReport,
@@ -146,12 +147,19 @@ def test_a_sequence_derived_alert_is_not_attacked_at_the_byte_level() -> None:
     assert not moves[0].evades
 
 
-def _known_edge_rule(band: float = 50_000.0):
-    """A stub of the *current* lateral rule: fires on bytes over known edges.
+def _known_edge_rule(band_bps: float = KNOWN_EDGE_BYTES_PER_SEC_WARN):
+    """A stub of the *current* lateral rule: fires on the byte **rate** over known edges.
 
     The rule used to score bytes over *new* edges, and these tests were written
     against that. Recon pre-registers the edges lateral movement later uses, so
     the premise was backwards; the stub follows the rule, not the other way round.
+
+    It also used to compare an absolute byte total against a fixed 50_000. The
+    real rule scores a *rate* - `known_bytes / window_seconds` against
+    `KNOWN_EDGE_BYTES_PER_SEC_WARN` - and the band moved when it was re-swept on
+    the reworked generator. A stub measured in different units than the rule it
+    stands in for makes "does throttling evade this?" unanswerable, so it is
+    derived from the same constant.
     """
 
     def run(current, history_tuple):
@@ -161,7 +169,8 @@ def _known_edge_rule(band: float = 50_000.0):
         known_bytes = sum(
             e["bytes"] for e in current.edge_summary if (e["source"], e["destination"]) in prior
         )
-        firing = known_bytes >= band
+        seconds = max(1e-9, (current.window_end - current.window_start).total_seconds())
+        firing = known_bytes / seconds >= band_bps
         return [_finding("lateral_movement", 1.0 if firing else 0.0, firing, "T1021")]
 
     return run
@@ -195,7 +204,14 @@ def test_rehearsal_is_not_offered_because_the_rule_no_longer_rewards_it() -> Non
 
 
 def test_throttling_is_only_claimed_when_it_actually_stops_the_alert() -> None:
-    state = _state(0, [_edge("a", "b", 80_000.0)])
+    # Sized against the shipped band rather than a remembered number. The lateral
+    # rule scores bytes-per-second on already-seen internal edges, and
+    # `throttle_the_transfer` is only enumerated when that rate is *above* the
+    # warn band. The band moved 750 -> 1500 B/s when the generator was reworked,
+    # which left this fixture at 80_000 B / 60 s = 1_333 B/s, just under it, so the
+    # move stopped being generated at all. Deriving the size from the constant
+    # means it cannot drift again when the band is re-swept.
+    state = _state(0, [_edge("a", "b", KNOWN_EDGE_BYTES_PER_SEC_WARN * 60.0 * 2)])
     history = (_state(1, [_edge("a", "b", 10.0)]),)
 
     moves = {

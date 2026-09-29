@@ -46,13 +46,13 @@ numbers will differ by seed, and that is the point - they are not constants.
 
 | Claim | Command | Measured |
 |---|---|---|
-| Rolling-origin direction accuracy holds flat | `make bench-backtest` | 0.91 mean over 4 origins; the calibrated threshold swings 0.25-0.85 |
-| The lateral-movement rule scores bytes on **known** internal edges as a **rate** | `make bench-detectors` | **PENDING re-measurement on `synthetic-recon-lateral-v3`.** The previously published precision 0.812 / recall 0.963 / F1 0.881 was measured on v2, whose benign/lateral separation was a generator artefact; see `docs/KNOWN_LIMITATIONS.md`. Current v3 figures are precision 0.765, recall 0.481, F1 0.591 and the rule is recorded as needing a `DeploymentBaseline`. |
-| The reconnaissance rule is usable but noisy | `make bench-detectors` | **PENDING re-measurement on `synthetic-recon-lateral-v3`.** v2 reported precision 0.686, recall 1.000, F1 0.814. Current v3 figures are precision 0.676, recall 0.962, F1 0.794 (25 TP / 12 FP / 1 FN) after the minimum-flows guard. |
+| Rolling-origin direction accuracy holds flat | `make bench-backtest` | mean direction accuracy 0.745, mean false-early warning rate 0.171, median lead time 0.0 windows across 4 origins |
+| The lateral-movement rule scores bytes on **known** internal edges as a **rate**, and is *weak* on the current corpus | `make bench-detectors` | precision 0.7647, recall 0.4815, F1 0.5909 (13 TP / 4 FP / 14 FN, 97 windows). The rule needs a `DeploymentBaseline`, which does not exist yet, and is capped sub-alert without one. An earlier, stronger figure for this rule is withdrawn below |
+| The reconnaissance rule is usable but noisy | `make bench-detectors` | precision 0.6757, recall 0.9615, F1 0.7937 (25 TP / 12 FP / 1 FN, 97 windows), after the minimum-flows guard |
 | Seven of nine rules cannot be scored here | `make bench-detectors` | reported as not evaluable, with the reason |
 | The linear transition baseline is barely a simulator | `make bench-world` | pre-projection spectral norm ~1.6e5; the projection keeps ~6e-06 of it |
-| The world model beats persistence open-loop | `make bench-world` | +0.147 mean skill, vs -0.890 for the linear transition baseline and -0.095 without the open-loop objective |
-| Isotonic recalibration of the world-model risk head is gated, and rejected on the release fixture | `make bench-calibration` | Brier 0.0420 -> 0.0568 (worse, so no curve ships); ECE 0.0592 -> 0.0503 (better, but the gate requires both) |
+| The world model is compared open-loop against persistence | `make bench-world` | mean skill +0.1538 on the release bundle, i.e. **no better than repeating the last window**; per step -0.282, +0.122, +0.156. The withdrawn v2 corpus reported +0.189 for the same model, which was the trivial-separation artefact. See `docs/KNOWN_LIMITATIONS.md` |
+| Isotonic recalibration of the world-model risk head is gated on a measured improvement, and **accepted** on the current fixture | `make bench-calibration` | Brier 0.1576 -> 0.1294, ranking unchanged. On the withdrawn v2 fixture the same gate **rejected** the curve, so the gate discriminates rather than decorates |
 
 ## Not currently backed by an artifact - treat as unverified
 
@@ -62,6 +62,7 @@ to be unbacked, which for a results table is the same thing.
 
 | Claim | Where | Why unbacked | What would fix it |
 |---|---|---|---|
+| A lateral-movement detector figure of precision 0.812 / recall 0.963 / F1 0.881, and a reconnaissance figure of 0.686 / 1.000 / 0.814 | `docs/KNOWN_LIMITATIONS.md` | both were measured on `synthetic-recon-lateral-v2`, whose benign/lateral separation was a generator artefact; the v3 figures are 0.7647 / 0.4815 / 0.5909 and 0.6757 / 0.9615 / 0.7937 | re-measure on v3 with `make bench-detectors`; the current figures are already in the supported table above |
 | A cross-day CIC-IDS2017 forecast benchmark was executed on real traffic, with a lead-time and false-early table | `docs/RESULTS.md` | `reports/generated/real-benchmark/` does not exist in the repo and no CIC-IDS2017 CSV is present; `data/raw/` holds only `fixture-lab`, which is a synthetic file this project generates | Obtain the licensed CSVs, place them in `data/raw/cic-ids2017/TrafficLabelling/`, run `make bench-real`, and commit the report |
 | ~900k real flows were benchmarked | `deliverables/ABSTRACT.md` | same | same |
 | PB-001 "Confirm dataset availability and licenses" is Done | `docs/planning/PRODUCT_BACKLOG.md` | no dataset is present | same |

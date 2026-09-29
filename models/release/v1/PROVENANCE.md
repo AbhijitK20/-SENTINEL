@@ -1,8 +1,8 @@
 # Provenance
 
-- Exported: 2026-09-28T14:56:59.977519+00:00
-- Git SHA: `74f93ea3cc54195a4d610c4df8b92cca3d344524`
-- Python: 3.11.15
-- Platform: Windows-10-10.0.26200-SP0
-- Config: `configs\default.yaml`
-- Dataset: `synthetic-recon-lateral-v2`
+- Exported: 2026-09-29T18:05:12.227962+00:00
+- Git SHA: `65c0620e71df8053ee8126282f0e6a9cc5a352a6`
+- Dataset: `synthetic-recon-lateral-v3`
+- Python: 3.12.14
+- Platform: Linux-7.0.0-34-generic-x86_64-with-glibc2.43
+- Config: `configs/default.yaml`

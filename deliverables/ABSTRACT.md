@@ -22,12 +22,35 @@ Every prediction carries its evidence; every metric in the UI is labelled **OBSE
 Every number below is printed by a script in this repo; see `docs/CLAIMS.md` for
 the command behind each one.
 
-- Baseline F1 **0.892**, per-horizon GRU F1 **0.957** on the held-out split
-- World-model open-loop skill **+0.189** against persistence, **-0.429** against
-  the linear transition baseline and **-0.095** under the ablation
-- Rolling-origin backtest: direction accuracy **0.91** mean across 4 origins
+All figures below are on `synthetic-recon-lateral-v3`, seed 42, 10 scenarios
+split 60/20/20 **by scenario** so no window from a training scenario appears at
+test time, 60 s windows with a 30 s stride, 98 features per window.
+
+- Logistic baseline, test split: F1 **0.702**, precision 0.635, recall 0.786,
+  PR-AUC **0.662**
+- Per-horizon GRU, h+1: F1 **0.817**, precision 0.745, recall 0.905,
+  PR-AUC **0.885**
+- World model (RSSM) risk head, test split: F1 **0.826**, PR-AUC **0.918**,
+  attack-stage accuracy **0.880**, stage macro-F1 **0.877**
+- World-model **open-loop skill ≈ -0.001** against persistence
+  (per step -0.282, +0.122, +0.156)
 - Per-rule detector precision/recall on held-out windows, including the
-  unflattering parts
+  unflattering parts: lateral movement F1 0.591, reconnaissance F1 0.794
+
+**Two of these are worse than this project previously reported, and that is the
+honest result.** The first synthetic corpus was trivially separable: the label
+was recoverable from one scalar, a *single* feature scored ROC-AUC 0.9833
+against a full 98-feature model's 0.9933 — a gap of 0.0072, meaning 97 of the 98
+features were decoration and every headline number was measuring the shortcut.
+The generator was reworked to overlap the classes deliberately; the same
+protocol now gives a single-feature ROC-AUC of **0.741** against a full-model
+**0.930**, a gap of **0.113**. The figures above are from the corrected corpus.
+
+The open-loop skill of roughly zero is reported rather than tuned away: the
+world model is not yet beating "repeat the last window" when it has to imagine
+the future without observations. `docs/KNOWN_LIMITATIONS.md` records this, along
+with the fact that the linear transition baseline it is compared against is
+barely a simulator.
 
 **On real CIC-IDS2017 traffic: not measured.** No CIC-IDS2017 CSV is present in
 this repository and none is downloaded by it; `data/raw/` holds only a synthetic
