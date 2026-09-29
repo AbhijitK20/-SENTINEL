@@ -47,7 +47,7 @@ numbers will differ by seed, and that is the point - they are not constants.
 | Claim | Command | Measured |
 |---|---|---|
 | Rolling-origin direction accuracy holds flat | `make bench-backtest` | 0.91 mean over 4 origins; the calibrated threshold swings 0.25-0.85 |
-| The lateral-movement rule now scores bytes on **known** internal edges, and works | `make bench-detectors` | precision 0.929, recall 0.963, F1 0.945 (26 TP / 2 FP / 1 FN) |
+| The lateral-movement rule scores bytes on **known** internal edges as a **rate**, and works | `make bench-detectors` | precision 0.812, recall 0.963, F1 0.881 (26 TP / 6 FP / 1 FN) |
 | The reconnaissance rule is usable but noisy | `make bench-detectors` | precision 0.686, recall 1.000, F1 0.814 (24 TP / 11 FP / 0 FN) |
 | Seven of nine rules cannot be scored here | `make bench-detectors` | reported as not evaluable, with the reason |
 | The linear transition baseline is barely a simulator | `make bench-world` | pre-projection spectral norm ~1.6e5; the projection keeps ~6e-06 of it |
