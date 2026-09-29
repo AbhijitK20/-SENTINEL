@@ -21,6 +21,10 @@ reports/generated/
 *.csv
 !data/fixtures/*.csv
 *.parquet
+# Exception: the committed pre-windowed CIC-IDS2017 aggregate, so a clone can
+# render measured numbers without the 1.2 GB download. Aggregates only - no raw
+# flows - and carries the required citation in data/derived/PROVENANCE.md.
+!data/derived/*.parquet
 *.pt
 *.pth
 *.onnx
