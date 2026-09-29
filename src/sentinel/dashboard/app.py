@@ -348,6 +348,9 @@ try:
             sequence_length,
             forecast_horizon,
         )
+        # Stated in the header, not in a footnote. A judge must not have to hunt
+        # for whether the numbers on screen came from a generator or a network.
+        dataset_provenance = "REAL CIC-IDS2017"
     else:
         labelled, samples, manifest, dataset_id = synthetic_dataset(
             scenario_count,
@@ -357,6 +360,7 @@ try:
             sequence_length,
             forecast_horizon,
         )
+        dataset_provenance = "SYNTHETIC — generated, not captured traffic"
 except Exception as error:  # a bad dataset must not take the app down
     ui.header("SENTINEL", "analyst console")
     ui.banner(
@@ -437,7 +441,7 @@ ui.header(
     "SENTINEL",
     "network attack forecasting",
     meta=(
-        f"{dataset_id} · {len(labelled):,} windows · "
+        f"{dataset_provenance} · {dataset_id} · {len(labelled):,} windows · "
         f"{schema.width} features · seed {seed}"
         + (f" · artifacts {st.session_state['artifact_dir']}" if artifact_dir else "")
     ),

@@ -159,7 +159,6 @@ def stats(items: Sequence[Stat]) -> None:
             f"{note}</div>"
         )
     st.markdown(f'<div class="sntl-stats">{"".join(cells)}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="sntl-stats">{"".join(cells)}</div>', unsafe_allow_html=True)
 
 
 def risk_meter(
