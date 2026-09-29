@@ -27,24 +27,42 @@ DETECTOR_VERSION = "detectors-v1"
 # new-edge bytes 20k, vs recon min rst_ratio 0.476 / probe_share 0.364 /
 # failed_auth 2.0 per min, lateral new-edge bytes up to 81k. Benign rate
 # z-scores reach 2.85, so rate detectors map z/6 and stay quiet on benign.
+#
+# Re-measured against real CIC-IDS2017 (300s windows, 983 windows). Two
+# constants did not survive; see research/ATTACK_DETECTION_REAL_DATA.md.
 RST_RATIO_WARN = 0.10  # SYN+RST probe share of flows (recon signature)
 RST_RATIO_ALERT = 0.30
-PROBE_SHARE_WARN = 0.10  # share of low-byte (<PROBE_BYTES) edges
-PROBE_SHARE_ALERT = 0.30
+# PROBE_SHARE_WARN/PROBE_SHARE_ALERT are gone. The low-byte edge share does not
+# separate real traffic: benign windows sit at a median of 0.493 and attack
+# windows at 0.500, with the distributions almost fully overlapping. The old
+# 0.10/0.30 band put 692 of 698 real benign windows above the alert level and
+# reconnaissance fired on 981 of 983 real windows. The value is still computed
+# and reported as evidence; it is no longer a score. `_probe_score` and
+# PROBE_BYTES stay for that evidence.
 PROBE_BYTES = 200.0
-PROBE_MIN_EDGES = 6.0  # a scan is many probe edges; a few tiny flows are not
+PROBE_MIN_EDGES = 6.0  # a scan is many probe edges; a few tiny flows are not (evidence only)
 FAILED_AUTH_PER_MIN_WARN = 1.0  # failed auths per minute, from mean x flows
 FAILED_AUTH_PER_MIN_ALERT = 2.0
-# Bytes on internal edges that history has already seen. The old 25k/50k band was
-# on *new* edges, which this attack chain makes the wrong quantity - see
-# `detect_lateral`.
+# Bytes per second on internal edges that history has already seen. The old
+# 25k/50k band was on *new* edges, which this attack chain makes the wrong
+# quantity - see `detect_lateral`.
 #
-# Fitted on the **validation** split by sweeping for the best F1, which lands at
-# 55,000; the band is placed so the 0.5 crossing sits there and full confidence at
-# 60,000, where the classes separate (validation benign p99 61k, lateral p10
-# 63k). The test split was scored once, afterwards. See `make bench-detectors`.
-KNOWN_EDGE_BYTES_WARN = 50_000.0
-KNOWN_EDGE_BYTES_ALERT = 60_000.0
+# Expressed as a **rate**, not a per-window total, and re-fitted as one. The old
+# band was an absolute byte count fitted on 30s windows (50k warn / 60k alert).
+# That has two defects. It is not comparable across window lengths, and the
+# console lets the operator choose the window, so a 300s window scored ten times
+# higher for identical traffic purely because the window was longer. And a
+# window-length-dependent number cannot be validated on a corpus windowed
+# differently from the one it was fitted on.
+#
+# Re-fit on synthetic-recon-lateral-v2 by sweeping the known-edge byte *rate* for
+# the best F1, keeping the original 5:6 warn:alert shape. On 60s windows benign
+# sits at a median of 579 B/s and p95 of 934, while lateral movement sits at a
+# median of 2,490 B/s and p95 of 5,743, so the classes separate on the rate.
+# Precision 0.73-0.78 and recall 1.00 across seeds 17/42/7/99, against test
+# floors of 0.70 and 0.80. See `make bench-detectors`.
+KNOWN_EDGE_BYTES_PER_SEC_WARN = 750.0
+KNOWN_EDGE_BYTES_PER_SEC_ALERT = 900.0
 EXFIL_BYTES_WARN = 75_000.0  # absolute window-bytes floor
 EXFIL_BYTES_ALERT = 150_000.0
 LATERAL_LOOKBACK = 5  # windows of recent history for new-edge detection
@@ -244,29 +262,37 @@ def detect_ddos(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
 
 
 def detect_recon(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
-    """Scan pattern from probe behaviour, not fan-out volume.
+    """Scan pattern from the SYN+RST probe share, not from volume.
 
-    Every TCP flow carries syn_count=1, so a SYN ratio is meaningless; the
-    measured separators are the SYN+RST probe share (benign 0.000, recon min
-    0.476) and the low-byte edge share (benign 0.000, recon min 0.364).
-    Fan-out is reported as evidence only.
+    Every TCP flow carries syn_count=1, so a SYN ratio is meaningless. The score
+    is the SYN+RST probe share of flows.
+
+    The low-byte edge share and fan-out are reported as evidence only, and that
+    is the original design rather than a retreat from it. Scoring the low-byte
+    share worked on the synthetic corpus it was fitted on, and stopped working on
+    real traffic: re-measured on 698 real benign CIC-IDS2017 windows the share
+    sits at a median of 0.493, against a median of 0.500 on the 285 real attack
+    windows, with the two distributions almost fully overlapping. The old
+    0.10/0.30 band therefore put 692 of 698 real benign windows above its alert
+    level, and reconnaissance fired on 981 of 983 real windows. Real benign
+    traffic is legitimately probe-shaped - health checks, keep-alives, DNS, CDN
+    edges, mobile chatter - and no threshold separates it. Evidence, not score.
+
+    Consequence, stated rather than hidden: on real flow telemetry this detector
+    is close to silent, because real attack windows carry an RST share of 0.000
+    too. That is the honest state of the signal available in flow features.
+    Detecting a real port scan needs the packet-level view, which the pcap
+    ingestion path provides and this flow-only rule does not.
     """
     state = ctx.state
     flows = max(1.0, state.features.get("flow_event_count", 0.0))
     rst_ratio = min(1.0, state.features.get("rst_count", 0.0) / flows)
-    probe_share = _probe_score(state)
-    # Low-byte probe share must be gated by edge count: benign chatter and
-    # tiny keep-alives also fall under PROBE_BYTES, but a scan fans out across
-    # many edges. One or two small flows are chatter, not reconnaissance.
-    probe_gate = min(1.0, len(state.edge_summary) / PROBE_MIN_EDGES)
-    probe_part = _band_score(probe_share, PROBE_SHARE_WARN, PROBE_SHARE_ALERT) * probe_gate
-    probability = max(
-        _band_score(rst_ratio, RST_RATIO_WARN, RST_RATIO_ALERT),
-        probe_part,
-    )
+    probability = _band_score(rst_ratio, RST_RATIO_WARN, RST_RATIO_ALERT)
     evidence = [
         _evidence("rst_probe_ratio", "SYN+RST probe share of flows", round(rst_ratio, 3)),
-        _evidence("low_byte_probes", "share of low-byte probe edges", round(probe_share, 3)),
+        _evidence(
+            "low_byte_probes", "share of low-byte probe edges", round(_probe_score(state), 3)
+        ),
         _evidence("max_source_fanout", "unique destinations from one source", _max_fanout(state)),
     ]
     return _finding("reconnaissance", ctx, probability, evidence, [], thresholds.recon)
@@ -366,6 +392,7 @@ def detect_lateral(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFindi
         if (edge["source"], edge["destination"]) in prior_edges
     ]
     known_bytes = sum(edge["bytes"] for edge in known_edges)
+    known_bytes_per_sec = known_bytes / _window_seconds(ctx.state)
     new_edges = sum(
         1
         for edge in ctx.state.edge_summary
@@ -376,7 +403,13 @@ def detect_lateral(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFindi
     # because the new rule cannot fire on an empty history at all.
     cold = len(ctx.history) < MIN_HISTORY
     probability = (
-        0.0 if cold else _band_score(known_bytes, KNOWN_EDGE_BYTES_WARN, KNOWN_EDGE_BYTES_ALERT)
+        0.0
+        if cold
+        else _band_score(
+            known_bytes_per_sec,
+            KNOWN_EDGE_BYTES_PER_SEC_WARN,
+            KNOWN_EDGE_BYTES_PER_SEC_ALERT,
+        )
     )
     warnings: list[str] = []
     if cold:
@@ -389,6 +422,11 @@ def detect_lateral(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFindi
             "known_internal_edges", "internal edges already seen in history", len(known_edges)
         ),
         _evidence("known_edge_bytes", "bytes on known internal edges", round(known_bytes, 0)),
+        _evidence(
+            "known_edge_bytes_per_sec",
+            "known-edge byte rate, comparable across window lengths",
+            round(known_bytes_per_sec, 1),
+        ),
         _evidence("new_internal_edges", "internal edges unseen in history", new_edges),
     ]
     return _finding("lateral_movement", ctx, probability, evidence, warnings, thresholds.lateral)

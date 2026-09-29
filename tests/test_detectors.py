@@ -17,6 +17,7 @@ from sentinel.detectors import (
     run_all_detectors,
     severity_from_probability,
 )
+from sentinel.schemas import NetworkState
 from sentinel.targets import LabelledState
 
 SCENARIOS = [f"det{i}" for i in range(4)]
@@ -208,3 +209,129 @@ def test_severity_banding() -> None:
 
 def _ctx(state, history):
     return DetectorContext(state=state, history=tuple(history))
+
+
+# ── real-traffic calibration, measured on CIC-IDS2017 ────────────────────
+#
+# The low-byte edge share was once a scored term in detect_recon. On the
+# synthetic corpus it separated. On real traffic it does not: 698 real benign
+# windows sit at a median share of 0.493 and 285 real attack windows at 0.500,
+# with the distributions almost fully overlapping, so the old 0.10/0.30 band
+# placed 692 of 698 real benign windows above its alert level and
+# reconnaissance fired on 981 of 983 real windows.
+#
+# These tests pin the corrected behaviour. The measured distributions live in
+# research/ATTACK_DETECTION_REAL_DATA.md; the numbers below are the ones that
+# broke it.
+
+
+def _realistic_benign_state(rst_count: float = 0.0, low_byte_edges: int = 700):
+    """A benign window shaped like real traffic: many tiny edges, no RST storm.
+
+    Real benign windows carry a median of 748 edges at a median low-byte share
+    of 0.493, and a median RST probe share of 0.000. That combination is what
+    made the old band fire on everything.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    start = datetime(2017, 7, 4, 9, 0, tzinfo=UTC)
+    edges = [
+        {
+            "source": f"10.0.0.{i % 200}",
+            "destination": f"10.0.1.{(i * 7) % 100}",
+            "count": 4,
+            "bytes": 120.0,  # under PROBE_BYTES: ordinary control traffic
+        }
+        for i in range(low_byte_edges)
+    ]
+    return NetworkState(
+        window_start=start,
+        window_end=start + timedelta(seconds=300),
+        features={
+            "flow_event_count": 900.0,
+            "rst_count": rst_count,
+            "bytes": 25_000_000.0,
+        },
+        entities=[],
+        edge_summary=edges,
+        coverage={"flow": True, "packet": False},
+        source_ids=[],
+    )
+
+
+def test_recon_does_not_score_the_low_byte_edge_share() -> None:
+    """The share is evidence, not a signal: real benign traffic is 0.493 of it."""
+    from sentinel.detectors import PROBE_BYTES, _probe_score
+
+    state = _realistic_benign_state()
+    share = _probe_score(state)
+    assert share > 0.45, "fixture should reproduce the real benign low-byte share"
+    assert all(e["bytes"] / e["count"] < PROBE_BYTES for e in state.edge_summary)
+
+    finding = detect_recon(_ctx(state, []), DetectorSet())
+    assert finding.probability == 0.0, (
+        "a benign window whose edges are mostly low-byte must not score; the "
+        "low-byte share is evidence only"
+    )
+    assert not finding.is_alert
+
+    # The value is still reported, so an analyst can see why it looks probe-like.
+    reported = {e.name: e.observed_value for e in finding.evidence}
+    assert "low_byte_probes" in reported
+    assert round(reported["low_byte_probes"], 3) == round(share, 3)
+
+
+def test_recon_still_scores_a_genuine_rst_storm() -> None:
+    """Removing the share must not remove the rule that does discriminate."""
+    state = _realistic_benign_state(rst_count=400.0, low_byte_edges=700)
+    assert state.features["rst_count"] / state.features["flow_event_count"] > 0.30
+
+    finding = detect_recon(_ctx(state, []), DetectorSet())
+    assert finding.probability == 1.0
+    assert finding.is_alert
+
+
+def test_lateral_band_is_a_rate_so_window_length_does_not_change_the_score() -> None:
+    """A longer window carries more bytes; the score must not follow it."""
+    from datetime import UTC, datetime, timedelta
+
+    from sentinel.evasion import _known_edge_bytes
+
+    edges = [{"source": "10.0.0.1", "destination": "10.0.0.2", "count": 10, "bytes": 20_000.0}]
+    history = tuple(
+        NetworkState(
+            window_start=datetime(2017, 7, 4, 9, 0, tzinfo=UTC) + timedelta(seconds=30 * i),
+            window_end=datetime(2017, 7, 4, 9, 0, tzinfo=UTC) + timedelta(seconds=30 * (i + 1)),
+            features={},
+            entities=[],
+            edge_summary=edges,
+            coverage={"flow": True, "packet": False},
+            source_ids=[],
+        )
+        for i in range(4)
+    )
+    scores = []
+    for seconds in (30, 300):
+        start = datetime(2017, 7, 4, 9, 0, tzinfo=UTC)
+        state = NetworkState(
+            window_start=start,
+            window_end=start + timedelta(seconds=seconds),
+            features={},
+            entities=[],
+            # ten times the bytes, because the window is ten times as long
+            edge_summary=[
+                {
+                    "source": "10.0.0.1",
+                    "destination": "10.0.0.2",
+                    "count": 10,
+                    "bytes": 20_000.0 * (seconds / 30),
+                }
+            ],
+            coverage={"flow": True, "packet": False},
+            source_ids=[],
+        )
+        scores.append(detect_lateral(_ctx(state, list(history)), DetectorSet()).probability)
+    assert scores[0] == scores[1], (
+        f"identical traffic at two window lengths scored {scores}; the band must be a rate"
+    )
+    assert _known_edge_bytes is not None
