@@ -48,7 +48,7 @@ PROBE_MIN_EDGES = 6.0  # a scan is many probe edges; a few tiny flows are not (e
 # Flows required before an RST *share* is treated as a measurement rather than
 # the ratio of two or three observations.
 RST_RATIO_MIN_FLOWS = 8.0
-FAILED_AUTH_PER_MIN_WARN = 1.0  # failed auths per minute, from mean x flows
+FAILED_AUTH_PER_MIN_WARN = 1.0  # failed auths per minute, from the window count
 FAILED_AUTH_PER_MIN_ALERT = 2.0
 # Bytes per second on internal edges that history has already seen. The old
 # 25k/50k band was on *new* edges, which this attack chain makes the wrong
@@ -456,13 +456,23 @@ def _probe_score(state: NetworkState) -> float:
 def detect_credential(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
     """Authentication failure pressure as failed auths per minute.
 
-    The window feature is a mean per flow; multiplying by flow count converts
-    it to a rate (benign 0.0/min, recon-phase min 2.0/min on validation data).
+    **The window feature is a count, not a per-flow mean.** The old code read it
+    as a mean, multiplied by the flow count, and labelled the result a rate:
+
+        per_min = state.features["failed_auth"] * flows * 60 / window_seconds
+
+    but ``state_builder`` aggregates it with ``Agg.SUM`` (``AGGREGATION_POLICY``
+    maps ``failed_auth`` to ``failed_auth_sum``), so the multiplication counted
+    every failure once per flow in the window. Measured on the fixture before
+    this fix, a window containing **2** failed-auth events reported
+    ``failed_auth_per_min = 26.0`` and saturated the finding at
+    ``probability = 1.0``; any window with a single failure cleared the alert
+    band. The band (1.0 warn, 2.0 alert) is a per-minute rate, and the window is
+    already the time unit, so the flow count does not belong in the numerator.
     """
     state = ctx.state
-    mean_failed = state.features.get("failed_auth", 0.0)
-    flows = state.features.get("flow_event_count", 0.0)
-    per_min = mean_failed * flows * 60.0 / _window_seconds(state)
+    failures = state.features.get("failed_auth", 0.0)
+    per_min = failures * 60.0 / _window_seconds(state)
     probability = _band_score(per_min, FAILED_AUTH_PER_MIN_WARN, FAILED_AUTH_PER_MIN_ALERT)
     warnings = []
     if per_min > 0.0:
@@ -785,13 +795,19 @@ def detect_malware(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFindi
     """Endpoint process-execution burst from EDR-style event features.
 
     Sensors emit ``malware_process_executions`` per process-start event; the
-    window total (mean x event count) crosses the alert band at five or more
-    executions. Without endpoint telemetry the detector reports disabled —
-    flow data cannot see processes.
+    window total crosses the alert band at five or more executions. Without
+    endpoint telemetry the detector reports disabled — flow data cannot see
+    processes.
+
+    The band is a plain count, and the feature is already a count:
+    ``malware_process_executions`` has no entry in ``AGGREGATION_POLICY``, so
+    ``state_builder`` sums it. The previous code named it ``mean_exec`` and
+    multiplied by ``event_count``, reporting a per-window total inflated by the
+    window's event count. Same defect as ``detect_credential``.
     """
     state = ctx.state
-    mean_exec = state.features.get("malware_process_executions")
-    if mean_exec is None:
+    total_exec = state.features.get("malware_process_executions")
+    if total_exec is None:
         return _finding(
             "malware_activity",
             ctx,
@@ -803,7 +819,7 @@ def detect_malware(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFindi
             ],
             thresholds.malware,
         )
-    executions = mean_exec * state.features.get("event_count", 1.0)
+    executions = total_exec
     probability = _band_score(executions, 2.0, 5.0)
     evidence = [
         _evidence("process_executions", "process-start events in window", round(executions, 0))

@@ -33,7 +33,7 @@ Thresholds were tuned on measured benign/attack distributions from
 |---|---|---|---|
 | DDoS | T1498 | flows/s + bytes/s z-score vs benign history | z ≥ 6 (capped 0.95) |
 | Reconnaissance | T1046 | SYN+RST probe share; low-byte edge share (gated by ≥6 edges) | band score ≥ 0.80 |
-| Credential abuse | T1110 | failed auths per minute (mean × flows) | ≥ 2.0/min |
+| Credential abuse | T1110 | failed auths per minute, from the **window count** | ≥ 2.0/min |
 | Lateral movement | T1021 | bytes on internal edges unseen in last 5 windows | ≥ 50k bytes |
 | Command & Control | T1071 | **insufficient telemetry** — never scores | — |
 | Exfiltration | T1048 | bytes z-score vs benign history (divisor 10) | z ≥ 8 |

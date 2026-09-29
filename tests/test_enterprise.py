@@ -220,17 +220,37 @@ def test_c2_scores_only_with_beacon_signal() -> None:
 def test_malware_alerts_on_execution_burst() -> None:
     from sentinel.detectors import DetectorContext, DetectorSet, detect_malware
 
-    burst = detect_malware(
-        DetectorContext(
-            state=_state(
-                5,
-                {**BENIGN_FEATURES, "malware_process_executions": 2.0, "event_count": 6.0},
+    def score(executions: float, event_count: float = 6.0):
+        return detect_malware(
+            DetectorContext(
+                state=_state(
+                    5,
+                    {
+                        **BENIGN_FEATURES,
+                        "malware_process_executions": executions,
+                        "event_count": event_count,
+                    },
+                ),
+                history=BENIGN_HISTORY,
             ),
-            history=BENIGN_HISTORY,
-        ),
-        DetectorSet(),
+            DetectorSet(),
+        )
+
+    # The band is 2 warn / 5 alert on a *count*. `malware_process_executions`
+    # has no entry in AGGREGATION_POLICY, so state_builder sums it; the rule
+    # used to multiply that sum by event_count, which let a window with two
+    # executions alert by reporting twelve. Two executions is the low edge of
+    # the warn band and must not alert; six must.
+    assert not score(2.0).is_alert, (
+        "two process executions alerted; the documented band is five or more"
     )
+    burst = score(6.0)
     assert burst.is_alert and burst.mitre_technique == "T1059"
+
+    # The score must not scale with the window's event count.
+    assert {e.observed_value for e in score(6.0, event_count=50.0).evidence} == {
+        e.observed_value for e in burst.evidence
+    }
 
 
 def test_phishing_scores_dns_surrogate() -> None:

@@ -98,6 +98,70 @@ AGGREGATION_POLICY: dict[str, tuple[Agg, ...]] = {
 # never reach the generic sum fallback.
 RAW_ONLY_FEATURES = frozenset({"fragment_flags", "ip_flags", "frag_offset"})
 
+# IPv4 ranges that are private, loopback, link-local or otherwise inside the
+# network being observed. Anything else in address form is off-net.
+_PRIVATE_V4_FIRST_OCTET_RANGES = ((10,), (172,), (192,), (127,), (169,))
+
+
+def _is_private_v4(address: str) -> bool:
+    parts = address.split(".")
+    if len(parts) != 4 or not all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
+        return False
+    octets = (int(p) for p in parts)
+    first = next(octets)
+    if first in (10, 127):  # RFC1918 10/8, loopback
+        return True
+    if first == 172:  # RFC1918 172.16/12
+        return 16 <= next(octets) <= 31
+    if first == 192:  # RFC1918 192.168/16, and 192.0.0.0/24 IETF protocol
+        second = next(octets)
+        return second == 168 or second == 0
+    if first == 169:  # link-local
+        return True
+    if first == 100 and next(octets) == 64:  # CGNAT 100.64/10
+        return True
+    return False
+
+
+def is_external_destination(entity: str) -> bool:
+    """True when an entity name denotes something outside the observed network.
+
+    **This used to be a two-item prefix test and matched nothing real.** The old
+    expression was::
+
+        entity.startswith(("external", "1.2.3.4"))
+
+    which only ever matched a literal entity named ``external-something`` or the
+    single hard-coded address ``1.2.3.4``. Measured across every window of the
+    committed synthetic corpus, ``external_destination_count`` was identically
+    ``0.0``, so the Exfiltration rule in ``stage_mapping.py`` — which requires
+    this count to be positive — could never fire on any shipped data. The same
+    expression would also have failed on a real capture, where destinations are
+    public addresses and registered domain names.
+
+    The definition used here is about where the address points, not how it is
+    spelled:
+
+    * an IPv4 literal is external unless it falls in a private, loopback,
+      link-local or CGNAT range;
+    * a hostname carrying a dot is a fully-qualified name (``evil.com``) and is
+      external; bare internal names (``host-01``, ``auth-service``) are not;
+    * a leading ``external`` is still honoured, so producers that label their own
+      off-net entities keep working.
+    """
+    name = entity.strip().lower()
+    if not name:
+        return False
+    if name.startswith("external"):
+        return True
+    looks_like_v4 = all(part.isdigit() for part in name.split(".")) and name.count(".") == 3
+    if looks_like_v4:
+        return not _is_private_v4(name)
+    if ":" in name:  # IPv6 literal
+        return name in ("::1", "::")
+    return "." in name
+
+
 # Aggregation types that are undefined for single-event windows.
 _UNDEFINED_FOR_SINGLE = {Agg.STD, Agg.VAR, Agg.P50, Agg.P90, Agg.P99, Agg.ENTROPY}
 
@@ -201,7 +265,7 @@ def _build_state(
         "flow_event_count": float(flow_count),
         "packet_event_count": float(packet_count),
         "external_destination_count": float(
-            sum(1 for entity in entities if entity.startswith(("external", "1.2.3.4")))
+            sum(1 for entity in entities if is_external_destination(entity))
         ),
     }
 
@@ -410,8 +474,15 @@ def _build_state(
         _frag_if("frag_df_share", frag_df_share)
         _frag_if("frag_mf_share", frag_mf_share)
     else:
-        features["frag_df_share"] = 0.0
-        features["frag_mf_share"] = 0.0
+        # Absent packet telemetry is recorded as an absent key, not as a measured
+        # zero. It used to be written as 0.0, and after standardization that put
+        # frag_df_share at z = -10.04 on a flow-only capture: the training
+        # distribution for this column sits at 1.0 with a standard deviation of
+        # 0.1, so "no packet evidence" was indistinguishable from "every packet
+        # cleared DF". The vector stays rectangular either way — `vectorize_states`
+        # imputes a missing column at the training mean — so writing the zero
+        # bought nothing and cost a ten-sigma outlier.
+        pass
 
     # Distinct fragment offsets: high alongside MF means fragmentation abuse.
     frag_offsets = feature_values.get("frag_offset", [])
@@ -419,7 +490,8 @@ def _build_state(
         result = frag_offset_nunique([int(offset) for offset in frag_offsets])
         features["frag_offset_nunique"] = result if result is not None else 0.0
     else:
-        features["frag_offset_nunique"] = 0.0
+        # Absent fragment offsets carry no evidence; see the note on frag_df_share.
+        pass
 
     # Retransmissions: the per-packet duplicate flag is set at ingestion and
     # aggregated per window here.

@@ -107,11 +107,31 @@ def test_raw_header_values_never_reach_the_generic_sum() -> None:
     assert features["frag_df_share"] == pytest.approx(1.0)
 
 
-def test_absent_packet_features_are_explicit_zeros_not_missing_keys() -> None:
+def test_absent_packet_features_are_absent_keys_not_measured_zeros() -> None:
+    """Absence of packet evidence is not a measurement of zero.
+
+    This previously asserted the opposite: the window wrote 0.0 for
+    ``frag_df_share`` and friends. That was deliberate at the time, on the
+    reasoning that explicit zeros keep the feature vector rectangular. They do
+    not - ``vectorize_states`` imputes an absent column at the training mean, so
+    the vector is rectangular either way - and the zero was actively harmful.
+    Standardizing it against a training column that sits at 1.0 with a standard
+    deviation of 0.1 placed a flow-only capture at z = -10.04, making "no packet
+    evidence" indistinguishable from "every packet cleared DF".
+
+    Retransmission counters are left as explicit zeros: their training
+    distribution is already concentrated near zero, so a zero is the honest
+    neutral value there and a missing key would discard the information that the
+    window genuinely observed no retransmissions.
+    """
     features = _window([_packet(0, 0, {"payload_size": 100.0})]).features
 
     for name in ("frag_df_share", "frag_mf_share", "frag_offset_nunique"):
-        assert features[name] == 0.0
+        assert name not in features, (
+            f"{name} was written as a measured 0.0; absent packet telemetry must be an "
+            "absent key so the model sees the training mean instead of a -10 sigma "
+            "outlier"
+        )
     assert features["retransmission_count"] == 0.0
     assert features["retransmission_rate"] == 0.0
 

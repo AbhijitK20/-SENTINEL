@@ -47,8 +47,8 @@ numbers will differ by seed, and that is the point - they are not constants.
 | Claim | Command | Measured |
 |---|---|---|
 | Rolling-origin direction accuracy holds flat | `make bench-backtest` | 0.91 mean over 4 origins; the calibrated threshold swings 0.25-0.85 |
-| The lateral-movement rule scores bytes on **known** internal edges as a **rate**, and works | `make bench-detectors` | precision 0.812, recall 0.963, F1 0.881 (26 TP / 6 FP / 1 FN) |
-| The reconnaissance rule is usable but noisy | `make bench-detectors` | precision 0.686, recall 1.000, F1 0.814 (24 TP / 11 FP / 0 FN) |
+| The lateral-movement rule scores bytes on **known** internal edges as a **rate** | `make bench-detectors` | **PENDING re-measurement on `synthetic-recon-lateral-v3`.** The previously published precision 0.812 / recall 0.963 / F1 0.881 was measured on v2, whose benign/lateral separation was a generator artefact; see `docs/KNOWN_LIMITATIONS.md`. Current v3 figures are precision 0.765, recall 0.481, F1 0.591 and the rule is recorded as needing a `DeploymentBaseline`. |
+| The reconnaissance rule is usable but noisy | `make bench-detectors` | **PENDING re-measurement on `synthetic-recon-lateral-v3`.** v2 reported precision 0.686, recall 1.000, F1 0.814. Current v3 figures are precision 0.676, recall 0.962, F1 0.794 (25 TP / 12 FP / 1 FN) after the minimum-flows guard. |
 | Seven of nine rules cannot be scored here | `make bench-detectors` | reported as not evaluable, with the reason |
 | The linear transition baseline is barely a simulator | `make bench-world` | pre-projection spectral norm ~1.6e5; the projection keeps ~6e-06 of it |
 | The world model beats persistence open-loop | `make bench-world` | +0.147 mean skill, vs -0.890 for the linear transition baseline and -0.095 without the open-loop objective |

@@ -525,3 +525,67 @@ forecasting ability, and no number on the synthetic benchmark should be quoted a
 if it did. The corrected benchmark is a harder test with a lower score; that is
 the correct direction for this project to move in.
 
+### Four correctness bugs in the model/detector pipeline, found 2026-09-29
+
+None of these were visible while the generator was trivially separable: a
+benchmark that reports F1 0.99 tends to hide an arithmetic error, because the
+shortcut gets the answer right for the wrong reason.
+
+**Missing telemetry was encoded as a measurement of zero, then standardized.**
+`vectorize_states` filled an absent feature with `0.0` in *raw* space and
+z-scored it, so a missing feature landed at `(0 - mean) / scale`. Measured
+against the committed bundle: `payload_size_p90` at **z = -104.47**, `ttl_max` at
+-64.00, and 16 of 98 features beyond 5 sigma. This is reachable, not
+hypothetical - a flow-only capture omits 24 of the 98 schema features, and
+`file_forecast.py` and `POST /v1/forecast` both accept one. Imputation now
+happens in z-space at the training mean, and the fitted statistics ignore windows
+that lack a feature. On the same fixture, `max |z|` went from **104.47 to 8.43**.
+`state_builder` also stopped writing `0.0` for absent packet evidence
+(`frag_df_share` and friends), which was a second door into the same result.
+`state-features-v1` -> `v2`.
+
+**`detect_credential` multiplied a count by a count.** The window feature
+`failed_auth` is aggregated with `Agg.SUM`, but the rule named it `mean_failed`,
+multiplied by the flow count and called the product a per-minute rate. A window
+containing **2** failed authentications reported `failed_auth_per_min = 26.0`
+and saturated at `probability = 1.0`; any window with a single failure cleared
+the alert band. The band is a per-minute rate and the window is already the time
+unit, so the flow count does not belong in the numerator. Measured after the fix
+on the same corpus: 1 failure -> 1.0/min, no alert; 2 -> 2.0/min, alert.
+`detect_malware` had the identical defect and is fixed the same way.
+
+**The exfiltration stage was unreachable.** `external_destination_count` counted
+entities matching `startswith(("external", "1.2.3.4"))` - a literal prefix and one
+hard-coded address. Across every window of the committed corpus the count was
+identically `0.0`, so the Exfiltration rule in `stage_mapping.py`, which requires
+a positive count, could never fire on any shipped data, and would have been
+equally wrong on a real capture. The test now decides by address: a public IPv4
+literal or a dotted FQDN is external, RFC1918/loopback/link-local/CGNAT and bare
+internal names are not.
+
+**The sequence detector normalised on its own maximum, so its argmax was always
+1.0.** Dividing accumulated scores by `max(predictions)` pins the winner at 1.0
+by construction, which made `min_probability=0.30` unreachable, `is_alert` a
+constant `True` and `confidence` a constant "high". A second defect sat beside
+it: `total_weight` was incremented once per *successor* rather than once per
+observed technique, so reconnaissance's 0.85 transition surfaced as 0.425. It now
+divides by the accumulated weight and returns a distribution summing to 1.0.
+Separately, this component is **not** a temporal sequence predictor: `run_all_detectors`
+hands it the current window's findings, so it is an intra-window co-occurrence
+heuristic with no lead time. The docstring said otherwise; it now says what it is.
+
+What was investigated and found **not** broken: destination-port/host pairing.
+The audit concern described a parallel-array index in `state_builder`, but the
+current code iterates `events` directly and guards with
+`if "destination_port" in event.features`, so there is no misalignment. No change
+was made.
+
+`DeploymentBaseline` remains unreachable in production. `run_all_detectors`
+accepts it and both volume rules branch on it, but the only caller that supplies
+one is `scripts/measure_real_detectors.py`; neither the live engine, the API nor
+the dashboard passes it, so every lateral and exfiltration window in production
+takes the `baseline is None` path and emits the "fit a DeploymentBaseline"
+warning. Wiring it needs a persisted artifact, a fitting trigger and a config
+surface, which is new architecture rather than a correctness fix;
+`tests/test_deployment_baseline_wiring.py` pins the current state so the change
+cannot be made silently.
