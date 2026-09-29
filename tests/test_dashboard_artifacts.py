@@ -37,6 +37,9 @@ def _load_resolver():
 resolve_artifact_dir, _ns = _load_resolver()
 RELEASE_BUNDLE = _ns["RELEASE_BUNDLE"]
 SYNTHETIC_BUNDLE = _ns["SYNTHETIC_BUNDLE"]
+#: The licensed CIC-IDS2017 source CSVs. Not in the repository: the presence of
+#: this directory is what decides whether the raw-CSV option can work at all.
+CIC_CSV_DIR = _ns["ROOT"] / "data" / "raw" / "cic-ids2017" / "TrafficLabelling"
 
 
 def test_explicit_flag_wins(tmp_path, monkeypatch) -> None:
@@ -274,8 +277,11 @@ def test_cloud_hides_the_raw_csv_dataset_and_readonly_disables_retraining(monkey
 def test_local_runs_keep_both_the_raw_dataset_and_retraining(monkeypatch, tmp_path) -> None:
     """The guards above must be cloud-only.
 
-    A local checkout has the CSVs and a working trainer; disabling either one
-    locally would remove capability rather than correct a hosted limitation.
+    A local checkout has a working trainer, so retraining must stay available
+    when SENTINEL_READONLY is unset. The raw-CSV option additionally needs the
+    licensed CSVs, which are not in the repository - so its presence is asserted
+    only where that dataset actually is, rather than making a fresh clone fail a
+    test about a 1.2 GB download it was never meant to require.
     """
     from streamlit.testing.v1 import AppTest
 
@@ -290,10 +296,23 @@ def test_local_runs_keep_both_the_raw_dataset_and_retraining(monkeypatch, tmp_pa
     dataset_options = [
         option for radio in at.sidebar.radio if radio.label == "Dataset" for option in radio.options
     ]
-    assert any("1.2 GB" in option for option in dataset_options), (
-        "a local checkout has the licensed CSVs, so the raw-CSV option must stay "
-        f"available when SENTINEL_CLOUD is unset. Got: {dataset_options}"
+    # The committed aggregate is in the repository, so it is always offered.
+    assert any("pre-windowed" in option for option in dataset_options), (
+        f"the committed real CIC-IDS2017 aggregate must always be selectable: {dataset_options}"
     )
+
+    raw = [option for option in dataset_options if "1.2 GB" in option]
+    if CIC_CSV_DIR.is_dir() and any(CIC_CSV_DIR.glob("*.csv")):
+        assert raw, (
+            "this machine has the licensed CSVs, so the raw-CSV option must stay "
+            f"available when SENTINEL_CLOUD is unset: {dataset_options}"
+        )
+    else:
+        assert not raw, (
+            "without the licensed CSVs the raw-CSV option cannot work and must "
+            f"not be offered: {dataset_options}"
+        )
+
     retrain = [b for b in at.sidebar.button if "Train / retrain" in b.label]
     assert retrain and not any(b.disabled for b in retrain), (
         "retraining must stay available when SENTINEL_READONLY is unset"
