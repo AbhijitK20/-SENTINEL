@@ -14,13 +14,17 @@ detector-specific code. Design rules:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from statistics import mean, pstdev
+from statistics import mean, median, pstdev
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from sentinel.schemas import AssetRecord, AttackFinding, NetworkState, StageEvidence
 from sentinel.threat_intel import ThreatIntelFeed, evaluate_hosts
 
 DETECTOR_VERSION = "detectors-v1"
+DEPLOYMENT_BASELINE_VERSION = "deployment-baseline-v1"
 
 # Explicit thresholds, measured on synthetic-recon-lateral-v2 (30s windows):
 # benign max rst_ratio 0.000 / probe_share 0.000 / failed_auth 0.0 per min /
@@ -121,6 +125,101 @@ def _band_score(value: float, warn: float, alert: float) -> float:
     return (value - warn) / (alert - warn)
 
 
+class DeploymentBaseline(BaseModel):
+    """Benign reference statistics for one deployment, learned offline.
+
+    This exists because an **absolute** byte band cannot work across networks.
+    Tuned on synthetic traffic, the known-edge band fires on 952 of 983 real
+    CIC-IDS2017 windows, including 96.7% of benign ones, because real benign
+    volume is roughly 149x the synthetic figure. No recalibration of an absolute
+    threshold fixes that.
+
+    A **rolling history** z-score was measured and rejected: lateral movement is
+    a sustained condition, so a baseline computed from recent traffic rises
+    along with the attack and the score collapses (best achievable TPR-FPR
+    +0.108 on the synthetic corpus, against F1 0.945 for the band it replaced).
+    See `research/ATTACK_DETECTION_REAL_DATA.md`.
+
+    The fix is to learn the baseline from a *separate* reference period that
+    contains no attack, and freeze it. A sustained attack then cannot raise its
+    own baseline, because the baseline is not computed from the live history.
+    This is the same discipline the threshold already uses: fit on validation,
+    freeze, ship.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    baseline_version: str = DEPLOYMENT_BASELINE_VERSION
+    #: Median, not mean: measured on real CIC-IDS2017 the benign known-edge rate
+    #: is 281,385 B/s with a standard deviation of 848,745 B/s - three times the
+    #: mean. A mean/std baseline puts a 3-sigma cut above essentially all real
+    #: traffic, which "fixes" the false-alert rate only by also dropping
+    #: detection to near zero. Median absolute deviation is immune to the
+    #: handful of bulk-transfer windows that make the distribution heavy-tailed.
+    median_bytes_per_sec: float
+    mad_bytes_per_sec: float
+    samples: int = Field(ge=1)
+    reference_label: str = "benign"
+    #: robust sigmas above the deployment median at which the score reaches 1.0
+    alert_sigma: float = Field(default=6.0, gt=0.0)
+    warn_sigma: float = Field(default=3.0, gt=0.0)
+
+    def robust_sigma(self, known_edge_bytes_per_sec: float) -> float:
+        """Modified z-score against the reference median, via median absolute deviation.
+
+        The 0.6745 factor rescales MAD to a standard-deviation equivalent under
+        normality, so the sigma thresholds mean the same thing here as a
+        classical z-score would.
+        """
+        if self.mad_bytes_per_sec <= 0.0:
+            # A reference period with no spread cannot express "unusual" in
+            # deviations; any rise above the median is then fully anomalous.
+            return (
+                0.0 if known_edge_bytes_per_sec <= self.median_bytes_per_sec else self.alert_sigma
+            )
+        return (
+            0.6745 * (known_edge_bytes_per_sec - self.median_bytes_per_sec) / self.mad_bytes_per_sec
+        )
+
+    def score(self, known_edge_bytes_per_sec: float) -> float:
+        """0 at or below the warn sigma, linear to 1.0 at the alert sigma."""
+        sigma = self.robust_sigma(known_edge_bytes_per_sec)
+        if sigma >= self.alert_sigma:
+            return 1.0
+        if sigma <= self.warn_sigma:
+            return 0.0
+        return (sigma - self.warn_sigma) / (self.alert_sigma - self.warn_sigma)
+
+
+def fit_deployment_baseline(
+    known_edge_rates: Sequence[float],
+    *,
+    reference_label: str = "benign",
+    alert_sigma: float = 6.0,
+    warn_sigma: float = 3.0,
+) -> DeploymentBaseline:
+    """Learn the benign reference band from a reference period known to be clean.
+
+    ``known_edge_rates`` must come from windows verified benign **and disjoint
+    from the evaluation period**. Feeding it live history reproduces the rejected
+    rolling z-score, because a sustained attack contaminates its own baseline.
+    """
+    values = sorted(float(v) for v in known_edge_rates)
+    if not values:
+        raise ValueError("cannot fit a deployment baseline without reference windows")
+    if not all(v >= 0.0 for v in values):
+        raise ValueError("known-edge byte rates must be non-negative")
+    med = median(values)
+    return DeploymentBaseline(
+        median_bytes_per_sec=med,
+        mad_bytes_per_sec=median([abs(v - med) for v in values]),
+        samples=len(values),
+        reference_label=reference_label,
+        alert_sigma=alert_sigma,
+        warn_sigma=warn_sigma,
+    )
+
+
 def _zscore(current: float, history_values: list[float]) -> float:
     """z-score vs benign history; 0.0 when history is too short or degenerate."""
     if len(history_values) < MIN_HISTORY:
@@ -162,6 +261,9 @@ class DetectorContext:
     history: tuple[NetworkState, ...] = field(default_factory=tuple)
     asset_registry: dict[str, AssetRecord] | None = None
     threat_feed: ThreatIntelFeed | None = None
+    #: Offline benign reference for this deployment. Absent means "not fitted",
+    #: which rules report as a warning rather than guessing a scale.
+    deployment_baseline: DeploymentBaseline | None = None
 
 
 @dataclass(frozen=True)
@@ -402,21 +504,34 @@ def detect_lateral(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFindi
     # necessarily zero rather than accidentally high. Stated rather than capped,
     # because the new rule cannot fire on an empty history at all.
     cold = len(ctx.history) < MIN_HISTORY
-    probability = (
-        0.0
-        if cold
-        else _band_score(
-            known_bytes_per_sec,
-            KNOWN_EDGE_BYTES_PER_SEC_WARN,
-            KNOWN_EDGE_BYTES_PER_SEC_ALERT,
-        )
-    )
+    baseline = ctx.deployment_baseline
     warnings: list[str] = []
     if cold:
+        probability = 0.0
         warnings.append(
             "benign history is too short to establish which internal edges are "
             "known — lateral movement is scored zero until a baseline exists"
         )
+        sigma: float | None = None
+    elif baseline is None:
+        # No reference period for this deployment. The absolute band below is
+        # tuned on synthetic volume and misfires badly on real networks, so it is
+        # used only as a last resort and the gap is stated rather than hidden.
+        probability = _band_score(
+            known_bytes_per_sec,
+            KNOWN_EDGE_BYTES_PER_SEC_WARN,
+            KNOWN_EDGE_BYTES_PER_SEC_ALERT,
+        )
+        warnings.append(
+            "no deployment baseline fitted — falling back to the synthetic absolute "
+            f"band ({KNOWN_EDGE_BYTES_PER_SEC_WARN:g}-{KNOWN_EDGE_BYTES_PER_SEC_ALERT:g} B/s). "
+            "On real traffic this band over-fires; fit a DeploymentBaseline from a clean "
+            "reference period for this network."
+        )
+        sigma = None
+    else:
+        probability = baseline.score(known_bytes_per_sec)
+        sigma = baseline.robust_sigma(known_bytes_per_sec)
     evidence = [
         _evidence(
             "known_internal_edges", "internal edges already seen in history", len(known_edges)
@@ -429,6 +544,14 @@ def detect_lateral(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFindi
         ),
         _evidence("new_internal_edges", "internal edges unseen in history", new_edges),
     ]
+    if baseline is not None:
+        evidence.append(
+            _evidence(
+                "deployment_baseline_sigma",
+                "robust sigmas above this deployment's own benign reference median",
+                None if sigma is None else round(sigma, 2),
+            )
+        )
     return _finding("lateral_movement", ctx, probability, evidence, warnings, thresholds.lateral)
 
 
@@ -716,6 +839,7 @@ def run_all_detectors(
     thresholds: DetectorSet | None = None,
     asset_registry: dict[str, AssetRecord] | None = None,
     threat_feed: ThreatIntelFeed | None = None,
+    deployment_baseline: DeploymentBaseline | None = None,
 ) -> tuple[AttackFinding, ...]:
     """Run every detector over one window state and return all findings.
 
@@ -727,7 +851,11 @@ def run_all_detectors(
 
     active = thresholds or DetectorSet()
     ctx = DetectorContext(
-        state=state, history=history, asset_registry=asset_registry, threat_feed=threat_feed
+        state=state,
+        history=history,
+        asset_registry=asset_registry,
+        threat_feed=threat_feed,
+        deployment_baseline=deployment_baseline,
     )
     findings: list[AttackFinding] = [
         detect_ddos(ctx, active),

@@ -682,7 +682,14 @@ def replay_screen(ctx: ScreenContext) -> None:
     ui.stats(
         [
             ui.Stat(
-                "Median lead", f"{lead:.1f} win" if lead is not None else "none", band="elevated"
+                "Median lead",
+                (f"+{lead * ctx.window_seconds:.0f}s" if lead is not None else "none"),
+                note=(
+                    f"{lead:.1f} window x {ctx.window_seconds}s"
+                    if lead is not None
+                    else "no forecast crossed before onset"
+                ),
+                band="elevated",
             ),
             ui.Stat("Crossing rate", f"{evaluation.forecast_crossing_rate:.0%}"),
             ui.Stat("False early", f"{evaluation.false_early_warning_rate:.0%}"),
