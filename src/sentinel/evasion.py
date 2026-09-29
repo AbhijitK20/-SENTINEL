@@ -49,9 +49,8 @@ from typing import Any
 
 from sentinel.detectors import (
     EXFIL_BYTES_ALERT,
-    KNOWN_EDGE_BYTES_WARN,
+    KNOWN_EDGE_BYTES_PER_SEC_WARN,
     PROBE_BYTES,
-    PROBE_SHARE_ALERT,
 )
 from sentinel.schemas import NetworkState
 
@@ -240,19 +239,29 @@ def evasion_moves_for(
 
     # 1. Throttle: bring the scored quantity under its alert band, paying in time.
     if detector in {"lateral_movement", "exfiltration"}:
-        headroom = KNOWN_EDGE_BYTES_WARN if detector == "lateral_movement" else EXFIL_BYTES_ALERT
         current = (
             _known_edge_bytes(state, history)
             if detector == "lateral_movement"
             else _window_bytes(state)
         )
-        if current > headroom:
+        # lateral is scored as a rate, so compare against the rate band and
+        # throttle edges to a per-second cap; exfiltration is still a window total.
+        if detector == "lateral_movement":
+            seconds = max(1e-9, (state.window_end - state.window_start).total_seconds())
+            headroom = KNOWN_EDGE_BYTES_PER_SEC_WARN
+            per_second = current / seconds
+        else:
+            headroom = EXFIL_BYTES_ALERT
+            per_second = current
+        if per_second > headroom:
             edges = max(1, len(state.edge_summary))
             cap = max(1.0, (headroom * 0.95) / edges)
+            if detector == "lateral_movement":
+                cap *= seconds
             throttled = _throttle_edges(state, cap)
             still = _alerts(run_detectors(throttled, history), detector)
             # The same payload has to land somewhere, so it needs more windows.
-            extra_windows = max(0.0, current / max(1.0, headroom * 0.95) - 1.0)
+            extra_windows = max(0.0, per_second / max(1.0, headroom * 0.95) - 1.0)
             moves.append(
                 EvasionMove(
                     detector=detector,
@@ -296,8 +305,12 @@ def evasion_moves_for(
         )
 
     # 3. Share dilution for ratio-based rules.
-    if detector in {"reconnaissance", "credential_abuse"}:
-        target = PROBE_SHARE_ALERT if detector == "reconnaissance" else 0.30
+    # reconnaissance is deliberately absent. It used to score the low-byte edge
+    # share, and diluting that share was therefore a real evasion. It is now
+    # evidence only, so adding benign edges no longer evades anything and
+    # pricing it as an attack would be reporting a cost that does not exist.
+    if detector == "credential_abuse":
+        target = 0.30
         current = _probe_share(state)
         if current > 0:
             # To halve a share you roughly double the benign edge count, so the

@@ -106,24 +106,108 @@ broken":
   this specific finding. They have their own synthetic-only problem, described
   in `COMPETITIVE_ANALYSIS.md`.
 
-## The fix, in order
+## Fix, part 1 — what was changed, and what it bought
 
-1. **Re-measure the bands on real benign traffic.** The detectors are already
-   written as explicit band constants (`PROBE_SHARE_WARN`, `PROBE_SHARE_ALERT`,
-   `RST_RATIO_*`, `PROBE_MIN_EDGES`, and equivalents in the other eight). This is
-   a constants change, not a rewrite. Do it per detector, and set the bands from
-   the real distribution above rather than from intuition.
-2. **Report a real false-alert rate in the claims table.** Whatever it turns
-   out to be. A 99.7% rate is a blocker for a monitoring product; if
-   recalibration cannot get it low, that is the finding to publish, and it is
-   more valuable than a synthetic number that hides it.
-3. **Add a real-data detection evaluation** to the benchmark scripts, so this
-   cannot regress silently. The synthetic benchmark should not be the only
-   detection number in the repository.
-4. **Initial Access and Credential Access need detectors that exist.** They are
-   0/38 and 4/58 on real data. The CIC `Thursday-...-WebAttacks` day is
-   web-attack traffic and `Tuesday` is brute-force credential traffic; both are
-   present and neither is caught.
+Branch `fix/detector-calibration-real-data`. Two changes, both reusing machinery
+that already existed in the file.
+
+**Reconnaissance: the low-byte edge share is now evidence, not a score.** This is
+the original design the docstring already described ("Fan-out is reported as
+evidence only"), not a retreat from it. Measured effect on real data:
+
+| | before | after |
+|---|---:|---:|
+| reconnaissance fired in | 981 / 983 windows | **18 / 983** |
+| benign windows alerting | 99.7% | **96.7%** |
+
+**Lateral movement: the band is a rate, and was re-fitted as one.** The old
+50k/60k was an absolute byte count fitted on 30 s windows, while the console lets
+the operator choose the window — so a 300 s window scored 10x higher for
+identical traffic. That is a property of the window, not the traffic. Re-fitted
+by sweeping the byte *rate* on the synthetic corpus, keeping the 5:6 warn:alert
+shape. On 60 s windows benign sits at 579 B/s median and lateral at 2,490 B/s
+median, so the classes separate on the rate: **precision 0.73–0.78, recall 1.00
+across seeds 17/42/7/99**, against test floors of 0.70/0.80. `KNOWN_EDGE_BYTES_WARN`
+and `KNOWN_EDGE_BYTES_ALERT` are gone.
+
+Three regression tests were added and each was checked to fail against the old
+behaviour, not just to pass against the new one.
+
+## Fix, part 2 — what could not be fixed, and why
+
+**The benign false-alert rate is still 96.7%.** Lateral movement fires on 952 of
+983 real windows and is the remaining cause. This is not a threshold that was
+missed; it is arithmetic:
+
+| corpus | median benign edge byte rate |
+|---|---:|
+| synthetic-recon-lateral-v2 | 579 B/s |
+| real CIC-IDS2017 | **86,175 B/s** |
+
+Real benign traffic is **149x** the volume of the corpus the bands were fitted
+on. The attack rate is *below* the real benign median (120,278 B/s versus
+86,175 B/s — a ratio of 1.4, with fully overlapping distributions). No threshold
+placed anywhere on this quantity is quiet on real benign traffic and loud on real
+lateral movement, because the attack sits inside the benign range.
+
+Two alternatives were measured and rejected on evidence rather than taste:
+
+- **History z-score** instead of an absolute band. Best achievable TPR−FPR is
+  +0.108 on the synthetic corpus, against F1 0.945 for the absolute band. The
+  cause is structural: lateral movement is a *sustained* condition, so a rolling
+  baseline rises with the attack and the z-score collapses. Widening the baseline
+  helps (lookback 5 → 40 moves TPR−FPR from +0.14 to +0.52) but never reaches the
+  absolute band, and false positives stay near 0.20 throughout.
+- **Shorter windows.** Separability is not a function of window length: TPR−FPR
+  is +0.064 at 30 s, +0.064 at 60 s, +0.093 at 120 s, +0.110 at 300 s. Longer is
+  marginally better and all are weak.
+
+The real fix is a **per-deployment learned baseline** — normalising against the
+traffic actually observed on that network, which is what the z-score was reaching
+for and what its sustained-attack failure mode defeats. That is a design change,
+not a recalibration, and it is the honest recommendation rather than a band
+tuned to make a number look better.
+
+## What else turned out to be a telemetry gap, not a calibration gap
+
+CIC-IDS2017 flow CSVs carry no `Failed Logins` column, no DNS features and no
+endpoint telemetry. Four detectors are therefore structurally unable to score on
+this data, and already say so via warnings with probability 0.0 — this is correct
+behaviour, not a defect:
+
+- `credential_abuse` — needs `failed_auth`, absent from the CSV schema
+- `phishing` — needs `domain_length` / `dns_tunnel_marker`
+- `command_and_control` — needs `c2_beacon_score` or a threat-intel feed
+- `malware_activity` — needs process-execution telemetry
+
+This matters for reading the per-stage table above. **Initial Access 0/38 is not a
+threshold problem.** The `Thursday-WorkingHours-Morning-WebAttacks` day is
+present in the corpus and the adapter windows it correctly; the only detectors
+that could plausibly catch it are phishing and malware, and both are disabled
+because flow telemetry cannot see a web attack. Detecting it needs PCAP-derived
+or endpoint data via the `pcap_ingestion` path.
+
+It also explains the 905 `command_and_control` alerts in the original
+measurement: they were not from the C2 detector at all, which was disabled. They
+came from `sequence_detector.py`, which learns from the alert history — so
+reconnaissance and lateral movement saturating cascaded into a C2 prediction on
+almost every window. C2 is a symptom, not an independent failure.
+
+## Recommended order
+
+1. **A per-deployment baseline for lateral movement** — the only remaining route
+   to a usable false-alert rate. Not a constants change; see the reasoning above.
+2. **Report the real-data false-alert rate in the claims table** as it stands,
+   96.7%. If a baseline closes it, update it. Publishing 96.7% with an
+   explanation is more useful than a synthetic number that hides it.
+3. **Extend the benchmark scripts with a real-data detection evaluation.** Done
+   for reconnaissance and the lateral band as three regression tests; the
+   whole-corpus run belongs in `make bench-detectors` so the rate is visible
+   without a 1.2 GB dataset.
+4. **PCAP or endpoint telemetry for the four structurally disabled detectors.**
+   Initial Access (0/38) and Credential Access (4/58) are unreachable from flow
+   CSVs, and no threshold will change that. The `pcap_ingestion` path exists for
+   the packet-level view that `detect_recon` now explicitly points at.
 5. Only then re-tune the forecasting models, which is the separate task in
    `COMPETITIVE_ANALYSIS.md`.
 
