@@ -202,9 +202,12 @@ def test_a_retired_figure_is_only_ever_mentioned_as_withdrawn(relative: str) -> 
             window = " ".join(lines[max(0, index - 4) : index + 3]).lower()
             if any(marker in window for marker in WITHDRAWAL_MARKERS):
                 continue
-            assert not line.strip().startswith("|"), (
-                f"{relative}:{index + 1} presents {figure!r} ({why}) in a table with no "
-                f"withdrawal marker within 4 lines: {line.strip()[:100]!r}"
+            # A table row or a bullet is a *claim*. Prose that is explaining
+            # something else may legitimately mention the number.
+            stripped = line.strip()
+            assert not (stripped.startswith("|") or stripped.startswith("-")), (
+                f"{relative}:{index + 1} presents {figure!r} ({why}) as a claim - a table "
+                f"row or bullet - with no withdrawal marker within 4 lines: {stripped[:100]!r}"
             )
 
 

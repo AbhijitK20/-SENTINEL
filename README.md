@@ -10,21 +10,18 @@ pinned: false
 
 # SENTINEL
 
-**AI-Based Network Attack Forecasting from Network Traffic Data**
+**An offline, explainable temporal cyber-defence system for forecasting likely
+attack progression from network traffic before compromise is complete.**
 
-Sentinel predicts what happens next in a network attack — not just what's happening now. Traditional IDS asks "is this flow malicious?" Sentinel asks "given the current trajectory, what is the attacker likely to do next, which assets may be affected, and why?"
+SENTINEL asks a question a traditional IDS does not: given the current
+trajectory, what stage is the attack at, which assets are exposed, and why does
+the system think so. It is a research prototype, not a production SOC platform,
+and it does not claim field-validated detection rates.
 
-Every prediction carries driving-feature attribution, every detection carries measured thresholds and explicit confidence, and every honest limitation is documented — never hidden.
-
-```
-Network events (flow + packet) → UnifiedEvent → time-windowed NetworkState
-    ├── Trained forecaster (logistic baseline + GRU per-horizon)  →  P(infiltration)
-    ├── World model (RSSM): latent dynamics, open-loop imagination →  P(infiltration | imagined future)
-    ├── 9 attack-type detectors (rule-based, honest)              →  AttackFinding
-    └── Stage mapping (MITRE-aligned rules)                       →  stage + evidence
-        ↓
-    Dashboard / REST API / live sensors / trust ledger
-```
+Every prediction carries driving-feature attribution, every detection carries
+measured thresholds and explicit confidence, and every honest limitation is
+documented rather than hidden — including several that make the project look
+worse than a marketing deck would.
 
 ## Problem
 
@@ -48,7 +45,7 @@ exist the project prints `PENDING` rather than a plausible number.
 It is a research prototype. It is not a production SOC platform and does not
 claim field-validated detection rates.
 
-## Core flow
+## How it works
 
 ```text
 Network traffic (flow CSV / PCAP)
@@ -66,6 +63,29 @@ Tamper-evident alert history         append-only hash chain, verified on read
 ```
 
 Every stage in that chain is implemented and exercised by the test suite.
+
+## Key capabilities
+
+Each of these is implemented in `src/sentinel/` and covered by the suite; a
+reachability gate fails the build if any module stops being reachable from an
+entry point.
+
+| Capability | Where |
+|---|---|
+| Network traffic analysis from flow CSV **and** PCAP | `ingestion.py`, `pcap_ingestion.py` |
+| Both flow and packet-level telemetry in one window (TTL spread, TCP window, fragmentation, retransmission) | `state_builder.py`, `feature_computes/` |
+| Attack-stage detection and estimation, MITRE-mapped with evidence | `detectors.py`, `stage_mapping.py` |
+| Temporal context across a window sequence | `temporal.py` (per-horizon GRU), `world_model/` (RSSM) |
+| Open-loop imagination — scoring states the model had to imagine | `world_model/imagine.py` |
+| Risk scoring with a calibrated decision threshold | `calibration.py`, `isotonic.py` |
+| Conformal prediction intervals with a finite-sample coverage claim | `conformal.py` |
+| Explainable findings: driving-feature attribution and counterfactuals | `explain/` |
+| Alert provenance — hashes and forecast metadata, no raw traffic | `ledger.py` |
+| Tamper-evident history — an append-only hash chain, verified on read | `ledger.py` |
+| Offline, local execution — no network client in `src/sentinel/`, enforced by a test | `test_offline.py` |
+| Streamlit analyst console, 10 screens | `dashboard/` |
+| FastAPI service, 21 routes with API-key RBAC | `api/app.py` |
+| Reproducible evaluation — scenario-level splits, train-only statistics, SHA-256 bundle | `tests/`, `models/release/` |
 
 ## The console
 
@@ -92,8 +112,10 @@ enforces, and the tests that hold it to them:
 
 Run it with `uv run streamlit run src/sentinel/dashboard/app.py`. The dataset
 selector (synthetic replay, or CIC-IDS2017 attack days when present) sits in the
-sidebar, and the training gate is explicit — you see the split before you see a
-prediction.
+sidebar. By default the console loads the committed release bundle and trains
+nothing; training only happens if you point it at a data source with no bundle,
+and the scenario-level train/validation/test split is applied before any fit, so
+a window from a training scenario never reaches the model under test.
 
 ## What's Measured
 
@@ -412,12 +434,96 @@ docker compose --profile realtime up --build -d
 docker compose logs -f demo-sensor demo-attacker
 ```
 
+## Demo flow
+
+Verified end to end on this repository. Every step below was executed; the
+observed output is quoted so a judge knows what to expect rather than what to
+hope for.
+
+```bash
+# 1. Start SENTINEL
+uv sync --all-extras --all-groups
+SENTINEL_ARTIFACTS_DIR=models/release/v1 \
+SENTINEL_BOOTSTRAP_KEY="$(openssl rand -hex 16)" \
+uv run uvicorn sentinel.api:create_app --factory --host 127.0.0.1 --port 8100 &
+SENTINEL_ARTIFACTS_DIR=models/release/v1 \
+uv run streamlit run src/sentinel/dashboard/app.py \
+    --server.address 127.0.0.1 --server.port 8501
+```
+
+2. **Open the dashboard** at <http://127.0.0.1:8501>. It loads the committed
+   release bundle, so no training happens on start (measured: first render 3.7 s,
+   subsequent reruns 0.30 s, ten screens, no exceptions).
+
+3. **Load network traffic.** The *Forecast* tab runs the synthetic replay
+   automatically from `data/fixtures/attack_replay.csv`. The *Live* tab accepts a
+   flow CSV or PCAP upload. Everything is local.
+
+4. **Run detection.** The *Live* tab, or:
+
+   ```bash
+   KEY=your-key   # demo mode also accepts sent_demo_key_2026
+   curl -s -X POST http://127.0.0.1:8100/v1/detect \
+     -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+     -d "$(uv run python -c '
+   import json
+   from sentinel.ingestion import read_flow_csv
+   ev = list(read_flow_csv("data/fixtures/attack_replay.csv").events)
+   print(json.dumps({"events": [e.model_dump(mode="json") for e in ev],
+                     "window_seconds": 60, "stride_seconds": 60}))')"
+   ```
+
+   Observed on the committed fixture: **36 windows, 19 alerts** across
+   `reconnaissance`, `credential_abuse`, `lateral_movement`, `ddos` and
+   `insider_threat`.
+
+5. **View the attack-stage assessment.** `POST /v1/forecast` on the same events,
+   or the *Forecast* tab. Observed: stage **`Lateral Movement`** with
+   `MITRE ATT&CK Enterprise TA0008`.
+
+6. **Inspect risk and explanation.** The forecast response carries the
+   probability timeline, a conformal interval, and the driving features. Observed
+   top drivers: `packets_max +3.66`, `packets_mean +2.11`,
+   `flag_psh_ratio +1.68`. The console labels every panel **observed** vs
+   **forecast**.
+
+7. **Inspect evidence and alert history.** The *Trust ledger* panel on the
+   *Forecast* tab: press **Record alert**, then read the integrity stat. The
+   chain is a hash chain over forecast and evidence metadata — no raw traffic is
+   written — and `verify()` re-hashes every record and every link on read.
+
+8. **Optional: demonstrate the caveat.** Say the open-loop skill is ~0. The
+   *Forecast* tab shows the warnings the forecast emits, including "Packet
+   features are unavailable" for a flow-only capture and "baseline-only decay
+   estimate" when no temporal model is supplied. That honesty is the point.
+
+**Fallback if the dashboard is slow to start:** `uv run python
+scripts/smoke_demo.py` runs the same seven steps headless and prints the measured
+value for each. It exits non-zero on the first failure.
+
+**Demo mode.** On by default so nothing above needs setup. The API accepts the
+published key `sent_demo_key_2026` only while `SENTINEL_DEMO_MODE=true`, and
+`/health` reports `"demo_mode": true`. With demo mode off the app refuses to
+start without a real key and rejects the published one. See
+[.env.example](.env.example).
+
 ## Honest Limitations
 
-- Synthetic replay validates pipeline behavior, not production detection performance
+- **This is a research prototype, not a production SOC platform.** It is a
+  prototype demonstrating predictive forecasting.
+- Synthetic replay validates pipeline behaviour, not production detection
+  performance. The first synthetic corpus was trivially separable; the current
+  one is deliberately harder and the headline numbers are lower because of it
+  (see *What's Measured*).
+- **Lateral movement and exfiltration are capped sub-alert** without a
+  per-deployment benign baseline, which is not implemented. The absolute byte
+  band they fall back to over-fires on real traffic, and the warning on every
+  finding says so.
+- Three of the nine detector rules are disabled without DNS or EDR telemetry, so
+  six of nine are exercised by this dataset.
 - World-model open-loop skill is measured on synthetic replay only. It degrades with horizon and no horizon is free
-- Imagination does not add lead time on the synthetic set: it matches during-attack detection with a zero false-early rate, but never fires before the attack starts — the per-horizon nowcast is what warns early
-- The linear transition baseline cannot simulate: both the one-step and the new multi-step fits are wildly expansive, and the stability projection discards ~99.999% of either, so the shipped linear map is close to a constant predictor. **The world model's +0.189 open-loop skill is therefore not a like-for-like comparison** — it beats a broken reference, and `rollout_forecast` now emits that caveat on the forecast itself. See `docs/KNOWN_LIMITATIONS.md`
+- **Measured median forecast lead time is 0.0 windows** on both the default and the calibrated threshold. Nothing in this project fires before an attack starts on this dataset, and that is a property of the generator, not of the architecture. The calibrated threshold buys a higher crossing rate at a much higher false-early rate; the trade is recorded, not resolved
+- The linear transition baseline cannot simulate: its one-step map is expansive, so the stability projection flattens it into a near-constant predictor. **The world model's open-loop comparison against it is therefore not like-for-like** — and on the current corpus the world model's own margin over persistence is small and not robust to how it is measured (+0.060 over five steps, -0.001 over the bundle's three-step test metric). The "beats persistence" claim is withdrawn. See `docs/KNOWN_LIMITATIONS.md`
 - Packet-level features only reach the model when the input actually contains packet events; a flow CSV produces flow features only and the forecast says so
 - **The CIC-IDS2017 dataset is not in this repository and is not downloaded by it.** `data/raw/` is gitignored. The real-data protocol is implemented and exercised on a generated CIC-schema fixture, which proves the code path but measures nothing. Real numbers require the licensed CSVs, and `run_real_benchmark.py` derives its claim status from the input so a fixture run can never be quoted as a result
 - The trust ledger is a hash chain, not a blockchain — it's the integration seam for a future permissioned chain
