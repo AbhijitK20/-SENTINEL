@@ -21,8 +21,26 @@ reports/live
 deliverables
 tools/wheels
 
+# Local-only trees that are large and irrelevant to a hosted run. Left in, they
+# made the build context 2,566 MB - 1,671 MB of third-party research clones and
+# 827 MB of video renders - which a host has to upload before it can build
+# anything. None of it is an input to the console or the API.
+research
+video
+graphify-out
+.agents
+.codewhale
+brag-output*
+
 # The release bundle is the shipped deliverable: predict.load_artifacts() must
 # work from a fresh clone or container with no training step. Re-include it
 # after the broad artifact exclusions above.
 !models/release
 !models/release/**
+
+# The committed pre-windowed CIC-IDS2017 aggregate, for the same reason. The
+# `*.parquet` rule above is what excluded it, so without this the image ships
+# with no real data and the console silently falls back to synthetic replay.
+!data/derived
+!data/derived/*.parquet
+!data/derived/*.json
