@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from sentinel.detectors import (
@@ -335,3 +336,49 @@ def test_lateral_band_is_a_rate_so_window_length_does_not_change_the_score() -> 
         f"identical traffic at two window lengths scored {scores}; the band must be a rate"
     )
     assert _known_edge_bytes is not None
+
+
+def test_deployment_baseline_is_scale_invariant_and_sustained_attack_safe() -> None:
+    """A fitted baseline must fire on a real-volume network and not chase itself.
+
+    Two properties the absolute synthetic band cannot have: 149x-scaled benign
+    traffic must score zero, and a long run of high-volume attack windows must
+    keep scoring high because the baseline is frozen rather than recomputed from
+    the contaminated history.
+    """
+    from sentinel.detectors import (
+        fit_deployment_baseline,
+    )
+
+    # A network 149x the synthetic volume, with ordinary variation.
+    rng = np.random.default_rng(7)
+    benign_rates = list(100.0 + rng.normal(0, 8, 400))
+    baseline = fit_deployment_baseline(benign_rates)
+
+    # Benign at real scale must not alert.
+    assert baseline.score(float(np.median(benign_rates))) < 0.5
+
+    # A sustained attack stays anomalous however long it runs, because the
+    # baseline never sees the attack.
+    for _ in range(50):
+        assert baseline.score(900.0) == 1.0
+
+    # Scale invariance: multiplying the whole reference set and the query by the
+    # same factor must leave the score untouched, because median and MAD are both
+    # linear in the data. This is the property the absolute band cannot have.
+    base_rates = list(100.0 + rng.normal(0, 8, 400))
+    small = fit_deployment_baseline([r / 10.0 for r in base_rates])
+    large = fit_deployment_baseline(base_rates)
+    for q in (100.0, 140.0, 400.0):
+        assert small.score(q / 10.0) == pytest.approx(large.score(q), abs=1e-9)
+
+
+def test_lateral_reports_missing_baseline_instead_of_guessing() -> None:
+    """No fitted baseline must surface a warning, not silently score."""
+    from sentinel.detectors import run_all_detectors
+
+    st = _realistic_benign_state()
+    hist = tuple(_realistic_benign_state() for _ in range(6))
+    findings = {f.attack_type: f for f in run_all_detectors(st, hist)}
+    lateral = findings["lateral_movement"]
+    assert any("no deployment baseline" in w for w in lateral.warnings)

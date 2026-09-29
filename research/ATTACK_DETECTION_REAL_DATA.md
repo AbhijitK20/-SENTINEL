@@ -197,6 +197,7 @@ almost every window. C2 is a symptom, not an independent failure.
 
 1. **A per-deployment baseline for lateral movement** — the only remaining route
    to a usable false-alert rate. Not a constants change; see the reasoning above.
+   **Done**, with the measured result below.
 2. **Report the real-data false-alert rate in the claims table** as it stands,
    96.7%. If a baseline closes it, update it. Publishing 96.7% with an
    explanation is more useful than a synthetic number that hides it.
@@ -208,6 +209,51 @@ almost every window. C2 is a symptom, not an independent failure.
    Initial Access (0/38) and Credential Access (4/58) are unreachable from flow
    CSVs, and no threshold will change that. The `pcap_ingestion` path exists for
    the packet-level view that `detect_recon` now explicitly points at.
+
+## The per-deployment baseline, measured
+
+`DeploymentBaseline` in `detectors.py` is learned offline from a **disjoint,
+known-benign reference period** and then frozen, so a sustained attack cannot
+raise its own reference. Measured by `scripts/measure_real_detectors.py` over
+all eight day CSVs, 775 evaluation windows (490 benign, 285 attack), with the
+first 30% of benign windows as the reference period:
+
+| Rule | Absolute band | Deployment baseline |
+|---|---|---|
+| lateral, benign | 99.2% | **6.0%** |
+| lateral, attack | 99.6% | **16.1%** |
+| any rule, benign | 99.6% | 16.6% |
+
+The absolute band was carrying no information at all — it fired on 99.2% of
+benign and 99.6% of attack windows, so it could not distinguish them. The
+baseline replaces that with a weak but real 2.7x lift: 16.1% detection at 6.0%
+false alerts, against 1-in-6 unseen lateral windows caught.
+
+**This is progress, not a fix.** 16.1% recall is not deployable, and the honest
+reading is that the lateral rule on flow-only real traffic is a weak signal at
+best. The 96.7% figure above was measured with a different history slice and so
+is 99.2% here; the difference is the lookback used, not a contradiction.
+
+### Why median and MAD rather than mean and standard deviation
+
+The first implementation used mean and standard deviation and the false-alert
+rate fell to 2.7% — but detection fell with it, to 4.2%. The reference
+statistics explain why: benign known-edge rate is **281,385 ± 848,745 B/s**, a
+standard deviation three times the mean, because a handful of bulk-transfer
+windows dominate. A 3-sigma cut on that distribution sits above essentially all
+real traffic, so it "fixes" false alerts by going deaf.
+
+Switching to median and median absolute deviation (median 63,420 B/s, MAD
+24,924) keeps the false-alert rate at 6.0% and recovers detection to 16.1%.
+Both statistics are linear in the data, so the baseline is exactly scale
+invariant — a network 149x busier than the synthetic corpus scores the same
+relative excursion, which is the property the absolute band could never have.
+`tests/test_detectors.py` asserts that invariance by scaling one reference set
+and asserting the score is unchanged.
+
+When no baseline is fitted, the rule says so in a warning rather than silently
+falling back to the synthetic band, because that fallback is what produced the
+99.2% rate in the first place.
 5. Only then re-tune the forecasting models, which is the separate task in
    `COMPETITIVE_ANALYSIS.md`.
 

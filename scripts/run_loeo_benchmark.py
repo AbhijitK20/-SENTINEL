@@ -68,7 +68,9 @@ DAY_CSVS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _load_all(data_dir: Path, *, window_seconds: int, stride_seconds: int) -> list[LabelledState]:
+def load_all_days(
+    data_dir: Path, *, window_seconds: int, stride_seconds: int
+) -> list[LabelledState]:
     """Load every day CSV into labelled windows, in chronological file order."""
     out: list[LabelledState] = []
     for name, scenario_id in DAY_CSVS:
@@ -205,7 +207,7 @@ def main() -> None:
     args = parser.parse_args()
 
     print("loading real CIC-IDS2017 days:")
-    labelled = _load_all(
+    labelled = load_all_days(
         Path(args.data_dir), window_seconds=args.window_seconds, stride_seconds=args.stride_seconds
     )
     if not labelled:
