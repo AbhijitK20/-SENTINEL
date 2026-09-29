@@ -21,4 +21,11 @@ RUN uv sync --frozen --extra all --no-dev
 
 EXPOSE 8501
 
+# A hosted container serves every visitor from one bundle, and the licensed
+# source CSVs are not in the image, so the console hides the raw-CSV dataset
+# option and disables in-session retraining. Retraining on a shared 2-vCPU box
+# would be slow enough to look broken; the committed bundle is the model.
+ENV SENTINEL_CLOUD=1 \
+    SENTINEL_READONLY=1
+
 CMD ["uv", "run", "--no-sync", "streamlit", "run", "src/sentinel/dashboard/app.py"]
