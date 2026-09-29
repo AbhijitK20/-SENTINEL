@@ -219,10 +219,13 @@ anyone given the link:
 - **The app sleeps when idle.** A visitor arriving after a period of inactivity
   gets a wake-up screen and waits out the cold start. This is inherent to every
   free tier; there is no free host that stays warm.
-- **RAM is capped** at roughly 2.7 GB per app. Loading the committed real-data
-  aggregate peaks around 826 MB in a local measurement. It is behind
-  `st.cache_data`, so it is paid once per server process rather than once per
-  session.
+- **RAM is capped** at roughly 2.7 GB per app. Measured locally, the hosted
+  console with the real CIC-IDS2017 aggregate selected — Streamlit, torch,
+  plotly and all 4,899 windows in one process — peaks at **1,439 MB RSS** and
+  takes 11.4 s to first paint. The default (synthetic replay) is lighter. The
+  aggregate is behind `st.cache_data`, so it is paid once per server process
+  rather than once per session. Headroom against the cap is roughly 1.2 GB, so
+  this is the constraint most likely to be hit first if the dashboard grows.
 
 Hugging Face Spaces was evaluated and rejected for this deployment: the CPU
 Basic hardware tier has no hourly charge, but *creating* a Gradio or Docker Space
