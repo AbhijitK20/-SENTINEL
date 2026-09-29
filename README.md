@@ -56,7 +56,15 @@ prediction.
 
 ## What's Measured
 
-All numbers come from `reports/generated/` (regenerate with the scripts below). Every number is reproducible, and every number states whether it came from synthetic replay or a real capture.
+Every number below is produced by a script in `scripts/`, using the committed,
+checksummed release bundle in `models/release/v1/` (`make verify` re-hashes it).
+The generated reports themselves are **not committed** — they are large, and
+they are rebuilt on demand. Regenerate them with the `make bench-*` targets
+below, or run the whole chain with `make reproduce`.
+
+Each number states whether it came from synthetic replay or a real capture. Where
+a result cannot be reproduced from this repository, it is marked **PENDING**
+rather than printed.
 
 ### World model: open-loop state prediction (held-out scenarios)
 
@@ -97,19 +105,27 @@ payload distribution).
 | False-positive rate | 0.060 | 0.000 |
 | PR-AUC | 0.978 | 1.000 |
 
-### Real-data forecast (CIC-IDS2017, 5 attack families)
+### Real-data forecast (CIC-IDS2017) — PENDING, NOT YET MEASURED
 
-Trains on Tuesday (FTP/SSH-Patator), validates on Thursday morning (Web Attacks), tests each day separately.
-
-| Attack Family | Flows | Windows | Lead (0.50) | Crossing | False Early |
-|---|---|---|---|---|---|
-| Infiltration (Thu PM) | 286K | 97 | **0.5 win (75 s)** | 15% | 11% |
-| DDoS (Fri PM) | 225K | 37 | 0.0 | 36% | 9% |
-| PortScan (Fri PM) | 286K | 60 | None | 16% | 16% |
-| Botnet (Fri AM) | 191K | 97 | 0.0 | 20% | 10% |
-| DoS (Wed) | 692K | 204 | 0.0 | 32% | 12% |
-
-The per-horizon model demonstrates **75-second predictive lead time on Infiltration**. Other families show 0.0 lead — the model doesn't predict them ahead of time with current training data. This is an honest result: the architecture works for Infiltration; diverse dwell-time data is needed for other families.
+> **Claim status: unverified — no result is published here.** The cross-day
+> CIC-IDS2017 forecast protocol is implemented (`scripts/run_real_benchmark.py`)
+> and exercised on a generated CIC-schema fixture, which proves the code path
+> but measures nothing. The licensed CSVs are **not in this repository** and are
+> not downloaded by it; `data/raw/` holds only `fixture-lab/`, a synthetic file
+> this project generates. A lead-time and false-early table for the five attack
+> families was published here previously and is **withdrawn** — it cited
+> `reports/generated/real-benchmark/`, which does not exist in this repository.
+>
+> An earlier version of this README also stated a specific predictive lead time
+> on the Infiltration family. That number came from the withdrawn table and is
+> **not supported by any artifact here**. It is recorded as unverified in
+> `docs/CLAIMS.md`, and `tests/test_claims_integrity.py` fails the build if it
+> returns.
+>
+> **To make this real:** obtain the licensed CSVs, place them in
+> `data/raw/cic-ids2017/TrafficLabelling/`, run `make bench-real`, and commit the
+> generated report. `run_real_benchmark.py` derives its own claim status from
+> the input, so a fixture run can never be quoted as a real-data result.
 
 ### Real-traffic detector validation (lab HTTP attacks)
 

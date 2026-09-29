@@ -11,6 +11,7 @@ Shows:
 from __future__ import annotations
 
 import platform
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,7 +63,12 @@ SPRINTS = [
         "id": 10,
         "name": "Real-Data Benchmark",
         "points": 13,
-        "done": True,
+        # The protocol and the CIC-IDS2017 adapter are implemented and
+        # exercised on a generated schema fixture, but the licensed CSVs are
+        # not in this repository and the run has never been executed. This
+        # sprint is NOT complete: docs/CLAIMS.md tracks the real-data table as
+        # unbacked, and marking it done contradicted that.
+        "done": False,
         "tests": 96,
         "files": 53,
     },
@@ -90,7 +96,24 @@ REMAINING_POINTS = TOTAL_POINTS - COMPLETED_POINTS
 SPRINTS_DONE = sum(1 for s in SPRINTS if s["done"])
 SPRINTS_TOTAL = len(SPRINTS)
 FILES_TOTAL = 60  # python files on disk (src + scripts + tests)
-TESTS_TOTAL = 111  # actual count
+
+
+def count_test_functions() -> int:
+    """Count test functions on disk rather than trusting a remembered number.
+
+    This constant was 111 and was quoted in the submission abstract while the
+    suite held several times that. A presentation figure that can drift from
+    the repository without anyone noticing is worse than no figure, so it is
+    derived on every render.
+    """
+    tests_dir = REPO_ROOT / "tests"
+    return sum(
+        len(re.findall(r"^\s*def (test_\w+)", path.read_text(encoding="utf-8"), re.M))
+        for path in sorted(tests_dir.glob("test_*.py"))
+    )
+
+
+TESTS_TOTAL = count_test_functions()
 
 # ── SVG helpers ───────────────────────────────────────────────────────
 W, H = 900, 520

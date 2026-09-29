@@ -13,6 +13,7 @@ These tests are that enforcement.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -99,12 +100,186 @@ def test_the_claims_file_exists_and_names_the_open_items() -> None:
     assert "Explicitly not claimed" in text
 
 
+# ── the withdrawn claim, and the document that failed to withdraw it ───────
+#
+# docs/RESULTS.md had its real-data table replaced with PENDING and
+# ABSTRACT.md had its ~900k figure retracted. README.md was never touched: it
+# kept the full five-family table AND the headline lead-time sentence, in a
+# document that also states the dataset was never run. The gate above could not
+# catch it because it only ever read RESULTS.md and ABSTRACT.md by name.
+#
+# These tests are the fix: the rule is now expressed as a fact about the whole
+# gated corpus, not about two files somebody remembered.
+
+#: Lead times that were published from the withdrawn real-data table. The
+#: narrative claim is "75-second predictive lead time"; the table encoded it as
+#: a half-window crossing. Both are the same withdrawn measurement.
+WITHDRAWN_LEAD_TIME = re.compile(
+    r"75[-\s]?(?:second|s)\b"  # 75-second / 75 second
+    r"|\b75s\b"
+    r"|0\.5\s*win\b",  # the table's "0.5 win (75 s)" cell
+    re.I,
+)
+
+#: Documents a judge reads before anything else. These are named explicitly so
+#: that adding the rule cannot quietly exclude the file that motivated it.
+JUDGE_FACING = (
+    "README.md",
+    "docs/RESULTS.md",
+    "docs/CLAIMS.md",
+    "deliverables/ABSTRACT.md",
+)
+
+
+@pytest.mark.parametrize("relative", JUDGE_FACING, ids=JUDGE_FACING)
+def test_no_judge_facing_document_republishes_the_withdrawn_lead_time(relative: str) -> None:
+    """The withdrawn real-data lead time must not reappear in a headline doc.
+
+    A withdrawn measurement that survives in one document is worse than one
+    that was never published: it reads as current while contradicting the
+    document that retracted it.
+    """
+    path = ROOT / relative
+    assert path.is_file(), f"{relative} is judge-facing and must exist"
+    text = path.read_text(encoding="utf-8")
+    match = WITHDRAWN_LEAD_TIME.search(text)
+    assert match is None, (
+        f"{relative}:{text[: match.start()].count(chr(10)) + 1} republishes the withdrawn "
+        f"real-data lead time ({match.group(0)!r}). The CIC-IDS2017 table was withdrawn "
+        "because reports/generated/real-benchmark/ does not exist in this repository. "
+        "Mark it PENDING, or restore it with a committed report."
+    )
+
+
+@pytest.mark.parametrize("relative", JUDGE_FACING, ids=JUDGE_FACING)
+def test_judge_facing_documents_do_not_assert_the_dataset_was_benchmarked(relative: str) -> None:
+    """A real-data results table may not be presented as a completed measurement.
+
+    Guards the shape of the specific regression: a per-family table with flow
+    counts and a lead-time column is a claim that the run happened, whatever
+    the surrounding prose says.
+    """
+    text = (ROOT / relative).read_text(encoding="utf-8")
+    for family in ("Infiltration", "DDoS", "Botnet", "PortScan"):
+        if family not in text:
+            continue
+        # Any mention of a real attack family must sit next to a withdrawal.
+        assert re.search(r"PENDING|withdrawn|unverified|NOT CURRENTLY", text, re.I), (
+            f"{relative} names the real-data attack family {family!r} with no withdrawal "
+            "marker anywhere in the document"
+        )
+
+
+def test_readme_manifest_of_measured_numbers_points_at_a_command() -> None:
+    """README states where its numbers come from; that place must be buildable.
+
+    It previously promised that "all numbers come from reports/generated/",
+    which is gitignored and absent, making the repository's central
+    reproducibility claim unfalsifiable for anyone who clones it.
+    """
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert PRODUCES.search(readme), (
+        "README states where its measured numbers come from but contains no command "
+        "that produces them"
+    )
+    # The bundle is committed, so it may be cited as a source directly.
+    assert "models/release" in readme, (
+        "README must cite the committed release bundle as the source of its numbers"
+    )
+
+
 def test_the_known_limitations_file_records_the_unflattering_results() -> None:
     text = (ROOT / "docs" / "KNOWN_LIMITATIONS.md").read_text(encoding="utf-8")
     assert "Measured, not assumed" in text
     # If these are deleted the measurements become unfalsifiable again.
     assert "lateral-movement" in text
     assert "not a working simulator" in text or "barely a simulator" in text
+
+
+# ── presentation generators must not re-type a withdrawn number ───────────
+#
+# deliverables/appendix/snapshot.png is built by scripts/export_appendix.py.
+# That file hard-coded the withdrawn real-data claims (~900k flows, 23/34
+# windows, 0.12-0.18 false-early) as string literals while the same image
+# printed "all numbers measured, none hand-typed". Nothing gated it, because
+# the image is a PNG and the text lived only in a script.
+
+#: Figures withdrawn in docs/CLAIMS.md that must not reappear in a generator.
+WITHDRAWN_FIGURES = (
+    r"~?\d+\s?k\s+real flows",
+    r"900,?000",
+    r"23\s*[-–]\s*25\s*/\s*34",
+    r"0\.12\s*[-–]\s*0\.18",
+    r"none hand-typed",
+    r"15 tests passing",
+    r"baseline model is next",
+)
+
+GENERATORS = (
+    "scripts/export_appendix.py",
+    "scripts/render_burndown.py",
+    "scripts/render_snapshot.py",
+    "scripts/build_deck.py",
+)
+
+
+@pytest.mark.parametrize("relative", GENERATORS, ids=GENERATORS)
+def test_no_generator_hard_codes_a_withdrawn_figure(relative: str) -> None:
+    """A withdrawn number must not be typed into a script that draws it.
+
+    These generators produce the submitted artifacts. A literal in one of them
+    bypasses every markdown gate, because the claim never appears in a `.md`.
+    """
+    path = ROOT / relative
+    if not path.is_file():
+        pytest.skip(f"{relative} is not present")
+    text = path.read_text(encoding="utf-8")
+    for pattern in WITHDRAWN_FIGURES:
+        match = re.search(pattern, text, re.I)
+        assert match is None, (
+            f"{relative} hard-codes {match.group(0)!r}, a figure withdrawn in "
+            "docs/CLAIMS.md. Read it from tracked data or print PENDING."
+        )
+
+
+def test_the_real_data_sprint_is_not_marked_complete() -> None:
+    """The real-data benchmark sprint may not be 'done' while its claim is open.
+
+    docs/CLAIMS.md tracks the CIC-IDS2017 forecast table as unbacked. The
+    burndown data marked the Real-Data Benchmark sprint complete, so the
+    submitted chart asserted 100% delivery of a run that never happened.
+    """
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import render_burndown
+    finally:
+        sys.path.pop(0)
+    sprint = next(s for s in render_burndown.SPRINTS if "Real-Data" in s["name"])
+    assert sprint["done"] is False, (
+        "Real-Data Benchmark is marked done, but the licensed CSVs are absent and "
+        "the run has never been executed. See docs/CLAIMS.md."
+    )
+
+
+def test_the_snapshot_test_count_is_measured_not_remembered() -> None:
+    """The presentation test count must come from the tests on disk.
+
+    It was the literal 111 while the suite held several times that, and the
+    abstract quoted the same figure.
+    """
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import render_burndown
+    finally:
+        sys.path.pop(0)
+    on_disk = sum(
+        len(re.findall(r"^\s*def test_\w+", p.read_text(encoding="utf-8"), re.M))
+        for p in sorted((ROOT / "tests").glob("test_*.py"))
+    )
+    assert render_burndown.TESTS_TOTAL == on_disk, (
+        f"TESTS_TOTAL={render_burndown.TESTS_TOTAL} but {on_disk} test functions "
+        "exist on disk; the figure is derived, so these must agree"
+    )
 
 
 # ── the audit's numeric match is tolerance-based, on purpose ──────────────

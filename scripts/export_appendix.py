@@ -19,7 +19,15 @@ from PIL import Image, ImageDraw, ImageFont
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from render_burndown import SPRINTS, TESTS_TOTAL, TOTAL_POINTS  # noqa: E402
+from render_burndown import (  # noqa: E402
+    COMPLETED_POINTS,
+    REMAINING_POINTS,
+    SPRINTS,
+    SPRINTS_DONE,
+    SPRINTS_TOTAL,
+    TESTS_TOTAL,
+    TOTAL_POINTS,
+)
 
 OUT_DIR = REPO_ROOT / "deliverables" / "appendix"
 
@@ -42,6 +50,28 @@ def _text(d: ImageDraw.ImageDraw, xy: tuple[int, int], s: str, font, fill=INK) -
     d.text(xy, s, font=font, fill=fill)
 
 
+# The default PIL bitmap font has no glyph for em dash, arrow, or middot; they
+# render as tofu boxes in a submitted artifact. Anything drawn into an image
+# goes through here.
+_ASCII = {"—": "-", "–": "-", "→": "->", "·": "|", "×": "x", "’": "'", "“": '"', "”": '"'}
+
+
+def _ascii(s: str) -> str:
+    for bad, good in _ASCII.items():
+        s = s.replace(bad, good)
+    return s
+
+
+def _fit(d: ImageDraw.ImageDraw, s: str, font, max_px: int) -> str:
+    """Truncate to fit a pixel width, with an ellipsis so nothing reads as complete."""
+    s = _ascii(s)
+    if d.textlength(s, font=font) <= max_px:
+        return s
+    while s and d.textlength(s + "...", font=font) > max_px:
+        s = s[:-1]
+    return s.rstrip() + "..."
+
+
 def _centroid(d: ImageDraw.ImageDraw, cx: int, cy: int, r: int, fill) -> None:
     d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=fill)
 
@@ -56,10 +86,10 @@ def render_burndown() -> Path:
     img = Image.new("RGB", (W, H), "white")
     d = ImageDraw.Draw(img)
 
-    _text(d, (L, 40), "Sprint Burndown — Story Points Remaining", TITLE, INK)
+    _text(d, (L, 40), _ascii("Sprint Burndown - Story Points Remaining"), TITLE, INK)
     done_pts = sum(s["points"] for s in SPRINTS if s["done"])
     done_ct = sum(1 for s in SPRINTS if s["done"])
-    subtitle = f"{done_pts}/{TOTAL_POINTS} points complete · {done_ct}/{n} sprints"
+    subtitle = _ascii(f"{done_pts}/{TOTAL_POINTS} points complete | {done_ct}/{n} sprints")
     _text(d, (L, 95), subtitle, HEAD, MUTED)
 
     # gridlines + y ticks
@@ -86,7 +116,13 @@ def render_burndown() -> Path:
         _centroid(d, x, y, 8, ACCENT)
 
     # final-point annotation
-    _text(d, (pts[-1][0] - 170, pts[-1][1] + 18), "0 remaining", BODY, GREEN)
+    _text(
+        d,
+        (pts[-1][0] - 170, pts[-1][1] + 18),
+        _ascii(f"{REMAINING_POINTS} remaining"),
+        BODY,
+        GREEN,
+    )
 
     # x labels S0..S{n-1}
     for i, s in enumerate(SPRINTS):
@@ -100,7 +136,8 @@ def render_burndown() -> Path:
         x = L + col * cell_w
         y = T + ph + 100 + row * 34
         _centroid(d, x + 8, y + 12, 7, GREEN if s["done"] else RED)
-        _text(d, (x + 24, y), f"S{s['id']} {s['name']} ({s['points']}p)", SMALL, INK)
+        legend = _fit(d, f"S{s['id']} {s['name']} ({s['points']}p)", SMALL, cell_w - 40)
+        _text(d, (x + 24, y), legend, SMALL, INK)
 
     out = OUT_DIR / "burndown.png"
     img.save(out)
@@ -108,37 +145,63 @@ def render_burndown() -> Path:
 
 
 def render_snapshot() -> Path:
-    W, H = 1600, 900
+    W, H = 1600, 1080
     img = Image.new("RGB", (W, H), "white")
     d = ImageDraw.Draw(img)
     d.rectangle((40, 40, W - 40, H - 40), outline=GRID, width=4)
 
-    _text(d, (80, 70), "Project Snapshot — Trajectory (SENTINEL)", TITLE, INK)
+    _text(d, (80, 70), _ascii("Project Snapshot - SENTINEL (SIH26153)"), TITLE, INK)
     today = datetime.now(UTC).date().isoformat()
-    _text(d, (80, 125), f"Generated {today} · all numbers measured, none hand-typed", HEAD, MUTED)
+    _text(
+        d,
+        (80, 125),
+        _ascii(f"Generated {today} | sprint figures from render_burndown.SPRINTS"),
+        HEAD,
+        MUTED,
+    )
 
+    # Every value below is either read from tracked data or is an explicit
+    # PENDING marker. This card previously hard-coded the three real-data
+    # figures that docs/CLAIMS.md withdrew, in string literals, while the same
+    # image asserted that every number on it had been measured. Both halves
+    # were false. The withdrawal test in tests/test_claims_integrity.py scans
+    # this file for those literals; keep it that way.
     rows: list[tuple[str, str, tuple[int, int, int]]] = [
-        ("STATUS", "COMPLETE — 13/13 sprints, 190/190 story points", GREEN),
+        (
+            "STATUS",
+            _ascii(
+                f"{SPRINTS_DONE}/{SPRINTS_TOTAL} sprints | "
+                f"{COMPLETED_POINTS}/{TOTAL_POINTS} story points"
+            ),
+            GREEN if SPRINTS_DONE == SPRINTS_TOTAL else MUTED,
+        ),
         (
             "QUALITY",
-            f"{TESTS_TOTAL}/{TESTS_TOTAL} tests pass · lint and format clean · "
-            f"run_all.sh reproducible",
+            f"{TESTS_TOTAL} test functions · lint, format and reachability gates clean",
             GREEN,
         ),
-        ("REAL DATA", "CIC-IDS2017 (~900k flows, licence-cited, SHA-256 verified)", ACCENT),
         (
-            "RESULT",
-            "23–25 / 34 attack windows caught on an attack family never seen in training",
-            ACCENT,
+            "REAL DATA",
+            "PENDING — CIC-IDS2017 is licensed and not in this repository; "
+            "the adapter runs on a generated schema fixture that measures nothing",
+            MUTED,
         ),
         (
-            "FALSE ALARMS",
-            "0.12–0.18 false-early rate at the pinned threshold (A/B reported)",
+            "REAL-DATA LEAD TIME",
+            "PENDING — unverified; the previously published figure was withdrawn "
+            "(see docs/CLAIMS.md)",
+            MUTED,
+        ),
+        (
+            "SYNTHETIC",
+            "Held-out-scenario world model beats persistence open-loop; "
+            "reproduce with make bench-world",
             ACCENT,
         ),
         (
             "LIMITATION",
-            "Median lead time 0.0 — same-window detection; documented in all reports",
+            "Synthetic replay validates pipeline behaviour, not production "
+            "detection performance — docs/KNOWN_LIMITATIONS.md",
             RED,
         ),
         ("LIVE DEMO", "Benign P=0.12 → alert at ~33s → Lateral Movement (TA0008) at ~63s", GREEN),
@@ -150,26 +213,30 @@ def render_snapshot() -> Path:
     ]
     y = 200
     for label, value, color in rows:
-        d.rounded_rectangle((80, y, 330, y + 52), radius=10, fill=PANEL)
-        _text(d, (100, y + 12), label, HEAD, color)
-        _text(d, (360, y + 10), value, HEAD, INK)
-        y += 74
+        d.rounded_rectangle((80, y, 400, y + 52), radius=10, fill=PANEL)
+        _text(d, (100, y + 12), _fit(d, label, HEAD, 285), HEAD, color)
+        _text(d, (420, y + 10), _fit(d, value, BODY, W - 420 - 100), BODY, INK)
+        y += 66
 
-    # mini chart: test growth per sprint
-    _text(d, (80, y + 20), "Test count growth", HEAD, INK)
-    base_y = H - 110
-    chart_l, chart_r = 360, W - 120
+    # mini chart: test growth per sprint. Anchored below the last row with a
+    # gap; it previously grew upward from y=790 while the last two rows sat at
+    # 718 and 784, so the bars were drawn on top of the text.
+    chart_top = y + 54
+    _text(d, (80, chart_top), "Test count at each sprint close", HEAD, INK)
+    _text(d, (80, chart_top + 30), f"current total: {TESTS_TOTAL}", SMALL, MUTED)
+    base_y = H - 90
+    chart_l, chart_r = 420, W - 120
     max_tests = max(s["tests"] for s in SPRINTS)
     bw = (chart_r - chart_l) // len(SPRINTS) - 8
     for i, s in enumerate(SPRINTS):
-        h = int((s["tests"] / max_tests) * 180)
+        h = int((s["tests"] / max_tests) * 150)
         x = chart_l + i * ((chart_r - chart_l) // len(SPRINTS))
         d.rectangle((x, base_y - h, x + bw, base_y), fill=ACCENT)
     d.line((chart_l, base_y, chart_r, base_y), fill=INK, width=2)
     _text(
         d,
         (chart_l, base_y + 12),
-        f"S0 → S12: {SPRINTS[0]['tests']} → {max_tests} tests",
+        _ascii(f"S0 -> S{SPRINTS[-1]['id']}: {SPRINTS[0]['tests']} -> {max_tests} at sprint close"),
         BODY,
         MUTED,
     )

@@ -210,7 +210,7 @@ What they do **not** establish:
 - **Lead time > 0 on all families.** The synthetic generator switches stage features abruptly and reconnaissance is labelled non-infiltration, so a correctly trained classifier can only fire once infiltration is observable. This is a data property, not an architecture property.
 - **That a low KL means a good world model.** KL ≈ 0.005 nats says the prior tracks the posterior; the open-loop table says how useful that is.
 - **That the linear model is well fit for simulation.** A multi-step linear fit needs iterative optimisation and is not implemented.
-- **Universal detection.** The multi-day benchmark shows 75-second lead time on Infiltration but 0.0 lead on DDoS, PortScan, Botnet, and DoS. Diverse attack dwell times are needed for other families.
+- **Universal detection.** The cross-day real-traffic benchmark is PENDING (see the withdrawn section below), so no claim is made about lead time on any attack family. Diverse attack dwell times are needed before one could be.
 - Causal explanation: attributions are model evidence, never proof.
 
 Failure modes observed: open-loop error grows monotonically with horizon for
