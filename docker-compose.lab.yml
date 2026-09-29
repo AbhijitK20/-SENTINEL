@@ -139,7 +139,7 @@ services:
     environment:
       VITE_PROXY_TARGET: http://idurar-target:8888/
     ports:
-      - "3002:3002"
+      - "${SENTINEL_PUBLISH_HOST:-127.0.0.1}:3002:3002"
     depends_on:
       - idurar-target
     networks: [lab-net]

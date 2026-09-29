@@ -8,8 +8,17 @@ services:
     image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
     pull_policy: build
     ports:
-      - "8501:8501"
+      # Loopback by default. The dashboard hosts the attack-runner button, which
+      # spawns a subprocess, and Streamlit has no authentication of its own, so
+      # publishing it on 0.0.0.0 would expose that to the local network. Set
+      # SENTINEL_PUBLISH_HOST=0.0.0.0 deliberately if you need remote access.
+      - "${SENTINEL_PUBLISH_HOST:-127.0.0.1}:8501:8501"
     environment:
+      # The attack-runner gate reads STREAMLIT_SERVER_ADDRESS from *this*
+      # container. It must be the host address Streamlit binds inside the
+      # container, not the host-side publish address, so the button stays
+      # available to a local judge and unavailable to a published instance.
+      STREAMLIT_SERVER_ADDRESS: "0.0.0.0"
       # Force Attack buttons run attack scripts against Idurar ERP.
       SENTINEL_DEMO_TARGET: http://idurar-target:8888
       SENTINEL_API_URL: http://api:8100
@@ -44,10 +53,10 @@ services:
       # SENTINEL_BOOTSTRAP_KEY. See README "Demo mode".
       SENTINEL_DEMO_MODE: "${SENTINEL_DEMO_MODE:-true}"
       SENTINEL_BOOTSTRAP_KEY: "${SENTINEL_BOOTSTRAP_KEY:-sent_demo_key_2026}"
-      # The dashboard's attack-runner button additionally requires loopback.
-      STREAMLIT_SERVER_ADDRESS: "127.0.0.1"
     ports:
-      - "8100:8100"
+      # Loopback by default. In demo mode the API accepts a published admin key,
+      # so it must not be reachable from the local network by accident.
+      - "${SENTINEL_PUBLISH_HOST:-127.0.0.1}:8100:8100"
     volumes:
       - ./reports:/app/reports
     networks: [lab-net, default, demo-net]
@@ -73,7 +82,7 @@ services:
     volumes:
       - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9090:9090"
+      - "${SENTINEL_PUBLISH_HOST:-127.0.0.1}:9090:9090"
     restart: unless-stopped
     profiles: ["obs"]
 
@@ -86,7 +95,7 @@ services:
     volumes:
       - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
-      - "3000:3000"
+      - "${SENTINEL_PUBLISH_HOST:-127.0.0.1}:3000:3000"
     restart: unless-stopped
     profiles: ["obs"]
 
@@ -153,7 +162,8 @@ services:
     build: apps/vulnerable
     image: sentinel-demo-app:local
     ports:
-      - "5000:5000"
+      # The vulnerable app is intentionally broken. Loopback, always.
+      - "${SENTINEL_PUBLISH_HOST:-127.0.0.1}:5000:5000"
     volumes:
       - demo-logs:/logs
     environment:

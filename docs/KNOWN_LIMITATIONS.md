@@ -9,6 +9,18 @@
 - Encrypted traffic limits payload-level interpretation.
 - The prototype does not replace production SOC controls or authorize automatic response.
 
+> ### Figures in this file that predate 2026-09-29
+>
+> Several tables below were measured on `synthetic-recon-lateral-v2`, the
+> trivially-separable corpus that was replaced. They are kept because the
+> *reasoning* they record is still valid — a rule whose premise is backwards, a
+> metric that cannot distinguish a real effect from an artefact. **The numbers
+> are historical and are not current measurements.** Current figures are in
+> `docs/RESULTS.md`; the current detector numbers are precision 0.7647 / recall
+> 0.4815 / F1 0.5909 for lateral movement and 0.6757 / 0.9615 / 0.7937 for
+> reconnaissance. Sections added on 2026-09-29 carry their own dates.
+
+
 ## Measured, not assumed
 
 These were measured by a script in this repository. The commands are given so
@@ -386,6 +398,8 @@ validation split (best F1 at 55k) and the test split scored once:
 |---|---|---|---|
 | old: bytes on *new* internal edges | 1.000 | 0.185 | 0.312 |
 | **new: bytes on *known* internal edges** | **0.929** | **0.963** | **0.945** |
+<!-- historical: measured on the withdrawn v2 corpus. The current corpus scores
+     0.7647 / 0.4815 / 0.5909. See the banner at the top of this file. -->
 
 The old rule was precise and nearly blind: it saw 5 of 27 lateral windows.
 
@@ -445,6 +459,9 @@ against a history-based rule measures nothing.
 |---|---|---|---|---|---|---|
 | reconnaissance | 0.686 | 1.000 | 0.814 | 24 | 11 | 0 |
 | lateral_movement | 0.194 | 0.259 | 0.222 | 7 | 29 | 20 |
+<!-- historical: withdrawn v2 corpus, and the lateral row is the *pre-fix* rule.
+     The current corpus scores reconnaissance 0.6757 / 0.9615 / 0.7937 and
+     lateral_movement 0.7647 / 0.4815 / 0.5909. -->
 
 The lateral-movement rule raises 29 false alerts for every 7 true ones, and
 misses 20 of 27 positive windows. It should not be presented as a working
@@ -471,8 +488,10 @@ benchmark.
 
 ### The linear transition model is barely a simulator
 
-`make bench-world` reports the world model at +0.189 open-loop skill against a
-linear transition baseline at -0.429. That comparison is not like-for-like, and
+`make bench-world` reported the world model at +0.189 open-loop skill against a
+linear transition baseline at -0.429. **Both figures are from the withdrawn v2
+corpus**; the current measurement is +0.060 against -0.298, and the
+"world model beats persistence" claim is withdrawn outright. That comparison is not like-for-like, and
 the rollout forecast now says so on its face. The linear fit's spectral norm
 before stability projection is ~1.6e5, so the projection keeps about 6e-06 of
 it: the "baseline" is close to a constant predictor. The world model beating it

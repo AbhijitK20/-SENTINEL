@@ -73,7 +73,10 @@ precision 0.194 on held-out windows. Neither is hidden. See
 
 ## Engineering Discipline
 
-- **111/111 tests**, lint and format gates, SHA-256 checksums on every model artifact
+- **797 test functions across 83 files** (`uv run pytest -q` collects ~1,020
+  cases including parametrised ones; all pass, 4 skipped), lint and format gates,
+  SHA-256 checksums on every model artifact, and a reachability gate that fails the
+  build if any module becomes unreachable
 - **Leak-safe by construction:** scenario/temporal held-out splits audited by dedicated tests
 - **Honest adapters:** four real defects in the CIC-IDS2017 distribution (12-hour clock defect, mixed encodings, mis-split packaging rows, header variants) are handled explicitly and pinned by tests — the timestamp correction was validated against the published UNB attack schedule
 - **Deterministic replay:** fixed seeds; identical runs on any machine

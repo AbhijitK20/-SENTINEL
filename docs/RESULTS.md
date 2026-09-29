@@ -25,7 +25,7 @@
 
 ## Baseline (logistic regression, current window)
 
-| Metric | Test |
+| Metric | Test (v3) |
 |---|---:|
 > ### Why these numbers are much lower than earlier releases
 >
@@ -64,25 +64,27 @@
 > real-world forecasting ability.
 
 
-| Precision | 0.868 |
-| Recall | 0.917 |
-| F1 | 0.892 |
-| False-positive rate | 0.060 |
-| PR-AUC | 0.978 |
+| Precision | 0.635 |
+| Recall | 0.786 |
+| F1 | 0.702 |
+| False-positive rate | 0.306 |
+| PR-AUC | 0.662 |
 
 ## Temporal Model (GRU, one independent model per horizon)
 
-| Horizon | Precision | Recall | F1 | FPR | PR-AUC | Best epoch | Train ms |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| h+1 | 1.000 | 0.917 | **0.957** | 0.000 | 1.000 | 26 | 1151 |
-| h+2 | 1.000 | 0.889 | 0.941 | 0.000 | 1.000 | 24 | 1111 |
-| h+3 | 1.000 | 0.806 | 0.892 | 0.000 | 1.000 | 19 | 978 |
-| h+4 | 0.909 | 0.833 | 0.870 | 0.035 | 0.985 | 16 | 812 |
-| h+5 | 1.000 | 0.889 | 0.941 | 0.000 | 1.000 | 28 | 1250 |
+| Horizon | Precision | Recall | F1 | FPR | PR-AUC | Best epoch |
+|---|---:|---:|---:|---:|---:|---:|
+| h+1 | 0.745 | 0.905 | **0.817** | 0.186 | 0.885 | 7 |
+| h+2 | 0.649 | 0.881 | 0.747 | 0.294 | 0.839 | 6 |
+| h+3 | 0.696 | 0.762 | 0.727 | 0.212 | 0.823 | 8 |
+| h+4 | 0.711 | 0.762 | 0.736 | 0.203 | 0.827 | 10 |
+| h+5 | 0.674 | 0.738 | 0.705 | 0.242 | 0.800 | 9 |
 
-Best horizon is h+1 (F1 0.957 vs baseline 0.892) with a zero false-positive
-rate; recall degrades toward h+3 and does not recover monotonically, which is why
-no single horizon is quoted as "the" temporal result.
+Best horizon is h+1 (F1 0.817 vs baseline 0.702). Recall degrades toward h+3
+and does not recover monotonically, which is why no single horizon is quoted as
+"the" temporal result. The withdrawn v2 figures for this table were 0.957 at
+h+1 with a 0.000 false-positive rate; those were measured on a corpus where the
+label came from one scalar.
 
 
 ## World Model — open-loop state prediction (the core deliverable)
@@ -105,21 +107,40 @@ observed window. Positive means the model beats doing nothing clever.
 
 | Predictor | +1 | +2 | +3 | +4 | +5 | Mean skill |
 |---|---:|---:|---:|---:|---:|---:|
-| **World model (RSSM + open-loop objective)** | 0.305 | 0.321 | 0.348 | 0.386 | 0.433 | **+0.189** |
-| Linear transition (`transition-rollout-v2`) | 0.616 | 0.616 | 0.617 | 0.619 | 0.627 | −0.429 |
-| Ablation: same net, no open-loop objective | 0.482 | 0.451 | 0.452 | 0.474 | 0.513 | −0.095 |
-| Persistence (repeat last window) | 0.307 | 0.451 | 0.470 | 0.487 | 0.530 | 0.000 |
+| **World model (RSSM + open-loop objective)** | 0.439 | 0.462 | 0.488 | 0.517 | 0.556 | **+0.060** |
+| Linear ridge transition (`transition-rollout-v3`) | 0.669 | 0.670 | 0.666 | 0.666 | 0.673 | −0.298 |
+| Ablation: same net, no open-loop objective | 0.538 | 0.539 | 0.563 | 0.606 | 0.660 | −0.114 |
+| Persistence (repeat last window) | 0.347 | 0.524 | 0.575 | 0.607 | 0.651 | 0.000 |
+
+These are the figures the benchmark printed for the current generator. The
+withdrawn v2 table reported **+0.189** for the same model, and that separation
+was the trivial-separability artefact: on v2 the label was recoverable from one
+scalar, so "imagine the next state" was close to "look up the answer".
+
+**A second, weaker number is recorded because it is in the release bundle.**
+`models/release/v1/world_model.json` stores a 3-step open-loop metric on its
+held-out test split giving a mean skill of **−0.001** (per step −0.282, +0.122,
++0.156). These are not the same measurement: the table above is the benchmark
+harness rolling five steps across every held-out scenario; the bundle figure is
+the three-step metric stored with the shipped model. A reader who checks both
+will notice the gap, so it is stated here rather than left to be discovered.
+
+The honest summary is that the world model's open-loop advantage is **small and
+not robust to how it is measured**. The earlier "beats persistence" claim is
+withdrawn; what survives is "beats persistence from step two onward in the
+five-step harness, and does not in the bundle's three-step test metric".
 
 Windows evaluated: 120 (2 held-out scenarios × every contiguous history/future pair).
 
 Three things this table establishes:
 
-1. **The learned dynamics beat both the linear surrogate and doing nothing.**
-   The RSSM is better than persistence from +2 onward; the linear map is worse at
-   every step.
+1. **The learned dynamics beat the linear surrogate at every step, and beat
+   persistence from +2 onward — but lose to persistence at +1.** Losing the
+   first step to "repeat the last window" is worth reading carefully rather than
+   skipping: at +1 the RSSM's MAE is 0.444 against persistence's 0.347.
 2. **The open-loop objective is what does it.** The ablation is the identical
    architecture trained without the multi-step term. It reconstructs observed
-   windows fine and still scores −0.095 once it must predict its own future —
+   windows fine and still scores −0.114 once it must predict its own future —
    the exposure-bias failure, measured rather than asserted.
 3. **Error grows with horizon by construction.** Recursion compounds; the
    per-step columns make that visible instead of averaging it away.
@@ -129,7 +150,10 @@ Three things this table establishes:
 The linear model is fitted properly for this comparison, and the numbers say why
 it still cannot simulate:
 
-- Its one-step least-squares next-state map has spectral norm **2.7 × 10⁵**.
+- Its one-step least-squares next-state map is expansive, so rolling it out
+  diverges instead of forecasting. `scripts/run_world_model.py` records the
+  measured norm and clip factor in `world_model_benchmark.json` for the current
+  fit.
   That map is expansive, so rolling it out diverges instead of forecasting.
 - It is projected to a non-expansive norm (0.98), a clip factor of 3.6 × 10⁻⁶,
   which flattens it into a near-constant predictor — visible as MAE that barely
@@ -149,13 +173,16 @@ clip factor in `world_model_benchmark.json`.
 
 | Core | Recon MSE | KL (nats) | Stage macro-F1 | Train s | Open-loop skill |
 |---|---:|---:|---:|---:|---:|
-| lstm | 0.3447 | 0.0053 | 0.985 | 9 | **+0.189** |
-| gru | 0.3542 | 0.0072 | 0.979 | 8 | +0.179 |
-| transformer | 0.1382 | 0.0092 | 0.983 | 25 | +0.080 |
+| lstm | 0.4110 | 0.0712 | 0.877 | 6 | +0.060 |
+| gru | 0.3620 | 0.0659 | 0.852 | 6 | **+0.077** |
+| transformer | 0.2818 | 0.0275 | 0.882 | 18 | +0.016 |
 
 Reconstruction fidelity and open-loop skill move in **opposite** directions: the
-transformer core reconstructs observed windows 2.5× better (0.138 vs 0.345) and
-simulates worst. Reporting only reconstruction loss would have ranked these three
+transformer core reconstructs observed windows best (0.2818 vs 0.4110 MSE) and
+simulates worst (+0.016 vs +0.060 for the lstm). The **gru** core is both a
+better reconstructor than the lstm and the better simulator here, so the shipped
+model is the lstm for historical reasons and the gru is the honest answer on
+this measurement. Re-run with `--compare-cores` before changing it. Reporting only reconstruction loss would have ranked these three
 in the wrong order, which is the practical argument for scoring a world model on
 simulated states.
 
@@ -163,22 +190,35 @@ simulated states.
 
 | Split | Windows | Recon MSE | KL (nats) | Risk F1 | Risk PR-AUC | Stage macro-F1 |
 |---|---:|---:|---:|---:|---:|---:|
-| train | 390 | 0.2776 | 0.0045 | 1.000 | 1.000 | 0.9997 |
-| validation | 130 | 0.3562 | 0.0060 | 1.000 | 1.000 | 0.9876 |
-| test | 130 | 0.3447 | 0.0053 | 1.000 | 1.000 | 0.9855 |
+| train | 351 | 0.4047 | 0.0645 | 0.925 | 0.990 | 0.945 |
+| validation | 113 | 0.4876 | 0.0664 | 0.792 | 0.889 | 0.890 |
+| test | 114 | 0.4110 | 0.0712 | 0.826 | 0.918 | 0.877 |
 
-KL is near zero because the prior — which never sees the observation — already
-predicts the posterior that does. That is the condition that makes open-loop
-sampling a simulation rather than a decoder applied to fresh inputs. A low KL is
-necessary, not sufficient: the open-loop table is what shows the simulation is
-worth anything.
+The KL is low (0.07 nats) because the prior — which never sees the observation —
+tracks the posterior that does. That is the condition that makes open-loop
+sampling a simulation rather than a decoder applied to fresh inputs.
+
+**A low KL is necessary and not sufficient.** On the withdrawn v2 corpus this
+column read 1.000 F1 and 0.005 nats on every split; those were perfect numbers
+produced by a corpus whose label came from one scalar. The open-loop table above
+is what shows whether the simulation is worth anything, and on the current corpus
+it is a small margin. Read the two tables together, not either alone.
 
 ### Imagination forecaster in walk-forward replay
 
-| Forecaster | Threshold | Median lead (win) | Pre-onset warn | Median pre-onset lead | Crossing rate | False early | During-attack detect |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Per-horizon (nowcast) | 0.45 | 0.0 | 0.170 | 1.0 | 0.350 | 0.067 | 1.000 |
-| RSSM imagination | 0.45 | 0.0 | 0.000 | — | 0.217 | 0.000 | 1.000 |
+Measured on the current corpus by `scripts/run_replay.py`, whole-scenario test
+split, seed 42, horizon 5. Median measured lead is **0.0 windows** on both
+thresholds: nothing fires before the onset, which is a property of this
+generator rather than of the architecture.
+
+| Threshold | Median lead (win) | Crossing rate | False-early | Pre-onset warn | During-attack detect |
+|---:|---:|---:|---:|---:|---:|
+| 0.50 (default) | 0.0 | 0.3846 | 0.0769 | 0.2195 | 1.000 |
+| 0.20 (calibrated on validation) | 0.0 | 0.8076 | 0.4615 | 0.7561 | 1.000 |
+
+The calibrated threshold buys a much higher crossing rate at the cost of a much
+higher false-early rate, and it still does not create lead time. That trade is
+recorded rather than resolved.
 
 Identical windows, threshold, and split. Two honest readings:
 

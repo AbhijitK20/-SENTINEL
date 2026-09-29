@@ -13,6 +13,7 @@ regression is obvious in the failure message rather than only in a diff.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -132,3 +133,130 @@ def test_deliverables_explain_how_each_artifact_is_built() -> None:
     text = readme.read_text(encoding="utf-8")
     for name in ("build_deck.py", "export_appendix.py"):
         assert name in text, f"deliverables/README.md must name {name} as the generator"
+
+
+# ── stale-figure sweep across the judge-facing corpus ───────────────────
+
+#: Figures from the withdrawn `synthetic-recon-lateral-v2` corpus. Each one is
+#: retired. A document may still *name* one when it is explaining the withdrawal
+#: — the words "withdrawn", "v2" and "shortcut" are what make that legitimate —
+#: so the rule is contextual rather than a bare ban.
+RETIRED_FIGURES = {
+    "0.892": "baseline F1 on v2",
+    "0.978": "baseline PR-AUC on v2",
+    "0.957": "GRU h+1 F1 on v2",
+    "0.812": "lateral precision on v2",
+    "0.686": "recon precision on v2",
+    "0.189": "world-model open-loop skill on v2",
+    "0.9833": "single-feature ROC-AUC on v2",
+    "0.9933": "full-model ROC-AUC on v2",
+    "0.0072": "the full-minus-single gap on v2",
+    "0.9861": "single-feature ROC-AUC, the v2 report",
+    "2.7 × 10⁵": "linear spectral norm, v2 fit",
+    "2.5×": "transformer-vs-lstm reconstruction ratio, v2",
+}
+
+# `0.945`, `0.963` and `0.929` are deliberately absent: the first is a genuine
+# v3 train-split stage macro-F1 and the others appear as legitimate v3 values, so
+# a bare string ban on them would fail on correct data. The lateral and recon
+# figures are pinned instead by `test_readme_states_the_current_detector_numbers`
+# and by the banner test on KNOWN_LIMITATIONS.md.
+#
+#: Where a retired figure may legitimately appear, and what must accompany it.
+WITHDRAWAL_MARKERS = (
+    "withdraw",
+    "v2",
+    "shortcut",
+    "historical",
+    "artefact",
+    "artifact",
+    "earlier",
+    "previously",
+    "no longer",
+    "trivial",
+)
+
+JUDGE_FACING = (
+    "README.md",
+    "docs/RESULTS.md",
+    "docs/CLAIMS.md",
+    "docs/ARCHITECTURE.md",
+    "deliverables/ABSTRACT.md",
+)
+
+
+@pytest.mark.parametrize("relative", JUDGE_FACING, ids=JUDGE_FACING)
+def test_a_retired_figure_is_only_ever_mentioned_as_withdrawn(relative: str) -> None:
+    """A v2 number must not be readable as a current measurement.
+
+    This is the failure the audit found: `docs/RESULTS.md` carried a blockquote
+    explaining that the numbers were superseded and then, forty lines below, a
+    table quoting exactly those numbers with no marker. A reader skimming for
+    the result would take the table.
+    """
+    lines = (REPO / relative).read_text(encoding="utf-8").split("\n")
+    for index, line in enumerate(lines):
+        for figure, why in RETIRED_FIGURES.items():
+            if figure not in line:
+                continue
+            window = " ".join(lines[max(0, index - 4) : index + 3]).lower()
+            if any(marker in window for marker in WITHDRAWAL_MARKERS):
+                continue
+            assert not line.strip().startswith("|"), (
+                f"{relative}:{index + 1} presents {figure!r} ({why}) in a table with no "
+                f"withdrawal marker within 4 lines: {line.strip()[:100]!r}"
+            )
+
+
+def test_known_limitations_flags_its_pre_2026_figures() -> None:
+    """The limitations file keeps old numbers on purpose; it must say so."""
+    text = (REPO / "docs" / "KNOWN_LIMITATIONS.md").read_text(encoding="utf-8")
+    assert "predate 2026-09-29" in text, (
+        "KNOWN_LIMITATIONS.md keeps tables measured on the withdrawn v2 corpus; it must "
+        "carry a banner saying the numbers are historical"
+    )
+    for figure in ("0.945", "0.686", "0.189"):
+        idx = text.find(figure)
+        if idx == -1:
+            continue
+        window = text[max(0, idx - 900) : idx + 900].lower()
+        assert any(m in window for m in ("historical", "v2", "withdrawn", "current")), (
+            f"{figure} appears in KNOWN_LIMITATIONS.md with no historical marker nearby"
+        )
+
+
+def test_readme_states_the_current_detector_numbers() -> None:
+    """The headline detector figures must match the last benchmark run."""
+    readme = (REPO / "README.md").read_text(encoding="utf-8")
+    for figure in ("0.765", "0.481", "0.591", "0.794"):
+        assert figure in readme, (
+            f"README should carry the current detector figure {figure}; it may be quoting "
+            "a retired measurement"
+        )
+
+
+def test_the_abstract_quotes_the_current_test_count() -> None:
+    """A remembered test count is wrong within two sprints of writing it.
+
+    The abstract claimed "111/111 tests" while the suite held 1020. The number
+    is cheap to obtain and expensive to defend, so it is derived here rather
+    than trusted.
+    """
+    abstract = (REPO / "deliverables" / "ABSTRACT.md").read_text(encoding="utf-8")
+    on_disk = sum(
+        len(re.findall(r"^\s*def test_\w+", p.read_text(encoding="utf-8"), re.M))
+        for p in sorted((REPO / "tests").glob("test_*.py"))
+    )
+    claimed = re.search(r"\*\*(\d[\d,]*) test functions across (\d+) files\*\*", abstract)
+    assert claimed, (
+        "the abstract must state how many test functions exist, so it can be derived "
+        "rather than remembered"
+    )
+    files = len(list((REPO / "tests").glob("test_*.py")))
+    assert int(claimed.group(1).replace(",", "")) == on_disk, (
+        f"the abstract claims {claimed.group(1)} test functions; {on_disk} exist on disk. "
+        "Do not hand-write this number."
+    )
+    assert int(claimed.group(2)) == files, (
+        f"the abstract claims {claimed.group(2)} test files; {files} exist on disk"
+    )
