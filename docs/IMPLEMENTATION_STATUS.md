@@ -2,12 +2,34 @@
 
 ## Current Milestone
 
-**Sprints 0-8 implemented, tested, and audited against the Definition of Done —
-with one exception that is now stated plainly: the licensed CIC-IDS2017 run
-(PB-001) has NOT been executed.** No CIC-IDS2017 CSV is present in this
-repository and none is downloaded by it; `data/raw/` holds only `fixture-lab/`,
-a synthetic file this project generates to exercise the adapter's column
-handling. `reports/generated/real-benchmark/` does not exist.
+**Sprints 0-8 implemented, tested, and audited against the Definition of Done,
+and the licensed CIC-IDS2017 run (PB-001) has since been executed** on all eight
+TrafficLabelling day CSVs — 2,830,743 flows, 983 windows at 300s/150s and 4,899 at
+60s/30s, across seven attack stages.
+
+What ships from that run:
+
+- `data/derived/cicids2017_windows.parquet` — the pre-windowed aggregate, 4,899
+  windows × 67 features, committed so a clone renders measured numbers in
+  **1.6 s** instead of a 15-20 minute, ~11 GB windowing pass. Aggregates only, no
+  raw flows, with the required citation in `data/derived/PROVENANCE.md`.
+- `research/LOEO_GENERALISATION.md` — leave-one-attack-out: mean unseen-stage
+  AUC **0.645** (Lateral 0.780, Credential Access 0.772, Recon 0.754, C2 0.600,
+  DoS 0.564, Initial Access 0.401).
+- `research/ATTACK_DETECTION_REAL_DATA.md` — the detector suite on real windows,
+  and the per-deployment baseline that took lateral benign false alerts from
+  99.2% to 6.0% at 16.1% attack detection.
+
+`reports/generated/` is gitignored, so the JSON artefacts are not in the
+repository; every number above was produced by
+`scripts/run_loeo_benchmark.py`, `scripts/measure_real_detectors.py` and
+`scripts/export_derived_windows.py`, and is re-derivable from the source CSVs.
+
+**No real-trained forecasting bundle is shipped.** `scripts/train_real_bundle.py`
+builds one, but it measures test F1 0.242 on real data against the committed
+synthetic bundle, so it is not on the demo path. See its module docstring. The
+forecasting model therefore remains synthetic-trained, and the console header
+says so.
 
 Everything else below was produced by a script in this repository. The real-data
 forecast table that used to be published in `docs/RESULTS.md` has been

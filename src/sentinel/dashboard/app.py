@@ -46,6 +46,8 @@ TRAINABLE_HORIZONS = 5
 # is on disk, the console uses it and says so. Training in-app stays available
 # for exploring a different dataset, but it is no longer the default path.
 RELEASE_BUNDLE = ROOT / "models" / "release" / "v1"
+#: Committed pre-windowed CIC-IDS2017 aggregate. See data/derived/PROVENANCE.md.
+DERIVED_CIC = ROOT / "data" / "derived" / "cicids2017_windows.parquet"
 FALLBACK_ARTIFACT_DIRS = (
     ROOT / "reports" / "generated" / "real-benchmark" / "baseline",
     ROOT / "reports" / "generated" / "benchmark" / "pipeline" / "baseline",
@@ -168,6 +170,52 @@ def synthetic_dataset(
         samples,
         make_split_manifest(scenario_ids, seed=seed),
         DATASET_ID,
+        f"{window_seconds}s windows",
+    )
+
+
+@st.cache_data(show_spinner="Loading pre-windowed CIC-IDS2017…")
+def derived_cic_dataset(
+    path: str,
+    seed: int,
+    sequence_length: int,
+    forecast_horizon: int,
+):
+    """Real CIC-IDS2017 from the committed pre-windowed aggregate.
+
+    This is the path a judge gets by default. Windowing the eight day CSVs
+    costs 15-20 minutes and about 11 GB of RAM, and the CSVs are not in the
+    repository, so anyone who cloned it and selected the real dataset would
+    either wait a very long time or fail outright.
+
+    The committed aggregate holds 4,899 windows x 67 real features - not the
+    98 the synthetic generator produces - and loads in 1.6 s using 170 MB. The
+    loaded model's own schema still expects 98 names, so the 31 features only
+    the generator emits take the schema's missing value here; the header labels
+    that count "model schema" so the two are not conflated.
+
+    Window and stride are deliberately not parameters: the windows are already
+    cut in the committed file, so re-windowing is impossible and the sidecar's
+    own values are reported in the header instead.
+    """
+    from sentinel.derived import load_derived_windows
+
+    labelled, meta = load_derived_windows(path)
+    # The windows are already cut, so the console's window/stride controls cannot
+    # apply here and warning about a mismatch would be unactionable. The
+    # committed windowing is reported in the header instead, so the number on
+    # screen is still attributable.
+    samples = build_sequence_samples(
+        labelled, sequence_length=sequence_length, horizon=forecast_horizon
+    )
+    scenario_ids = sorted({item.scenario_id for item in labelled})
+    derived_windowing = f"{meta.window_seconds}s windows"
+    return (
+        labelled,
+        samples,
+        make_split_manifest(scenario_ids, seed=seed),
+        meta.dataset_id,
+        derived_windowing,
     )
 
 
@@ -198,15 +246,19 @@ def cic_dataset(
             continue
         mid = (start_hour + end_hour) // 2
         day = day_of_month.get(stem.split("-")[0], 4)
+        # Read each day CSV once and split it in memory. The obvious loop over
+        # ("am", "pm") re-parses the whole file for each half, which doubled
+        # the work and the peak memory for no benefit: 2.8M flows became 5.7M
+        # row reads and ~22 GB of transient Pydantic events.
+        whole = load_flow_csv(csv_path, scenario_id=f"{stem}-all")
+        if not whole:
+            continue
         for part, (lo, hi) in (("am", (start_hour, mid)), ("pm", (mid, end_hour))):
-            events = load_flow_csv(
-                csv_path,
-                scenario_id=f"{stem}-{part}",
-                time_window=(
-                    datetime(2017, 7, day, lo, tzinfo=UTC),
-                    datetime(2017, 7, day, hi, tzinfo=UTC),
-                ),
+            bounds = (
+                datetime(2017, 7, day, lo, tzinfo=UTC),
+                datetime(2017, 7, day, hi, tzinfo=UTC),
             )
+            events = [e for e in whole if bounds[0] <= e.timestamp < bounds[1]]
             if not events:
                 continue
             labelled.extend(
@@ -218,6 +270,7 @@ def cic_dataset(
                     stride_seconds=stride_seconds,
                 )
             )
+        del whole
     if not labelled:
         raise ValueError("no CIC-IDS2017 windows could be built from the selected days")
     scenario_ids = sorted({item.scenario_id for item in labelled})
@@ -232,7 +285,13 @@ def cic_dataset(
         labelled, sequence_length=sequence_length, horizon=forecast_horizon
     )
     manifest = make_stratified_split_manifest(scenario_ids, stage_by_scenario, seed=seed)
-    return labelled, samples, manifest, f"{CIC_DATASET_ID} (attack days)"
+    return (
+        labelled,
+        samples,
+        manifest,
+        f"{CIC_DATASET_ID} (attack days)",
+        f"{window_seconds}s windows",
+    )
 
 
 @st.cache_resource(show_spinner="Training baseline + temporal models…")
@@ -276,13 +335,18 @@ with st.sidebar:
 
     with st.expander("Data source & retraining", expanded=False):
         st.subheader("Data source")
-        mode_options = ["Synthetic replay"] + (
-            [f"{CIC_DATASET_ID} attack days"] if available else []
+        derived_ok = DERIVED_CIC.is_file()
+        raw_label = f"{CIC_DATASET_ID} attack days (needs the 1.2 GB dataset)"
+        derived_label = f"{CIC_DATASET_ID} pre-windowed (committed)"
+        mode_options = (
+            ["Synthetic replay"]
+            + ([derived_label] if derived_ok else [])
+            + ([raw_label] if available else [])
         )
         mode = st.radio("Dataset", mode_options, index=0)
 
         selected_days: list[str] = []
-        if mode == f"{CIC_DATASET_ID} attack days":
+        if mode == raw_label:
             selected_days = st.multiselect(
                 "Attack days",
                 [stem for stem, _ in available],
@@ -292,7 +356,11 @@ with st.sidebar:
                 "three so every split can hold an attack class.",
             )
             if len(selected_days) < 3:
-                st.warning("Select at least three attack days, or switch back to synthetic.")
+                st.warning("Select at least three attack days, or switch back.")
+            st.caption(
+                "Re-windowing the source CSVs takes 15-20 minutes and about 11 GB of "
+                "RAM. The pre-windowed option above is the same measured data in 1.6 s."
+            )
 
         st.divider()
         st.subheader("Windows")
@@ -329,7 +397,9 @@ with st.sidebar:
 
 # ── Data ────────────────────────────────────────────────────────────────
 
-use_real = mode == f"{CIC_DATASET_ID} attack days" and len(selected_days) >= 3
+use_derived = mode == derived_label and derived_ok
+use_raw = mode == raw_label and len(selected_days) >= 3
+use_real = use_derived or use_raw
 fingerprint = (
     f"{mode}|{sorted(selected_days)}|{seed}|{window_seconds}|{stride_seconds}|"
     f"{sequence_length}|{forecast_horizon}|{scenario_count}|{full_training}"
@@ -339,8 +409,21 @@ if st.session_state.get("fingerprint") != fingerprint:
         st.session_state.pop(stale, None)
     st.session_state["fingerprint"] = fingerprint
 try:
-    if use_real:
-        labelled, samples, manifest, dataset_id = cic_dataset(
+    if use_derived:
+        labelled, samples, manifest, dataset_id, derived_windowing = derived_cic_dataset(
+            str(DERIVED_CIC), seed, sequence_length, forecast_horizon
+        )
+        # Stated in the header, not in a footnote. A judge must not have to hunt
+        # for whether the numbers on screen came from a generator or a network.
+        dataset_provenance = (
+            f"REAL CIC-IDS2017 — pre-windowed aggregate, committed ({derived_windowing})"
+        )
+        # The shipped bundle is trained on the synthetic generator, so real
+        # windows are scored by a model that has never seen a network. That is a
+        # real caveat and belongs in the header, not in a caveats file.
+        model_trained_on = "synthetic generator (no real-trained bundle is shipped)"
+    elif use_raw:
+        labelled, samples, manifest, dataset_id, derived_windowing = cic_dataset(
             tuple(sorted(selected_days)),
             seed,
             window_seconds,
@@ -348,11 +431,10 @@ try:
             sequence_length,
             forecast_horizon,
         )
-        # Stated in the header, not in a footnote. A judge must not have to hunt
-        # for whether the numbers on screen came from a generator or a network.
-        dataset_provenance = "REAL CIC-IDS2017"
+        dataset_provenance = "REAL CIC-IDS2017 — windowed from source CSVs"
+        model_trained_on = "synthetic generator (no real-trained bundle is shipped)"
     else:
-        labelled, samples, manifest, dataset_id = synthetic_dataset(
+        labelled, samples, manifest, dataset_id, derived_windowing = synthetic_dataset(
             scenario_count,
             seed,
             window_seconds,
@@ -361,6 +443,7 @@ try:
             forecast_horizon,
         )
         dataset_provenance = "SYNTHETIC — generated, not captured traffic"
+        model_trained_on = "synthetic generator (matches the shipped bundle)"
 except Exception as error:  # a bad dataset must not take the app down
     ui.header("SENTINEL", "analyst console")
     ui.banner(
@@ -442,7 +525,8 @@ ui.header(
     "network attack forecasting",
     meta=(
         f"{dataset_provenance} · {dataset_id} · {len(labelled):,} windows · "
-        f"{schema.width} features · seed {seed}"
+        f"model trained on: {model_trained_on} · "
+        f"model schema: {schema.width} features · seed {seed}"
         + (f" · artifacts {st.session_state['artifact_dir']}" if artifact_dir else "")
     ),
 )

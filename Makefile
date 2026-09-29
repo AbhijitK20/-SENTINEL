@@ -1,5 +1,6 @@
 .PHONY: setup gate lint reach test format demo demo-live web-app train reproduce verify \
-	export bench-world bench-real bench-backtest bench-detectors bench-calibration bench-telemetry bench-evasion bench-labels bench-drift bench-perf demo-path clean
+	export bench-world bench-real bench-backtest bench-detectors bench-calibration bench-telemetry bench-evasion bench-labels bench-drift bench-perf demo-path clean \
+	derived loeo detectors-real
 
 BUNDLE ?= models/release/v1
 BENCH  ?= reports/generated/benchmark
@@ -89,6 +90,21 @@ bench-drift:  ## what a stealthier attacker costs, and how long until we notice
 
 bench-perf:  ## throughput in items/second, and whether it is linear
 	uv run python scripts/run_perf_profile.py --output $(BENCH)/perf-profile
+
+derived:  ## rebuild the committed pre-windowed CIC-IDS2017 aggregate (needs the licensed CSVs)
+	uv run python scripts/export_derived_windows.py \
+		--data-dir data/raw/cic-ids2017/TrafficLabelling \
+		--out data/derived/cicids2017_windows.parquet
+
+loeo:  ## leave-one-attack-out generalisation on real CIC-IDS2017 (needs the licensed CSVs)
+	uv run python scripts/run_loeo_benchmark.py \
+		--data-dir data/raw/cic-ids2017/TrafficLabelling \
+		--output reports/generated/loeo
+
+detectors-real:  ## detector suite on real CIC-IDS2017, with and without a deployment baseline
+	uv run python scripts/measure_real_detectors.py \
+		--data-dir data/raw/cic-ids2017/TrafficLabelling \
+		--output reports/generated/real-detectors
 
 bench-real:  ## CIC-IDS2017 cross-day benchmark (needs the licensed CSVs)
 	uv run python scripts/run_real_benchmark.py \
