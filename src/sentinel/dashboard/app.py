@@ -178,8 +178,6 @@ def synthetic_dataset(
 def derived_cic_dataset(
     path: str,
     seed: int,
-    window_seconds: int,
-    stride_seconds: int,
     sequence_length: int,
     forecast_horizon: int,
 ):
@@ -190,10 +188,15 @@ def derived_cic_dataset(
     repository, so anyone who cloned it and selected the real dataset would
     either wait a very long time or fail outright.
 
-    The committed aggregate holds the same 98-feature window vectors the
-    benchmark measured, in 1.6 s and 170 MB. Window and stride come from the
-    file's own sidecar rather than the caller's, because the windows are
-    already cut and re-cutting them would change every number.
+    The committed aggregate holds 4,899 windows x 67 real features - not the
+    98 the synthetic generator produces - and loads in 1.6 s using 170 MB. The
+    loaded model's own schema still expects 98 names, so the 31 features only
+    the generator emits take the schema's missing value here; the header labels
+    that count "model schema" so the two are not conflated.
+
+    Window and stride are deliberately not parameters: the windows are already
+    cut in the committed file, so re-windowing is impossible and the sidecar's
+    own values are reported in the header instead.
     """
     from sentinel.derived import load_derived_windows
 
@@ -408,12 +411,7 @@ if st.session_state.get("fingerprint") != fingerprint:
 try:
     if use_derived:
         labelled, samples, manifest, dataset_id, derived_windowing = derived_cic_dataset(
-            str(DERIVED_CIC),
-            seed,
-            window_seconds,
-            stride_seconds,
-            sequence_length,
-            forecast_horizon,
+            str(DERIVED_CIC), seed, sequence_length, forecast_horizon
         )
         # Stated in the header, not in a footnote. A judge must not have to hunt
         # for whether the numbers on screen came from a generator or a network.
