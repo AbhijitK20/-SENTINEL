@@ -8,6 +8,10 @@ dependencies = [
     "joblib>=1.6.0",
     "numpy>=2.0,<3",
     "pandas>=2.2,<3",
+    # Parquet reader/writer for the committed derived-window aggregate
+    # (data/derived/*.parquet) and the on-disk window cache. Without it the
+    # console cannot show real traffic without re-windowing 2.8M flows.
+    "pyarrow>=15",
     "pydantic>=2.8,<3",
     "pyyaml>=6.0,<7",
     "scikit-learn>=1.5,<2",

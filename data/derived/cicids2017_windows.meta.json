@@ -74,6 +74,7 @@
     "syn_count_sum",
     "ttl_nunique_per_src"
   ],
+  "carries_edge_summary": true,
   "stages": {
     "Benign": 3845,
     "Credential Access": 256,
@@ -83,6 +84,6 @@
     "Lateral Movement": 56,
     "Reconnaissance": 56
   },
-  "generated_at": "2026-09-29T10:37:16+00:00",
+  "generated_at": "2026-09-29T11:11:01+00:00",
   "citation": "Sharafaldin, Lashkari & Ghorbani, 'Towards Generating New Intrusion Detection Datasets and Intrusion Traffic Characterization', ICISSP 2018. https://www.unb.ca/cic/datasets/ids-2017.html"
 }

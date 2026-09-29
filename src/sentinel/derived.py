@@ -48,6 +48,10 @@ class DerivedMeta(BaseModel):
     stride_seconds: int = Field(gt=0)
     windows: int = Field(ge=0)
     feature_names: list[str]
+    #: edge_summary is stored as a JSON string column. It is required, not
+    #: optional: the detector suite scores known-edge byte rate from it, so a
+    #: derived file without edges loads but leaves every detector inert.
+    carries_edge_summary: bool = True
     stages: dict[str, int]
     generated_at: str
     citation: str
@@ -92,6 +96,7 @@ def save_derived_windows(
             "infiltration": bool(item.label.infiltration),
             "label_source": item.label.label_source,
             "entities": len(item.state.entities),
+            "edge_summary": json.dumps(item.state.edge_summary, sort_keys=True),
             "index": i,
         }
         for name in names:
@@ -150,6 +155,7 @@ def load_derived_windows(path: str | Path) -> tuple[list[LabelledState], Derived
             window_end=row["window_end"].to_pydatetime(),
             features=features,
             entities=[],
+            edge_summary=json.loads(row["edge_summary"]) if "edge_summary" in row else [],
             coverage={},
             source_ids=[],
         )

@@ -62,9 +62,9 @@ to be unbacked, which for a results table is the same thing.
 
 | Claim | Where | Why unbacked | What would fix it |
 |---|---|---|---|
-| A cross-day CIC-IDS2017 forecast benchmark was executed on real traffic, with a lead-time and false-early table | `docs/RESULTS.md` | `reports/generated/real-benchmark/` does not exist in the repo and no CIC-IDS2017 CSV is present; `data/raw/` holds only `fixture-lab`, which is a synthetic file this project generates | Obtain the licensed CSVs, place them in `data/raw/cic-ids2017/TrafficLabelling/`, run `make bench-real`, and commit the report |
-| ~900k real flows were benchmarked | `deliverables/ABSTRACT.md` | same | same |
-| PB-001 "Confirm dataset availability and licenses" is Done | `docs/planning/PRODUCT_BACKLOG.md` | no dataset is present | same |
+| A cross-day CIC-IDS2017 forecast benchmark was executed on real traffic, with a lead-time and false-early table | `docs/RESULTS.md` | The real-data **detection** and **generalisation** work has been run and is recorded in `research/`, but a cross-day *forecast* benchmark (lead-time / false-early table over K steps on real traffic) has not been produced. `scripts/run_real_benchmark.py` would produce it, and the source CSVs were present when the detection work ran | Run `make bench-real` and commit the resulting report under `docs/RESULTS.md` |
+| ~900k real flows were benchmarked | `deliverables/ABSTRACT.md` | The measured figure is 2,830,743 flows across eight day CSVs, not ~900k; the abstract predates the full run | Update the abstract to the measured flow count and cite the script that produced it |
+| PB-001 "Confirm dataset availability and licenses" is Done | `docs/planning/PRODUCT_BACKLOG.md` | The dataset was obtained, the licence terms and required citation are recorded in `data/derived/PROVENANCE.md`, and the derived aggregate is committed | Nothing further; the evidence is now in the repository |
 | Sprint 0-8 complete including the licensed real-data run | `docs/IMPLEMENTATION_STATUS.md` | same | same |
 | The imagined-risk calibration term in the world model makes predictions worse (bias +0.099 -> +0.122, Brier 0.0815 -> 0.0854 over 56 cuts) | formerly in this table | those figures were produced by an earlier run and **no script in the current tree prints them**. `make bench-calibration` reports the isotonic recalibration gate instead, which is a different mechanism and is now the quoted row above | re-add the imagined-risk sweep to `scripts/run_calibration_report.py` and quote that |
 

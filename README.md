@@ -117,17 +117,48 @@ The per-horizon model demonstrates **75-second predictive lead time on Infiltrat
 
 ## How To Run
 
-```bash
-# Install
-uv sync --all-extras
+### Sixty seconds, no dataset download
 
-# Run locally
-uv run streamlit run src/sentinel/dashboard/app.py    # Dashboard :8501
-uv run uvicorn sentinel.api:create_app --factory --port 8100  # API :8100
+```bash
+uv sync --all-extras
+uv run streamlit run src/sentinel/dashboard/app.py   # Dashboard :8501
+```
+
+The console opens on the committed release bundle, pre-trained and ready — no
+training step, no download. It loads in a few seconds.
+
+Inside **Data source & retraining** you can also switch to
+`CIC-IDS2017 pre-windowed (committed)`, which renders **4,899 real CIC-IDS2017
+windows in 1.6 s** from `data/derived/cicids2017_windows.parquet`. That file is a
+committed aggregate — behavioural features, attack stage and scenario per window,
+no raw flows — and it carries the required citation in
+`data/derived/PROVENANCE.md`. Reconstructing it from the 1.2 GB source CSVs costs
+15-20 minutes and about 11 GB of RAM, so the aggregate is what ships.
+
+The forecasting model itself is trained on the synthetic generator, and the
+header says so on every screen. Real windows are shipped for detector
+measurement and generalisation evaluation, where the numbers in `research/` come
+from.
+
+### Everything else
+
+```bash
+# API
+uv run uvicorn sentinel.api:create_app --factory --port 8100
 
 # Run with Docker
 docker compose up --build -d          # API + dashboard + Prometheus + Grafana
 docker compose --profile demo up -d   # + vulnerable target + live sensors
+
+# Re-derive the committed real-data aggregate from the licensed CSVs
+uv run python scripts/export_derived_windows.py \
+    --data-dir data/raw/cic-ids2017/TrafficLabelling
+
+# Real-data generalisation and detector measurement
+uv run python scripts/run_loeo_benchmark.py \
+    --data-dir data/raw/cic-ids2017/TrafficLabelling
+uv run python scripts/measure_real_detectors.py \
+    --data-dir data/raw/cic-ids2017/TrafficLabelling
 
 # Reproduce every measured number
 uv run python scripts/run_benchmark.py --output reports/generated/benchmark

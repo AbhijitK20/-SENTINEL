@@ -139,3 +139,35 @@ def test_meta_forbids_unknown_fields():
                 "unexpected": 1,
             }
         )
+
+
+def test_edge_summary_survives_the_round_trip(tmp_path):
+    """Detectors score known-edge byte rate, so edges must survive export.
+
+    A derived file without edges loads cleanly and still produces a model, which
+    makes the failure silent: every detector simply scores zero forever. The
+    first real bundle trained this way reported a deployment baseline of
+    "median 0 B/s, MAD 0" for exactly that reason.
+    """
+    from sentinel.derived import save_derived_windows as _save
+
+    states = _labelled(2)
+    for item in states:
+        item.state.edge_summary = [
+            {"source": "10.0.0.1", "destination": "10.0.0.2", "bytes": 4096},
+            {"source": "10.0.0.1", "destination": "10.0.0.9", "bytes": 128},
+        ]
+    out = _save(
+        tmp_path / "e.parquet",
+        states,
+        dataset_id="test",
+        source="unit test",
+        window_seconds=60,
+        stride_seconds=30,
+        citation=CITATION,
+    )
+    loaded, meta = load_derived_windows(out)
+    assert meta.carries_edge_summary is True
+    for item in loaded:
+        assert item.state.edge_summary, "edge_summary was dropped on export"
+        assert item.state.edge_summary[0]["bytes"] == 4096
