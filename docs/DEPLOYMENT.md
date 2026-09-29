@@ -137,11 +137,101 @@ Deploy with:
 1. Push the repository to GitHub.
 2. Open `https://share.streamlit.io`.
 3. Choose the repository and branch.
-4. Set the main file to `src/sentinel/dashboard/app.py`.
+4. Set the main file to `streamlit_app.py` (the repository-root shim, not
+   `src/sentinel/dashboard/app.py` — see below).
 5. Deploy and wait for dependency installation to finish.
 
 After changing `requirements.txt`, use **Manage app -> Reboot app** or push a
 new commit so Community Cloud rebuilds the environment.
+
+### What the hosted console serves
+
+`streamlit_app.py` is the entry point. It puts `src/` on `sys.path`, sets the two
+hosted-deployment environment variables, and then executes the console with
+`runpy` — **not** `import`. Streamlit re-runs the entry script on every widget
+interaction, and a plain import is a no-op from the second run onwards because the
+module is already in `sys.modules`, so every `st.*` call is skipped and the page
+renders blank while the server sits idle. That failure is silent: no exception,
+no log line.
+
+| Variable | Effect on the console |
+|---|---|
+| `SENTINEL_CLOUD=1` | Hides the raw-CSV dataset option. The licensed CSVs are not in the repository, so on Cloud that path cannot work; offering it would send a visitor into a 15-20 minute windowing attempt that then fails. The committed pre-windowed aggregate remains available and is the real-data path. |
+| `SENTINEL_READONLY=1` | Disables the `Train / retrain` control and says why. One repository serves every visitor, so a hosted session cannot substitute a bundle it trained itself. |
+
+Both are cloud-only guards. A local checkout keeps the raw-CSV option and
+retraining, and `tests/test_dashboard_artifacts.py` asserts each side of that.
+
+**No dataset download is required.** The 4,899 real CIC-IDS2017 windows are
+committed as a 14.8 MB aggregate (`data/derived/cicids2017_windows.parquet`), and
+the model bundle is committed under `models/release/`. A clone is enough.
+
+### torch on Cloud
+
+`requirements.txt` pins `torch==2.14.0+cpu` and adds the PyTorch CPU index.
+Cloud installs with pip, which ignores `pyproject.toml`'s `[tool.uv.sources]`, so
+without this it would take the default PyPI wheel: a CUDA-bundled build of
+several hundred MB plus multi-GB `nvidia-*-cu*` dependencies that do not fit the
+install. The `+cpu` local tag is not published on PyPI, so pinning it forces the
+CPU build rather than merely preferring it.
+
+### Which model is served
+
+The console serves `models/release/real-cic-v1`, trained on the 4,899 real
+CIC-IDS2017 windows. The header states the training data by reading
+`MANIFEST.json` from the loaded bundle rather than from a hardcoded string, so
+the claim cannot drift from the artifact.
+
+Its measured numbers are worse than the synthetic bundle's, and that is reported
+rather than hidden:
+
+| Bundle | Trained on | Test F1 | Recall | FPR | PR-AUC |
+|---|---|---:|---:|---:|---:|
+| `real-cic-v1` (default) | real CIC-IDS2017, 4,899 windows | **0.242** | 0.610 | 0.181 | 0.272 |
+| `v1` (fallback) | synthetic generator | **0.892** | 0.917 | 0.060 | 0.978 |
+
+Read the test row, not the train row. The real bundle's train F1 is 0.602 and its
+test F1 is 0.242, which is the shape of a model that does not generalise across
+days — held-out days carry attack types the training days barely contain.
+
+The gap is a property of the dataset's capture design, not of the trainer:
+CIC-IDS2017 concentrates each attack type in a short burst inside one day, so
+after subdividing days into contiguous time blocks the held-out split carries
+only 53 attack windows across 4 stages. `scripts/train_real_bundle.py` records
+this in its own docstring.
+
+`models/release/v1` is retained, not deleted, and is reachable from a local
+checkout via `--artifacts models/release/v1` or
+`SENTINEL_ARTIFACTS_DIR=models/release/v1`. It is a fallback, not dead weight.
+
+Verify either bundle against its own manifest before trusting it:
+
+```bash
+uv run python scripts/verify_release_artifacts.py models/release/real-cic-v1
+uv run python scripts/verify_release_artifacts.py models/release/v1
+```
+
+### Free-tier limits
+
+Community Cloud is free and needs no card, with two costs worth stating to
+anyone given the link:
+
+- **The app sleeps when idle.** A visitor arriving after a period of inactivity
+  gets a wake-up screen and waits out the cold start. This is inherent to every
+  free tier; there is no free host that stays warm.
+- **RAM is capped** at roughly 2.7 GB per app. Loading the committed real-data
+  aggregate peaks around 826 MB in a local measurement. It is behind
+  `st.cache_data`, so it is paid once per server process rather than once per
+  session.
+
+Hugging Face Spaces was evaluated and rejected for this deployment: the CPU
+Basic hardware tier has no hourly charge, but *creating* a Gradio or Docker Space
+requires a PRO subscription ($9/month) for personal accounts. Only Static Spaces
+remain free to everyone.
+
+The REST API is not hosted here. Community Cloud runs `streamlit run` and cannot
+expose a custom port, so `Dockerfile.api` needs a container host that accepts
+Dockerfiles — see the API section below for that path.
 
 ### Hosted Live Detection Controls
 
@@ -153,7 +243,10 @@ Cloud:
 - `JSONL sensor file` accepts the sensor JSONL format through the upload control.
 
 The original localhost attack command is still useful for local development,
-but it is not required or used by the hosted workflow.
+but it is not required or used by the hosted workflow. The in-container target
+and API that `scripts/run_lab_scenario.py` drives do not exist on Cloud, so
+`SENTINEL_API_URL` and `SENTINEL_DEMO_TARGET` are pointed at loopback and the tab
+says the demo cannot run there.
 
 ### Local Packet Capture
 

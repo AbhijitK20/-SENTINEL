@@ -4,7 +4,14 @@
 streamlit>=1.40,<2
 plotly>=5.24,<7
 networkx>=3.3,<4
-torch>=2.4,<3
+
+# Cloud installs with pip, which ignores pyproject's [tool.uv.sources] and would
+# take the default PyPI torch: a 767 MB CUDA-bundled wheel plus multi-GB
+# nvidia-*-cu* dependencies that do not fit the install. The CPU index serves the
+# same version without them, and the `+cpu` local tag is not published on PyPI,
+# so pinning it here forces the CPU build rather than merely preferring it.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0+cpu
 
 # FastAPI inference service (docs/ROADMAP.md Phase 1; level-2 scale)
 fastapi>=0.115,<1

@@ -17,6 +17,8 @@ baseRadius = "4px"
 # not invoke `uv run` and does not install the project itself, so that shim puts
 # `src/` on sys.path.
 # 4,899 real windows cross a websocket in the Dataset-shape payload, which is far
-# larger than the 200 MB Streamlit's default per-message cap was tuned for.
+# larger than the 200 MB Streamlit's default per-message cap was tuned for. The
+# default bundle is trained on exactly those windows, so this is load-bearing for
+# the hosted console, not a local-only tweak.
 [server]
 maxMessageSize = 250
