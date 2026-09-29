@@ -57,7 +57,18 @@ def method_note(text: str) -> None:
 
 #: Open ``st.container`` handles, so ``panel()`` / ``end_panel()`` can stay a
 #: two-call API while actually enclosing their content. See :func:`panel`.
-_PANEL_STACK: list = []
+#:
+#: This is **per Streamlit session**, not a module global. It used to be a bare
+#: module-level ``list``, which meant two browser sessions shared one stack: a
+#: `panel()` opened by session A could be closed by session B's `end_panel()`,
+#: silently mis-nesting every container and, because Streamlit's container stack
+#: is itself per-run, closing a container that belonged to a different render
+#: pass. On a laptop that is a judge opening a second tab. Streamlit keys
+#: session state per script-run context, so the stack lives there.
+def _panel_stack() -> list:
+    if "sntl_panel_stack" not in st.session_state:
+        st.session_state["sntl_panel_stack"] = []
+    return st.session_state["sntl_panel_stack"]
 
 
 def panel(title: str, hint: str = "", *, animated: bool = True) -> None:
@@ -80,7 +91,7 @@ def panel(title: str, hint: str = "", *, animated: bool = True) -> None:
     del animated
     container = st.container(border=True)
     container.__enter__()
-    _PANEL_STACK.append(container)
+    _panel_stack().append(container)
     st.markdown(f'<p class="sntl-panel__title">{esc(title)}</p>', unsafe_allow_html=True)
     if hint:
         st.markdown(f'<p class="sntl-panel__hint">{esc(hint)}</p>', unsafe_allow_html=True)
@@ -93,10 +104,10 @@ def end_panel() -> None:
     stray ``end_panel()`` is a bug in the screen and swallowing it would leave a
     container open and the rest of the page unbordered.
     """
-    if not _PANEL_STACK:
+    stack = _panel_stack()
+    if not stack:
         raise RuntimeError("end_panel() called without a matching panel()")
-    container = _PANEL_STACK.pop()
-    container.__exit__(None, None, None)
+    stack.pop().__exit__(None, None, None)
 
 
 # ── Statistics ──────────────────────────────────────────────────────────

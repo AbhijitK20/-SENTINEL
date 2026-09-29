@@ -1,0 +1,147 @@
+# Optional lab target for the IDURAR attack demo.
+#
+# This file is NOT part of the core demo and is not loaded by default. It exists
+# because the services below build from a **sibling repository** that this
+# repository does not contain and does not vendor:
+#
+#     ../idurar-erp-crm/backend
+#     ../idurar-erp-crm/frontend
+#
+# Until 2026-09-29 both services lived in docker-compose.yml behind the `lab`
+# profile, which meant `docker compose --profile lab up` failed on a fresh clone
+# with:
+#
+#     unable to prepare context: path ".../idurar-erp-crm/backend" not found
+#
+# Compose resolves the build context of every profiled service, so a path that
+# only the lab needed still broke a documented command.
+#
+# To use the IDURAR lab scenario, clone the sibling repository first:
+#
+#     git clone <idurar-erp-crm-url> ../idurar-erp-crm
+#     docker compose -f docker-compose.yml -f docker-compose.lab.yml --profile lab up -d
+#
+# Everything else in this repository — the dashboard, the API, the detectors,
+# the synthetic replay, the vulnerable-app demo profile — runs with
+# `docker compose up -d` alone and needs no sibling checkout.
+
+services:
+  lab-scenario-runner:
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
+    build: .
+    pull_policy: build
+    command:
+      - uv
+      - run
+      - --no-sync
+      - python
+      - scripts/run_lab_scenario.py
+      - --scenario
+      - recon-auth-progression
+      - --manifest
+      - /app/configs/lab/scenarios.json
+      - --target
+      - http://idurar-target:8888
+      - --api
+      - http://api:8100
+    environment:
+      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
+    volumes:
+      - ./configs/lab/scenarios.json:/app/configs/lab/scenarios.json:ro
+    depends_on:
+      - api
+    restart: "no"
+    profiles: ["lab"]
+    networks: [lab-net]
+
+  # Multi-phase attack: port scan → brute force → API enum → upload staging
+  # against Idurar.  Produces 50+ events across 4 attack phases so SENTINEL's
+  # detectors fire on real network telemetry.
+  lab-attack-idurar:
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
+    build: .
+    pull_policy: build
+    command:
+      - uv
+      - run
+      - --no-sync
+      - python
+      - scripts/attack_idurar.py
+      - --target
+      - http://idurar-target:8888
+      - --api
+      - http://api:8100
+      - --target-host
+      - idurar-target
+      - --target-port
+      - "8888"
+    environment:
+      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
+    depends_on:
+      - api
+      - idurar-target
+    restart: "no"
+    profiles: ["lab"]
+    networks: [lab-net]
+
+  # Full 9-phase attack suite: DDoS, recon, brute force, injection,
+  # lateral movement, exfiltration, C2 beaconing, insider threat,
+  # malware staging — 127+ events across all attack categories.
+  lab-full-attack:
+    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
+    build: .
+    pull_policy: build
+    command:
+      - uv
+      - run
+      - --no-sync
+      - python
+      - scripts/full_attack.py
+      - --target
+      - http://idurar-target:8888
+      - --api
+      - http://api:8100
+      - --target-host
+      - idurar-target
+      - --target-port
+      - "8888"
+    environment:
+      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
+    depends_on:
+      - api
+      - idurar-target
+    restart: "no"
+    profiles: ["lab"]
+    networks: [lab-net]
+
+  idurar-target:
+    build:
+      context: ../idurar-erp-crm/backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE: mongodb://host.docker.internal:27017/idurar
+      JWT_SECRET: ${IDURAR_JWT_SECRET:-sentinel-idurar-lab-secret}
+      NODE_ENV: development
+      OPENSSL_CONF: /dev/null
+      PUBLIC_SERVER_FILE: http://idurar-target:8888/
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    expose:
+      - "8888"
+    networks: [lab-net]
+    restart: unless-stopped
+    profiles: ["lab"]
+
+  idurar-frontend:
+    build:
+      context: ../idurar-erp-crm/frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_PROXY_TARGET: http://idurar-target:8888/
+    ports:
+      - "3002:3002"
+    depends_on:
+      - idurar-target
+    networks: [lab-net]
+    restart: unless-stopped
+    profiles: ["lab"]

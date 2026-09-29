@@ -260,7 +260,7 @@ def test_an_unmatched_end_panel_is_an_error_rather_than_a_no_op() -> None:
     """Silently ignoring it would leave a container open and the page unbordered."""
     from sentinel.frontend import components
 
-    components._PANEL_STACK.clear()
+    components._panel_stack().clear()
     with pytest.raises(RuntimeError, match="without a matching panel"):
         components.end_panel()
 
@@ -268,11 +268,27 @@ def test_an_unmatched_end_panel_is_an_error_rather_than_a_no_op() -> None:
 def test_panel_and_end_panel_leave_the_stack_balanced() -> None:
     from sentinel.frontend import components
 
-    components._PANEL_STACK.clear()
+    components._panel_stack().clear()
     components.panel("Title", "hint")
-    assert len(components._PANEL_STACK) == 1
+    assert len(components._panel_stack()) == 1
     components.end_panel()
-    assert components._PANEL_STACK == []
+    assert components._panel_stack() == []
+
+
+def test_the_panel_stack_is_not_a_module_global() -> None:
+    """Two browser sessions must not share one container stack.
+
+    The stack used to be a module-level list, so a ``panel()`` opened by one
+    session could be closed by another session's ``end_panel()``, mis-nesting
+    every container after it. A judge opening a second tab is enough to hit it.
+    """
+    from sentinel.frontend import components
+
+    assert not hasattr(components, "_PANEL_STACK"), (
+        "the module-level panel stack is back; two Streamlit sessions would share it"
+    )
+    source = (Path(components.__file__)).read_text(encoding="utf-8")
+    assert "st.session_state" in source, "the panel stack must live in session state"
 
 
 def test_the_panel_box_css_is_not_left_behind_as_dead_rules() -> None:

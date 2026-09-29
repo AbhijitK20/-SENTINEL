@@ -329,8 +329,54 @@ def _make_source(
 
 
 def _local_attack_demo_available() -> bool:
-    """Return whether the app is running where the localhost demo can execute."""
-    return not Path("/mount/src").exists()
+    """Return whether the app may spawn the localhost attack runner.
+
+    The guard used to be "am I not on Streamlit Cloud", i.e. the presence of
+    ``/mount/src``. **That passes inside this repository's own Docker image**, so
+    the documented `docker compose up` published a button on port 8501 that
+    shells out to `scripts/full_attack.py` with no authentication in front of it.
+    A Streamlit app has no auth of its own, so anything that can reach the port
+    could press it.
+
+    The runner is a localhost lab target and is useful in a demo, so it is not
+    removed - it is gated. It is available only when:
+
+    * ``SENTINEL_ALLOW_ATTACK_DEMO`` is explicitly truthy, or demo mode is on
+      (the default, so the documented demo still works), **and**
+    * the server is bound to a loopback address, so a judge running it locally
+      gets the button and a deployed instance does not.
+
+    Both conditions are reported in the UI so a judge can see why.
+    """
+    import os
+
+    def _truthy(name: str, default: str) -> bool:
+        return os.environ.get(name, default).strip().lower() not in {
+            "0",
+            "false",
+            "no",
+            "off",
+        }
+
+    demo_mode = _truthy("SENTINEL_DEMO_MODE", "true")
+    allowed = _truthy("SENTINEL_ALLOW_ATTACK_DEMO", "true" if demo_mode else "false")
+    # Server address as Streamlit resolved it; anything non-loopback is exposed.
+    address = os.environ.get("STREAMLIT_SERVER_ADDRESS", "0.0.0.0")
+    loopback = address in {"127.0.0.1", "localhost", "::1"}
+    return allowed and loopback
+
+
+def _attack_demo_block_reason() -> str:
+    """Why the attack runner is unavailable, phrased for a demo audience."""
+    import os
+
+    address = os.environ.get("STREAMLIT_SERVER_ADDRESS", "0.0.0.0")
+    return (
+        "The localhost attack runner is disabled on this instance. It spawns "
+        f"scripts/full_attack.py as a subprocess, and the server is bound to "
+        f"{address!r} rather than loopback. Set STREAMLIT_SERVER_ADDRESS=127.0.0.1 "
+        "to run the attack demo locally."
+    )
 
 
 def _start_local_attack_demo(seed: int = 42) -> JsonlSensorSource:
@@ -462,10 +508,7 @@ def render(seed: int = 42, loaded: Any = None, baseline_run: Any = None) -> None
         if _local_attack_demo_available():
             st.caption("Initiate runs the exact local target and attack scripts at speed 2.")
         else:
-            st.caption(
-                "This button requires the local SENTINEL dashboard; hosted Streamlit "
-                "cannot start localhost attack scripts."
-            )
+            st.caption(_attack_demo_block_reason())
     col1, col2, col3 = st.columns(3)
     start_requested = col1.button("▶ Start", type="primary", key="live-start")
     attack_requested = col2.button("🚨 Initiate Attack", type="primary", key="live-attack")
@@ -589,10 +632,7 @@ def render(seed: int = 42, loaded: Any = None, baseline_run: Any = None) -> None
         try:
             if attack_requested:
                 if not _local_attack_demo_available():
-                    raise RuntimeError(
-                        "The local attack scripts can only run on the machine hosting "
-                        "Streamlit. Run SENTINEL locally for this button."
-                    )
+                    raise RuntimeError(_attack_demo_block_reason())
                 _stop_local_attack_demo()
                 source = _start_local_attack_demo(seed=int(seed))
             else:

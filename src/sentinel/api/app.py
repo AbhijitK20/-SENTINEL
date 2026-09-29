@@ -40,6 +40,26 @@ from sentinel.threat_intel import ThreatIntelFeed
 DEFAULT_ASSETS_DIR = Path("reports/generated/real-benchmark/baseline")
 DEFAULT_AUTH_DIR = Path("reports/api")
 
+#: Published demo credential. It appears in the README, in docs/DEMO_SCENARIO.md
+#: and in `dashboard/tabs/live.py`, so it is not a secret and must never be
+#: accepted as an administrative credential outside an explicit demo mode.
+DEMO_BOOTSTRAP_KEY = "sent_demo_key_2026"
+
+
+def _demo_mode_enabled() -> bool:
+    """True unless explicitly disabled.
+
+    Defaults on so `docker compose up` and the documented demo commands work
+    without setup. Set `SENTINEL_DEMO_MODE=false` for anything reachable from a
+    network the public can reach; the app then requires a real key.
+    """
+    return os.environ.get("SENTINEL_DEMO_MODE", "true").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
 
 class ForecastRequest(BaseModel):
     """Batch of unified events to window, score, and explain."""
@@ -221,12 +241,33 @@ def create_app(
     resolved_auth_dir = Path(auth_dir or os.environ.get("SENTINEL_AUTH_DIR") or DEFAULT_AUTH_DIR)
     db_path = os.environ.get("SENTINEL_DB_PATH")
     keys = ApiKeyStore(resolved_auth_dir / "keys.jsonl", db_path=db_path) if auth_enabled else None
+    demo_mode = _demo_mode_enabled()
     bootstrap_key = os.environ.get("SENTINEL_BOOTSTRAP_KEY")
+    if not bootstrap_key and demo_mode:
+        bootstrap_key = DEMO_BOOTSTRAP_KEY
+    if keys is not None and auth_enabled and not bootstrap_key:
+        # Fail closed. Previously a missing key simply meant every route 401'd
+        # with no explanation; now it refuses to start, because an operator who
+        # believes they are running with authentication has no way to tell that
+        # difference from a misconfigured key.
+        raise RuntimeError(
+            "auth is enabled but no bootstrap key is configured. Set "
+            "SENTINEL_BOOTSTRAP_KEY to a secret of your choosing, or set "
+            "SENTINEL_DEMO_MODE=true to start with the published demo key. "
+            "Refusing to start rather than serving an unauthenticated or "
+            "unusable API."
+        )
     if keys is not None and bootstrap_key:
         # Operator-provisioned first admin key (deployment bootstrap).
         # Idempotent: re-registration is harmless because authenticate() folds
         # to the latest record per key id.
         keys.register_raw(bootstrap_key, "admin", label="bootstrap")
+        if bootstrap_key == DEMO_BOOTSTRAP_KEY and not demo_mode:
+            raise RuntimeError(
+                f"{DEMO_BOOTSTRAP_KEY!r} is the published demo credential and is "
+                "refused unless SENTINEL_DEMO_MODE=true. It is in the README, so it "
+                "is not a secret."
+            )
     audit = AuditLog(resolved_auth_dir / "audit.jsonl", db_path=db_path) if auth_enabled else None
     ledger = AlertLedger(resolved_auth_dir / "alerts.jsonl", db_path=db_path)
     cases = CaseStore(resolved_auth_dir / "cases.jsonl", db_path=db_path)
@@ -324,6 +365,7 @@ def create_app(
             "model_version": artifacts.baseline_result.model_version,
             "threshold": effective_threshold,
             "auth_enabled": auth_enabled,
+            "demo_mode": demo_mode,
             "time": datetime.now(UTC).isoformat(),
         }
 
@@ -489,6 +531,16 @@ def create_app(
         verification = ledger.verify()
         return {
             "count": len(records),
+            # An empty list is the normal state, not a fault: the ledger records
+            # *escalated cases* (POST /v1/cases/{id}/transition), not detections.
+            # POST /v1/detect is deliberately stateless and does not persist, and
+            # the dashboard's Trust Ledger panel records a forecast on request.
+            "populated_by": "POST /v1/cases/{case_id}/transition",
+            "note": (
+                "Empty is normal before an incident is escalated. Detections from "
+                "POST /v1/detect are returned in that response and are not persisted; "
+                "the live engine keeps its own bounded window of findings."
+            ),
             "verification": verification.model_dump(mode="json"),
             "records": [record.model_dump(mode="json") for record in records[-20:]],
         }

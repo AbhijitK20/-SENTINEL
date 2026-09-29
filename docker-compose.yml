@@ -38,7 +38,14 @@ services:
       # and the API report the same model and the same threshold.
       SENTINEL_ARTIFACTS_DIR: /app/models/release/v1
       SENTINEL_THREAT_FEED_FILE: /app/reports/threat_intel/feed.json
-      SENTINEL_BOOTSTRAP_KEY: ${SENTINEL_BOOTSTRAP_KEY:-sent_demo_key_2026}
+      # DEMO MODE: on by default so the documented demo runs with no setup.
+      # Set SENTINEL_DEMO_MODE=false for anything reachable from a public
+      # network; the API then refuses the published demo key and requires
+      # SENTINEL_BOOTSTRAP_KEY. See README "Demo mode".
+      SENTINEL_DEMO_MODE: "${SENTINEL_DEMO_MODE:-true}"
+      SENTINEL_BOOTSTRAP_KEY: "${SENTINEL_BOOTSTRAP_KEY:-sent_demo_key_2026}"
+      # The dashboard's attack-runner button additionally requires loopback.
+      STREAMLIT_SERVER_ADDRESS: "127.0.0.1"
     ports:
       - "8100:8100"
     volumes:
@@ -60,126 +67,6 @@ services:
     volumes:
       - ./reports:/app/reports
     restart: "no"
-
-  lab-scenario-runner:
-    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
-    build: .
-    pull_policy: build
-    command:
-      - uv
-      - run
-      - --no-sync
-      - python
-      - scripts/run_lab_scenario.py
-      - --scenario
-      - recon-auth-progression
-      - --manifest
-      - /app/configs/lab/scenarios.json
-      - --target
-      - http://idurar-target:8888
-      - --api
-      - http://api:8100
-    environment:
-      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
-    volumes:
-      - ./configs/lab/scenarios.json:/app/configs/lab/scenarios.json:ro
-    depends_on:
-      - api
-    restart: "no"
-    profiles: ["lab"]
-    networks: [lab-net]
-
-  # Multi-phase attack: port scan → brute force → API enum → upload staging
-  # against Idurar.  Produces 50+ events across 4 attack phases so SENTINEL's
-  # detectors fire on real network telemetry.
-  lab-attack-idurar:
-    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
-    build: .
-    pull_policy: build
-    command:
-      - uv
-      - run
-      - --no-sync
-      - python
-      - scripts/attack_idurar.py
-      - --target
-      - http://idurar-target:8888
-      - --api
-      - http://api:8100
-      - --target-host
-      - idurar-target
-      - --target-port
-      - "8888"
-    environment:
-      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
-    depends_on:
-      - api
-      - idurar-target
-    restart: "no"
-    profiles: ["lab"]
-    networks: [lab-net]
-
-  # Full 9-phase attack suite: DDoS, recon, brute force, injection,
-  # lateral movement, exfiltration, C2 beaconing, insider threat,
-  # malware staging — 127+ events across all attack categories.
-  lab-full-attack:
-    image: ${SENTINEL_IMAGE:-sih26153-sentinel:local}
-    build: .
-    pull_policy: build
-    command:
-      - uv
-      - run
-      - --no-sync
-      - python
-      - scripts/full_attack.py
-      - --target
-      - http://idurar-target:8888
-      - --api
-      - http://api:8100
-      - --target-host
-      - idurar-target
-      - --target-port
-      - "8888"
-    environment:
-      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-}
-    depends_on:
-      - api
-      - idurar-target
-    restart: "no"
-    profiles: ["lab"]
-    networks: [lab-net]
-
-  idurar-target:
-    build:
-      context: ../idurar-erp-crm/backend
-      dockerfile: Dockerfile
-    environment:
-      DATABASE: mongodb://host.docker.internal:27017/idurar
-      JWT_SECRET: ${IDURAR_JWT_SECRET:-sentinel-idurar-lab-secret}
-      NODE_ENV: development
-      OPENSSL_CONF: /dev/null
-      PUBLIC_SERVER_FILE: http://idurar-target:8888/
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    expose:
-      - "8888"
-    networks: [lab-net]
-    restart: unless-stopped
-    profiles: ["lab"]
-
-  idurar-frontend:
-    build:
-      context: ../idurar-erp-crm/frontend
-      dockerfile: Dockerfile
-    environment:
-      VITE_PROXY_TARGET: http://idurar-target:8888/
-    ports:
-      - "3002:3002"
-    depends_on:
-      - idurar-target
-    networks: [lab-net]
-    restart: unless-stopped
-    profiles: ["lab"]
 
   prometheus:
     image: prom/prometheus:latest

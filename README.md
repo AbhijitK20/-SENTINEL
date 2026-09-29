@@ -152,84 +152,195 @@ structure rather than volume, not that it forecasts real attacks.
 
 ## How To Run
 
+Everything below was executed against this repository on 2026-09-29 from a
+clean clone. Where a command is not exercised here it says so.
+
+### Prerequisites
+
+| | |
+|---|---|
+| Python | 3.11–3.13 (`uv` will fetch one; `pyproject.toml` caps at `<3.14`) |
+| uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| RAM | ~2 GB. The bundle loads torch; a cold dashboard boot trains models if no bundle is found. |
+| Disk | ~1.5 GB for the virtualenv. **The Docker image is larger** — it bundles torch CPU — and needs ~6 GB free. |
+| Docker | Optional. Only for `docker compose`. |
+
+### Install
+
 ```bash
-# Install
-uv sync --all-extras
+uv sync --all-extras --all-groups
+```
 
-# Run locally
-uv run streamlit run src/sentinel/dashboard/app.py    # Dashboard :8501
-uv run uvicorn sentinel.api:create_app --factory --port 8100  # API :8100
+### Run locally (the path verified for this submission)
 
-# Run with Docker
-docker compose up --build -d          # API + dashboard + Prometheus + Grafana
+```bash
+# Dashboard — http://127.0.0.1:8501
+SENTINEL_ARTIFACTS_DIR=models/release/v1 \
+uv run streamlit run src/sentinel/dashboard/app.py \
+    --server.address 127.0.0.1 --server.port 8501
+
+# API — http://127.0.0.1:8100  (docs at /docs)
+SENTINEL_ARTIFACTS_DIR=models/release/v1 \
+SENTINEL_BOOTSTRAP_KEY="$(openssl rand -hex 16)" \
+uv run uvicorn sentinel.api:create_app --factory --host 127.0.0.1 --port 8100
+```
+
+The dashboard loads the committed, checksummed bundle from
+`models/release/v1/`, so no training happens on start. Measured: dashboard
+health `ok`, first render 3.7 s, subsequent reruns 0.30 s with all ten screens
+present and no exceptions.
+
+### Demo mode, and when to turn it off
+
+Demo mode is **on by default** so this project runs with no setup. In demo mode
+the API accepts a published, well-known key (`sent_demo_key_2026`) and
+`/health` reports `"demo_mode": true`.
+
+```bash
+SENTINEL_DEMO_MODE=false SENTINEL_BOOTSTRAP_KEY=<your secret> \
+  uv run uvicorn sentinel.api:create_app --factory --host 0.0.0.0 --port 8100
+```
+
+With demo mode off the app **refuses to start** rather than serving an
+unauthenticated API, and it rejects the published demo key outright. Verified
+both refusals. The dashboard's "Initiate Attack" button additionally requires
+the Streamlit server to be bound to loopback, because it spawns
+`scripts/full_attack.py` as a subprocess and Streamlit has no authentication of
+its own. Every variable is documented in `.env.example`.
+
+### Smoke test — run this before a demo
+
+```bash
+uv run python scripts/smoke_demo.py
+```
+
+Seven steps through the path a judge will see — artifacts load, windows build,
+detectors fire, a forecast explains itself, a stage maps, the ledger verifies,
+and the committed fixture forecasts. It prints the measured value for each
+step and exits non-zero on the first failure. Passing output from this tree:
+
+```
+ok    release artifacts present and checksummed — 98 features, threshold 0.45
+ok    synthetic scenario generates windows — 66 windows, 2 telemetry levels
+ok    detectors fire on an attack window — 25 alerts, e.g. [...]
+ok    forecast produces a timeline with attribution — h+5 P=0.761, top driver packets_max (+6.50), stage Lateral Movement
+ok    stage mapping returns a named stage or says why not — 'Lateral Movement'
+ok    trust ledger records and verifies — 3 records, chain valid
+ok    file forecast works on the committed fixture — 3 horizons, packet coverage True
+```
+
+### Judge flow (verified)
+
+Dashboard **Forecast** tab, or `POST /v1/detect` with the committed fixture:
+
+```bash
+KEY=sent_demo_key_2026   # demo mode; see "Demo mode" above
+curl -s -X POST http://127.0.0.1:8100/v1/detect \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d "$(uv run python -c '
+import json,sys
+from sentinel.ingestion import read_flow_csv
+ev=list(read_flow_csv("data/fixtures/attack_replay.csv").events)
+print(json.dumps({"events":[e.model_dump(mode="json") for e in ev],
+                  "window_seconds":60,"stride_seconds":60}))')"
+```
+
+Returns findings and alerts per window; then `POST /v1/forecast` on the same
+events returns the probability timeline, the predicted stage with its MITRE
+reference, and the driving features behind it. Measured on the fixture: 360
+findings / 19 alerts across five attack types, stage `Lateral Movement`
+(TA0008), top driver `packets_max +3.66`.
+
+### With Docker
+
+```bash
+docker compose up --build -d          # API + dashboard (default profile only)
 docker compose --profile demo up -d   # + vulnerable target + live sensors
+docker compose --profile obs up -d    # + Prometheus + Grafana
+```
 
-# Reproduce every measured number
+The default profile is `api` and `dashboard` only. Prometheus and Grafana are
+behind the `obs` profile, not the default.
+
+**The IDURAR lab scenario needs a sibling repository this one does not contain.**
+Those services moved to `docker-compose.lab.yml` on 2026-09-29; until then,
+`docker compose --profile lab up` failed on a fresh clone because Compose
+resolves the build context of every profiled service. To use it:
+
+```bash
+git clone <idurar-erp-crm-url> ../idurar-erp-crm
+docker compose -f docker-compose.yml -f docker-compose.lab.yml --profile lab up -d
+```
+
+Everything else — the dashboard, the API, the detectors, the synthetic replay —
+runs with `docker compose up -d` and needs no sibling checkout.
+
+### Reproduce the measured numbers
+
+```bash
 uv run python scripts/run_benchmark.py --output reports/generated/benchmark
 uv run python scripts/run_world_model.py \
     --output reports/generated/world-model \
     --baseline reports/generated/benchmark/pipeline/baseline --compare-cores
+uv run python scripts/diagnose_separability.py   # the shortcut-leakage check
+uv run python scripts/sweep_known_edge_band.py    # the detector band sweep
+```
 
-# Forecast your own capture (PCAP or flow CSV) — fully offline
+The generated reports are **not committed** (`reports/generated/` is
+gitignored) and are rebuilt on demand. `make reproduce` runs the whole chain.
+
+### Forecast your own capture (PCAP or flow CSV) — fully offline
+
+```bash
 uv run python scripts/predict_file.py \
     --input data/fixtures/attack_replay.csv \
-    --baseline reports/generated/benchmark/pipeline/baseline \
-    --temporal reports/generated/benchmark/pipeline/temporal \
-    --world-model reports/generated/benchmark/world_model \
+    --baseline models/release/v1 --temporal models/release/v1 \
+    --world-model models/release/v1 \
     --forecaster imagination --window-seconds 60 --stride-seconds 60 \
     --output reports/generated/file-forecast/forecast.json
+```
 
-# Regenerate the demo capture
-uv run python scripts/make_demo_csv.py --output data/fixtures/attack_replay.csv --packet-events
+### Real-data protocol (needs the licensed CIC-IDS2017 CSVs)
 
-# Real-data protocol (needs the licensed CIC-IDS2017 TrafficLabelling CSVs)
+```bash
 uv run python scripts/run_real_benchmark.py \
     --data-dir data/raw/cic-ids2017/TrafficLabelling \
     --output reports/generated/real-benchmark
+```
 
-# No dataset? Exercise the same code path on a generated CIC-schema fixture.
-# The report labels itself SYNTHETIC, so its numbers can never be misquoted.
+No dataset? Exercise the same code path on a generated CIC-schema fixture. The
+report labels itself SYNTHETIC, so its numbers can never be misquoted:
+
+```bash
 uv run python scripts/make_cic_fixture.py --output data/raw/fixture-lab
 uv run python scripts/run_real_benchmark.py \
     --data-dir data/raw/fixture-lab --output reports/generated/real-fixture
-
-# Tests
-uv run pytest -q                       # 300+ tests
-uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
 ```
 
-## Pipeline
+### Tests
 
-- **Ingestion**: CSV flow logs, PCAP packets (Scapy), CIC-IDS2017 adapter, DNS/auth log stubs
-- **State builder**: rolling time-window aggregation into `NetworkState`, flow **and** packet level
-- **Features**: leakage-safe z-score normalization, scenario-level split manifests
-- **Models**: logistic regression baseline, GRU per-horizon temporal, RSSM world model with open-loop imagination, stabilized linear K-step transition rollout
-- **Inference**: probability timeline, driving-feature attribution, predicted stage, MITRE mapping, lead time — from a live stream, a replay scenario, or a **PCAP/CSV file**
-- **Calibration**: leakage-safe F1/Youden threshold selection
-
-## Nine Detectors
-
-| Detector | MITRE | What It Watches | Honesty |
-|---|---|---|---|
-| DDoS | T1498 | Flow/bytes z-score vs benign | Capped 0.95 — can't confirm packet floods from flow data |
-| Recon | T1046 | SYN+RST probe share + low-byte fan-out | Fires when ≥6 probe edges and ≥30% share |
-| Credential abuse | T1110 | Failed auths per minute | Needs ≥3 benign history windows |
-| Lateral movement | T1021 | Bytes on new internal edges | Looks back 5 windows |
-| C2 beacon | T1071 | Sensor beacon score or threat-intel match | Returns 0.0 when no telemetry — never fabricates |
-| Exfiltration | T1048 | Bytes z-score vs history | Guarded by baseline history |
-| Insider threat | T1078 | Behavioral z-score on transfer volume | Capped during cold start |
-| Phishing | T1566 | DNS surrogate (domain length, tunnel marker) | Scores only with DNS features |
-| Malware | T1059 | Endpoint execution bursts | Scores only with endpoint telemetry |
+```bash
+uv run pytest -q
+uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
+```
 
 ## Docker Compose
 
 ```bash
 docker compose up --build -d
-# Dashboard:  http://localhost:8501
-# API docs:   http://localhost:8100/docs
-# Grafana:    http://localhost:3000 (admin/admin)
-# Prometheus: http://localhost:9090/targets
+# Dashboard:  http://127.0.0.1:8501
+# API docs:   http://127.0.0.1:8100/docs
+
+docker compose --profile obs up -d
+# Grafana:    http://127.0.0.1:3000  (credentials are set in compose; see the file)
+# Prometheus: http://127.0.0.1:9090/targets
 ```
+
+Both published ports bind to **loopback**, not `0.0.0.0`. The dashboard hosts the
+attack-runner button, and the API is authenticated; neither belongs on a public
+interface. The Grafana admin password is still the compose default
+(`admin`) — that is a demo convenience and should be set before any shared
+deployment.
 
 ## Real-Network Demo
 

@@ -154,3 +154,26 @@ temporal) · Live (streaming) · Metrics (weights, split audit, config) · Demo
 - No UI component library (the component set is small enough to own)
 - No light theme yet: tokens exist and are tested, but only dark ships
 - No Figma sync
+
+## The Next.js console in `web/` was removed on 2026-09-29
+
+There was a `web/apps/console/` Next.js + Tailwind + Radix prototype in this
+repository. It is gone. The reasons, so the decision is on the record:
+
+- **Nothing referenced it.** Not `docker-compose.yml`, not any Dockerfile, not
+  the Makefile, not CI, not a single test. It was not part of the application.
+- **It could not build.** `next.config.js` sets
+  `transpilePackages: ["@sentinel/tokens", "@sentinel/ui"]` and rewrites them to
+  `packages/*/src`; neither directory exists (only `__init__.py` stubs). There
+  was no lockfile, no `next-env.d.ts`, no ESLint config.
+- **It made no requests.** Every `.tsx` rendered hardcoded fixture values, so it
+  displayed numbers that were not measured anywhere.
+- **It duplicated the design system with a drifted palette.** `web/apps/console/src/styles/globals.css`
+  still carried the pre-contrast-fix colours, which fail the WCAG AA bar that
+  `tests/test_frontend.py` enforces on the Python tokens.
+- **Its one commit was unrelated** — a lint fix to a Python test.
+
+A half-built second frontend is worse than none in a submission: it invites the
+question "which one is the product?" and it cannot be shown to work. The
+dashboard in `src/sentinel/dashboard/` is the application, and its design system
+is enforced as executable invariants by `tests/test_frontend.py`.
