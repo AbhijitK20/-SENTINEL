@@ -27,6 +27,43 @@
 
 | Metric | Test |
 |---|---:|
+> ### Why these numbers are much lower than earlier releases
+>
+> `synthetic-recon-lateral-v2` was **trivially separable**. Each phase drew from
+> its own disjoint band of byte volumes, port sets, destination hosts and TCP
+> flag words, so the infiltration label was recoverable from one scalar. Over 98
+> features the baseline scored ROC-AUC 0.9933 on the test split while a *single*
+> feature (`flag_psh_ratio`) scored 0.9861 — a gap of 0.0072. Ninety-seven of the
+> ninety-eight features were decoration, and every metric above measured the
+> shortcut rather than forecasting.
+>
+> `synthetic-recon-lateral-v3` removes the shortcut: benign traffic is a mixture
+> (including bulk transfers and established PSH sessions) whose volume overlaps
+> the lateral phase, destinations and ports are drawn from shared pools, phase
+> lengths vary per scenario, and benign windows carry ordinary probe traffic.
+> Measured on `synthetic-recon-lateral-v3` (seed 42, 10 scenarios, scenario-level
+> 60/20 split, 60 s windows, 30 s stride, unchanged protocol):
+>
+> | | v2 (shortcut) | v3 (corrected) |
+> |---|---:|---:|
+> | best single-feature ROC-AUC | 0.9833 | 0.7407 |
+> | full baseline ROC-AUC | 0.9933 | 0.9302 |
+> | **full minus single (the gap)** | **0.0072** | **0.1126** |
+> | baseline F1 | 0.892 | 0.702 |
+> | baseline PR-AUC | 0.978 | 0.662 |
+> | baseline FPR | 0.060 | 0.306 |
+>
+> The headline numbers got worse because they were measuring a shortcut. The
+> number that matters is the gap: on v3 the other 97 features earn 0.113 ROC-AUC,
+> where on v2 they earned 0.007. Reproduce with
+> `uv run python scripts/diagnose_separability.py`, and the regression is gated by
+> `tests/test_benchmark_separability.py`.
+>
+> This is still a synthetic benchmark. It demonstrates that the pipeline learns a
+> structural signal rather than a volume shortcut; it is not evidence of
+> real-world forecasting ability.
+
+
 | Precision | 0.868 |
 | Recall | 0.917 |
 | F1 | 0.892 |

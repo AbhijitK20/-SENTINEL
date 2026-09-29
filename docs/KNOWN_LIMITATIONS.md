@@ -486,3 +486,42 @@ for contract compatibility and are always `None`. The GAT that once lived in
 `sentinel/graph/gnn.py` was deleted because nothing could ever call it.
 
 This file must be updated whenever an evaluation or demo reveals a new limitation.
+
+### The synthetic benchmark was trivially separable until 2026-09-29, and every earlier number measured that
+
+`synthetic-recon-lateral-v2` gave each phase a disjoint band of byte volumes,
+port sets, destination hosts and TCP flag words. Benign connections capped at
+6 kB while lateral movement moved 20-80 kB, so `bytes` in a window was close to
+a deterministic function of the infiltration label, and `flag_psh_ratio` (PSH
+was set only in the attack phase) was worse. Measured on the scenario-level test
+split: the baseline over 98 features scored ROC-AUC 0.9933, and a **single
+feature scored 0.9861** - a gap of 0.0072. Ninety-seven features were
+decoration.
+
+Consequences that are now recorded rather than hidden:
+
+- The published baseline F1 0.892 and PR-AUC 0.978 describe a one-feature
+  problem. On the corrected generator the same protocol gives F1 0.702 and
+  PR-AUC 0.662, with the full model beating the best single feature by 0.1126
+  instead of 0.0072.
+- `detectors.py`'s known-edge band was swept on v2. The comment claimed the
+  classes "separate on the rate" because benign sat at a median of 579 B/s
+  against lateral at 2,490 B/s. That separation was the generator, not the
+  signal. Re-swept on v3 across seeds 17/42/7/99
+  (`scripts/sweep_known_edge_band.py`) the best mean F1 is 0.5443 and the best
+  minimum recall is 0.5575; no band reaches the old 0.70/0.80 floors. The band
+  is now 1500/1800 B/s and the rule is recorded as needing a
+  `DeploymentBaseline`.
+- `detect_exfil` had the same flaw and is now capped sub-alert without a
+  baseline. Window volume is heavy-tailed; a z-score over the 3-6 windows the
+  product actually supplies cannot separate a backup from a transfer.
+- `detect_recon` now requires 8 flows before scoring an RST share, because a
+  ratio estimated from three observations is not a measurement.
+
+**What v3 does and does not show.** It shows the pipeline can learn a structural
+signal - port fan-out per connection, session establishment, internal-to-internal
+persistence - rather than a volume threshold. It does not show real-world
+forecasting ability, and no number on the synthetic benchmark should be quoted as
+if it did. The corrected benchmark is a harder test with a lower score; that is
+the correct direction for this project to move in.
+

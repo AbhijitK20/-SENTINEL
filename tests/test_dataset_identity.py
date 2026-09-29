@@ -26,7 +26,10 @@ _LITERAL = re.compile(r"[\"'](?:synthetic-recon-lateral-v\d|CIC-IDS2017)")
 
 
 def test_dataset_id_is_the_single_source_of_truth() -> None:
-    assert DATASET_ID == "synthetic-recon-lateral-v2"
+    # v3: the per-phase distributions were reworked so the infiltration label is
+    # not recoverable from one scalar. A v2-trained artifact must not be applied
+    # to v3 windows, so the id moved with the data.
+    assert DATASET_ID == "synthetic-recon-lateral-v3"
 
 
 def test_app_imports_the_canonical_id_instead_of_retyping_it() -> None:

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Synthetic scenario generator for SENTINEL.
 
-Two properties make this replay data useful for a world model rather than a
+Three properties make this replay data useful for a world model rather than a
 flow classifier:
 
 **Both telemetry levels.** Every connection is emitted twice: once as a ``flow``
@@ -18,6 +18,35 @@ shape. Labels stay honest: precursor windows are labelled ``Benign`` because the
 kill chain has not started, so a model earns lead time by recognising the
 precursor, not by being handed the answer.
 
+**Class overlap (v3).** ``v2`` drew each phase from its own disjoint band of
+byte volumes, port sets, destination hosts and TCP flag combinations. The
+infiltration label was therefore recoverable from one scalar: on ``v2`` a
+logistic regression over 98 features scored ROC-AUC 0.9933 on the test split,
+while a *single* feature (``flag_psh_ratio``) scored 0.9861 — a gap of 0.0072.
+Ninety-seven of ninety-eight features were decoration.
+
+``v3`` keeps the phases semantically distinct but stops letting volume carry the
+label:
+
+* Benign traffic is a mixture, not a single small band. It includes bulk
+  transfers (backups, exports) whose byte volume overlaps the lateral phase, and
+  established sessions that set PSH, which ``v2`` reserved for the attack.
+* The lateral phase draws from a wide log-normal band that reaches *below* the
+  benign median, and a quarter of its transfers are deliberately quiet.
+* Every phase draws destinations from the full host pool, so ``server-03`` is
+  no longer a lateral-only host.
+* Port pools overlap. Business ports, service ports and probe ports all appear
+  across phases; the distinguishing feature is the *fan-out per connection*, not
+  which port was touched.
+* Phase lengths, connection counts and transfer sizes are drawn per scenario, so
+  no window index means the same thing in two scenarios and an attack window can
+  be quieter than a benign one.
+
+The signal that survives is structural, and it is the one that actually
+separates the stages in real traffic: reconnaissance is many distinct
+destinations per connection, short-lived and unacknowledged; lateral movement is
+few ports, established sessions, and sustained internal-to-internal transfer.
+
 Stage design:
   benign -> precursor (low-and-slow probing) -> recon (scan ramp)
   -> lateral (transfer ramp)
@@ -29,6 +58,7 @@ Precursor signature (deliberately below flow thresholds):
 
 from __future__ import annotations
 
+import math
 import random
 from datetime import UTC, datetime, timedelta
 
@@ -36,7 +66,9 @@ from sentinel.schemas import NetworkState, StateLabel, UnifiedEvent
 from sentinel.state_builder import build_network_states
 from sentinel.targets import LabelledState, make_state_key
 
-DATASET_ID = "synthetic-recon-lateral-v2"
+#: v3 changes the per-phase distributions. Bumped so a v2-trained artifact is
+#: never silently applied to v3 windows.
+DATASET_ID = "synthetic-recon-lateral-v3"
 INTERNAL_HOSTS = [f"host-{index:02d}" for index in range(1, 9)]
 SERVERS = ["auth-service", "server-03", "file-server", "web-proxy"]
 
@@ -46,6 +78,28 @@ BENIGN_WINDOWS = (64240.0, 65535.0, 29200.0, 8192.0)
 SCAN_WINDOWS = (1024.0, 2920.0, 5840.0)
 # Don't Fragment set, as an integer IP flags word.
 DF_FLAG = 0x4000
+
+# Ports appear in more than one phase. A port is not a stage label; the number
+# of distinct destinations per connection is.
+BUSINESS_PORTS = (80, 443, 53, 8443, 8080, 3306, 5432, 5900)
+SERVICE_PORTS = (22, 88, 135, 139, 445, 1433, 3389)
+PROBE_PORTS = (21, 23, 993, 1434, 2049, 3128, 5222, 6379, 9200)
+
+# TCP flag words.
+SYN_ACK = 2 | 16
+SYN_ACK_PSH = 2 | 16 | 8
+SYN_ACK_FIN = 2 | 16 | 1
+SYN_RST = 2 | 4
+SYN_ACK_RST = 2 | 16 | 4
+
+
+def _log_normal_bytes(rng: random.Random, median: float, sigma: float, lo: float, hi: float):
+    """Draw a positive, heavy-tailed size.
+
+    Real transfer sizes are not uniform: a log-normal keeps the tail fat enough
+    that a "normal" window can look like an attack window and back.
+    """
+    return float(min(hi, max(lo, math.exp(rng.gauss(math.log(median), sigma)))))
 
 
 def generate_scenario_events(
@@ -81,6 +135,27 @@ def generate_scenario_events(
     attacker = rng.choice(INTERNAL_HOSTS)
     events: list[UnifiedEvent] = []
     counter = 0
+
+    # Nuisance parameters for this scenario, drawn before any phase runs. They
+    # are independent of the stage schedule on purpose: how busy a network is,
+    # and how long each stage lasts, must not predict the label. v2 fixed every
+    # phase length for every scenario, so window index was a label proxy.
+    benign_len = max(3, int(rng.gauss(benign_minutes, benign_minutes * 0.22)))
+    recon_len = max(2, int(rng.gauss(recon_minutes, recon_minutes * 0.30)))
+    lateral_len = max(2, int(rng.gauss(lateral_minutes, lateral_minutes * 0.30)))
+    prec_len = max(1, min(precursor_minutes, benign_len - 1))
+    # This scenario's overall load. Scales benign *and* attack volume, so a busy
+    # scenario is busy during its benign phase too.
+    load = max(0.35, rng.gauss(1.0, 0.28))
+    # How often a benign window happens to contain a bulk transfer. Without
+    # this, "big window" and "infiltration" are the same event.
+    bulk_rate = rng.uniform(0.10, 0.38)
+    # How often a lateral transfer is quiet enough to look ordinary. Real
+    # lateral movement that only reads a file is small.
+    stealth_rate = rng.uniform(0.15, 0.45)
+    # Benign connection volume, widened so an attack window can be quieter than
+    # a benign one.
+    benign_lo, benign_hi = int(4 * load), int(11 * load)
 
     def emit(
         ts: datetime,
@@ -182,13 +257,20 @@ def generate_scenario_events(
     # connections per minute, near-zero bytes, spread over minutes. What gives
     # it away is packet shape — jittered TTL, small windows, retransmissions,
     # wide port fan-out — which is why the observation carries both levels.
-    precursor_start_minute = max(1, benign_minutes - precursor_minutes)
-    for minute_idx in range(benign_minutes):
+    precursor_start_minute = max(1, benign_len - prec_len)
+    for minute_idx in range(benign_len):
         ts = origin + timedelta(minutes=minute_idx)
-        _benign_minute(rng, emit, ts)
+        _benign_minute(
+            rng,
+            emit,
+            ts,
+            lo=benign_lo,
+            hi=benign_hi,
+            bulk_rate=bulk_rate,
+        )
 
         if minute_idx >= precursor_start_minute:
-            progress = (minute_idx - precursor_start_minute + 1) / precursor_minutes
+            progress = (minute_idx - precursor_start_minute + 1) / prec_len
             # Two to six probes a minute, rising across the precursor: still far
             # below the benign connection count.
             probe_count = 2 + int(progress * rng.randint(2, 5))
@@ -206,7 +288,7 @@ def generate_scenario_events(
                     dport=port,
                     nbytes=float(rng.randint(40, 120)),
                     packets=2.0,
-                    flags=2 | 4,  # SYN + RST
+                    flags=SYN_RST,
                     slow_scan=True,
                 )
             for _ in range(int(progress * rng.randint(1, 3))):
@@ -217,7 +299,7 @@ def generate_scenario_events(
                     dport=88,
                     nbytes=180.0,
                     packets=3.0,
-                    flags=2 | 16 | 4,
+                    flags=SYN_ACK_RST,
                     failed_auth=1.0,
                     slow_scan=True,
                 )
@@ -227,49 +309,76 @@ def generate_scenario_events(
     # Dwell time: the scan ramps over its own minutes instead of appearing at
     # full intensity in the first window, so a trajectory is genuinely gradual.
     recon_start = origin + timedelta(minutes=minute)
-    for recon_index in range(recon_minutes):
+    for recon_index in range(recon_len):
         ts = origin + timedelta(minutes=minute)
-        _benign_minute(rng, emit, ts)
-        ramp = 0.45 + 0.55 * (recon_index + 1) / recon_minutes
-        for probe in range(max(2, int(rng.randint(12, 20) * ramp))):
+        _benign_minute(rng, emit, ts, lo=benign_lo, hi=benign_hi, bulk_rate=bulk_rate)
+        ramp = 0.45 + 0.55 * (recon_index + 1) / recon_len
+        # Wide fan-out per connection: the structural signal, and the reason a
+        # port list alone cannot label this phase.
+        for probe in range(max(2, int(rng.randint(9, 18) * ramp * load))):
             emit(
                 ts + timedelta(seconds=probe * 3),
                 attacker,
                 rng.choice(INTERNAL_HOSTS + SERVERS),
-                dport=rng.choice([22, 135, 139, 445, 3389, 8080]),
-                nbytes=float(rng.randint(60, 200)),
-                packets=2.0,
-                flags=2 | 4,  # SYN + RST
+                # Mostly fresh ports, but drawn from the shared pools so no port
+                # is exclusive to recon.
+                dport=rng.choice(tuple(BUSINESS_PORTS) + tuple(SERVICE_PORTS) + tuple(PROBE_PORTS)),
+                # Probes are short, but the upper tail overlaps an ordinary
+                # benign session so "small window" is not a label.
+                nbytes=_log_normal_bytes(rng, median=140.0, sigma=0.95, lo=40.0, hi=9_000.0),
+                packets=float(rng.randint(2, 6)),
+                flags=SYN_RST,
             )
-        for attempt in range(max(1, int(rng.randint(3, 6) * ramp))):
+        for attempt in range(max(1, int(rng.randint(2, 5) * ramp))):
             emit(
                 ts + timedelta(seconds=30 + attempt * 4),
                 attacker,
                 "auth-service",
                 dport=88,
-                nbytes=180.0,
-                packets=3.0,
-                flags=2 | 16 | 4,
+                nbytes=_log_normal_bytes(rng, median=220.0, sigma=0.6, lo=90.0, hi=1_200.0),
+                packets=float(rng.randint(2, 5)),
+                flags=SYN_ACK_RST,
                 failed_auth=1.0,
             )
         minute += 1
 
     # --- Phase 3: Lateral movement -----------------------------------
     lateral_start = origin + timedelta(minutes=minute)
-    for lateral_index in range(lateral_minutes):
+    for lateral_index in range(lateral_len):
         ts = origin + timedelta(minutes=minute)
-        _benign_minute(rng, emit, ts)
+        _benign_minute(rng, emit, ts, lo=benign_lo, hi=benign_hi, bulk_rate=bulk_rate)
         # Exfiltration ramps too: the first lateral minutes move less data.
-        ramp = 0.4 + 0.6 * (lateral_index + 1) / lateral_minutes
-        for hop in range(max(1, int(rng.randint(4, 8) * ramp))):
+        ramp = 0.4 + 0.6 * (lateral_index + 1) / lateral_len
+        for hop in range(max(1, int(rng.randint(3, 7) * ramp * load))):
+            stealth = rng.random() < stealth_rate
+            if stealth:
+                # A lateral hop that reads a file and leaves. Ordinary-sized.
+                nbytes = _log_normal_bytes(rng, median=2_600.0, sigma=0.7, lo=300.0, hi=12_000.0)
+            else:
+                nbytes = _log_normal_bytes(
+                    rng, median=34_000.0, sigma=1.05, lo=4_000.0, hi=220_000.0
+                )
+            # Destinations come from the whole pool, including the hosts the
+            # benign phase already talks to.
+            dst = rng.choice(INTERNAL_HOSTS + SERVERS)
+            # Not every lateral hop pushes data with PSH: service creation,
+            # credential use and remote exec ride an established session without
+            # it. Only the bulk-transfer path is PSH-dominated.
+            if stealth or rng.random() < 0.40:
+                flags = SYN_ACK if rng.random() < 0.6 else SYN_ACK_FIN
+            else:
+                flags = SYN_ACK_PSH
             emit(
                 ts + timedelta(seconds=hop * 7),
                 attacker,
-                "server-03" if hop % 2 == 0 else rng.choice(INTERNAL_HOSTS),
-                dport=rng.choice([445, 3389, 5985]),
-                nbytes=float(rng.randint(20_000, 80_000) * ramp),
-                packets=float(rng.randint(40, 120)),
-                flags=2 | 16 | 8,  # SYN + ACK + PSH
+                dst,
+                # Few distinct ports, the structural opposite of recon.
+                dport=rng.choice((445, 3389, 5985, 22, 1433)),
+                nbytes=nbytes,
+                # Packet count follows the transfer size with spread, so it is
+                # not an independent label proxy.
+                packets=max(2.0, nbytes / float(rng.randint(700, 1_400))),
+                flags=flags,
             )
         minute += 1
 
@@ -350,14 +459,86 @@ def _label_state(
     )
 
 
-def _benign_minute(rng: random.Random, emit, ts: datetime) -> None:
-    for _ in range(rng.randint(6, 12)):
-        emit(
-            ts + timedelta(seconds=rng.uniform(0, 59)),
-            rng.choice(INTERNAL_HOSTS),
-            rng.choice(SERVERS[:1] + SERVERS[2:]),
-            dport=rng.choice([443, 80, 53, 8443]),
-            nbytes=float(rng.randint(400, 6000)),
-            packets=float(rng.randint(4, 30)),
-            flags=2 | 16,
-        )
+def _benign_minute(
+    rng: random.Random,
+    emit,
+    ts: datetime,
+    *,
+    lo: int = 6,
+    hi: int = 12,
+    bulk_rate: float = 0.0,
+) -> None:
+    """Emit one minute of ordinary traffic.
+
+    A mixture, deliberately, because ordinary traffic is not one shape:
+
+    * ``browse`` — small request/response pairs on web and business ports.
+    * ``api`` — mid-sized calls, some with PSH set. v2 reserved PSH for the
+      attack phase, which made ``flag_psh_ratio`` a single-feature label at
+      ROC-AUC 0.986. Real established sessions set it; so does this one.
+    * ``bulk`` — a backup or export whose byte volume overlaps the lateral
+      phase. This is the reason a big window is no longer an attack window.
+    * ``probe`` — an unacknowledged SYN+RST from a health check, a port sweep
+      from another tool, or a misconfigured client. Reconnaissance is not the
+      only thing that fans out across ports.
+
+    Destinations come from the full host pool, so no host identifies a stage.
+    Arrival times are jittered inside the minute and occasionally cluster, so
+    window boundaries do not align with traffic edges.
+    """
+    count = rng.randint(max(1, lo), max(lo + 1, hi))
+    # A bulk transfer is a per-window event, not a per-connection one. Applied
+    # per connection it fired in almost every window, which is not how a network
+    # behaves and which flattened the volume signal the detectors read.
+    bulk_window = rng.random() < bulk_rate
+    for _ in range(count):
+        roll = rng.random()
+        # One burst per minute carries a cluster of connections.
+        burst = rng.random() < 0.22
+        offset = rng.uniform(0, 8) if burst else rng.uniform(0, 59)
+        src = rng.choice(INTERNAL_HOSTS)
+        dst = rng.choice(SERVERS + INTERNAL_HOSTS)
+        if bulk_window and roll < 0.34:
+            nbytes = _log_normal_bytes(rng, median=110_000.0, sigma=0.95, lo=12_000.0, hi=900_000.0)
+            emit(
+                ts + timedelta(seconds=offset),
+                src,
+                dst,
+                dport=rng.choice((445, 22, 1433, 5432)),
+                nbytes=nbytes,
+                packets=max(2.0, nbytes / float(rng.randint(800, 1_400))),
+                flags=SYN_ACK_PSH,
+            )
+        elif roll < 0.62:
+            # Most established data transfers set PSH. v2 set PSH only in the
+            # attack phase, which made flag_psh_ratio a single-feature label at
+            # ROC-AUC 0.986; ordinary sessions set it too.
+            emit(
+                ts + timedelta(seconds=offset),
+                src,
+                dst,
+                dport=rng.choice(BUSINESS_PORTS),
+                nbytes=_log_normal_bytes(rng, median=9_000.0, sigma=1.05, lo=300.0, hi=260_000.0),
+                packets=float(rng.randint(6, 220)),
+                flags=SYN_ACK_PSH if rng.random() < 0.72 else SYN_ACK,
+            )
+        elif roll < 0.652:
+            emit(
+                ts + timedelta(seconds=offset),
+                src,
+                rng.choice(INTERNAL_HOSTS + SERVERS),
+                dport=rng.choice(PROBE_PORTS),
+                nbytes=_log_normal_bytes(rng, median=110.0, sigma=0.8, lo=35.0, hi=1_800.0),
+                packets=2.0,
+                flags=SYN_RST,
+            )
+        else:
+            emit(
+                ts + timedelta(seconds=offset),
+                src,
+                dst,
+                dport=rng.choice(BUSINESS_PORTS),
+                nbytes=_log_normal_bytes(rng, median=2_600.0, sigma=0.95, lo=120.0, hi=60_000.0),
+                packets=float(rng.randint(3, 90)),
+                flags=SYN_ACK_FIN if rng.random() < 0.3 else SYN_ACK,
+            )

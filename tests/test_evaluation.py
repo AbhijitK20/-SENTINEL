@@ -11,7 +11,7 @@ from sentinel.config import BaselineConfig
 from sentinel.evaluation import evaluate_replay
 from sentinel.predict import DECISION_THRESHOLD, load_artifacts
 from sentinel.report import render_report
-from sentinel.synthetic import generate_labelled_states
+from sentinel.synthetic import DATASET_ID, generate_labelled_states
 from sentinel.targets import LabelledState, build_sequence_samples, make_split_manifest
 
 SCENARIOS = [f"ev{i}" for i in range(6)]
@@ -114,7 +114,7 @@ def test_report_contains_contract_sections(tmp_path: Path) -> None:
 
     result = forecast(states, loaded, max_horizon=3)
     report = render_report(
-        result, scenario_id=scenario, evaluation=evaluation, dataset_id="synthetic-recon-lateral-v2"
+        result, scenario_id=scenario, evaluation=evaluation, dataset_id=DATASET_ID
     )
 
     assert "# SENTINEL Forecast Report" in report
@@ -124,7 +124,7 @@ def test_report_contains_contract_sections(tmp_path: Path) -> None:
     assert "## Limitations" in report
     assert "not a benchmark claim" in report
     # The report must name the dataset it was actually produced from.
-    assert "- Dataset: `synthetic-recon-lateral-v2`" in report
+    assert f"- Dataset: `{DATASET_ID}`" in report
 
 
 def test_report_json_round_trip_stability(tmp_path: Path) -> None:

@@ -99,11 +99,30 @@ payload distribution).
 
 | Metric | Baseline (logistic) | Temporal (GRU h+1) |
 |---|---|---|
-| Precision | 0.868 | 1.000 |
-| Recall | 0.917 | 0.917 |
-| F1 | 0.892 | 0.957 |
-| False-positive rate | 0.060 | 0.000 |
-| PR-AUC | 0.978 | 1.000 |
+| Precision | 0.635 | 0.745 |
+| Recall | 0.786 | 0.905 |
+| F1 | 0.702 | 0.817 |
+| False-positive rate | 0.306 | 0.186 |
+| PR-AUC | 0.662 | — |
+
+**These numbers are much lower than an earlier release reported, and that is the
+point.** The previous generator (`synthetic-recon-lateral-v2`) was trivially
+separable: each phase drew from a disjoint band of byte volumes, ports, hosts and
+TCP flags, so the label came from one scalar. The baseline scored ROC-AUC 0.9933
+while a *single* feature scored 0.9861 — a gap of 0.0072, meaning 97 of 98
+features were decoration. `synthetic-recon-lateral-v3` overlaps the classes
+deliberately, and the same protocol now gives:
+
+| | v2 (shortcut) | v3 (corrected) |
+|---|---:|---:|
+| best single-feature ROC-AUC | 0.9833 | 0.7407 |
+| full baseline ROC-AUC | 0.9933 | 0.9302 |
+| **full minus single (the gap)** | **0.0072** | **0.1126** |
+
+Reproduce with `uv run python scripts/diagnose_separability.py`. The regression
+is gated by `tests/test_benchmark_separability.py`. Full reasoning in
+`docs/RESULTS.md`. This is a synthetic benchmark: it shows the pipeline learns
+structure rather than volume, not that it forecasts real attacks.
 
 ### Real-data forecast (CIC-IDS2017) — PENDING, NOT YET MEASURED
 

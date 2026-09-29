@@ -45,6 +45,9 @@ RST_RATIO_ALERT = 0.30
 # PROBE_BYTES stay for that evidence.
 PROBE_BYTES = 200.0
 PROBE_MIN_EDGES = 6.0  # a scan is many probe edges; a few tiny flows are not (evidence only)
+# Flows required before an RST *share* is treated as a measurement rather than
+# the ratio of two or three observations.
+RST_RATIO_MIN_FLOWS = 8.0
 FAILED_AUTH_PER_MIN_WARN = 1.0  # failed auths per minute, from mean x flows
 FAILED_AUTH_PER_MIN_ALERT = 2.0
 # Bytes per second on internal edges that history has already seen. The old
@@ -59,14 +62,31 @@ FAILED_AUTH_PER_MIN_ALERT = 2.0
 # window-length-dependent number cannot be validated on a corpus windowed
 # differently from the one it was fitted on.
 #
-# Re-fit on synthetic-recon-lateral-v2 by sweeping the known-edge byte *rate* for
-# the best F1, keeping the original 5:6 warn:alert shape. On 60s windows benign
-# sits at a median of 579 B/s and p95 of 934, while lateral movement sits at a
-# median of 2,490 B/s and p95 of 5,743, so the classes separate on the rate.
-# Precision 0.73-0.78 and recall 1.00 across seeds 17/42/7/99, against test
-# floors of 0.70 and 0.80. See `make bench-detectors`.
-KNOWN_EDGE_BYTES_PER_SEC_WARN = 750.0
-KNOWN_EDGE_BYTES_PER_SEC_ALERT = 900.0
+# Re-fit by sweeping the known-edge byte *rate* for the best F1, keeping the
+# original 5:6 warn:alert shape. `scripts/sweep_known_edge_band.py` runs that
+# sweep and writes reports/generated/detector-sweep/.
+#
+# v2 (2026-09, seeds 17/42/7/99): 750 / 900 B/s. Benign sat at a median of
+# 579 B/s and p95 934, lateral at median 2,490 and p95 5,743, so the classes
+# separated on the rate and the rule reported precision 0.73-0.78, recall 1.00.
+# **That separation was an artefact of the generator, not of the signal.**
+# synthetic-recon-lateral-v2 capped every benign connection at 6 kB while the
+# lateral phase moved 20-80 kB, so "bytes on a known edge" was a near-perfect
+# label proxy; 97 of the 98 model features were decoration for the same reason.
+#
+# v3 (seeds 17/42/7/99): best mean F1 0.5443 at 1500 / 1800 B/s, minimum
+# precision 0.4152 and minimum recall 0.5575. No band on this grid reaches the
+# old floors of 0.70 / 0.80, and the sweep cannot manufacture one: the rule
+# scores bytes on already-seen internal edges, and once ordinary internal
+# traffic also transfers data over those edges the quantity stops being
+# discriminative.
+#
+# The honest conclusion is that this rule needs a DeploymentBaseline for the
+# deployment it runs in. Until one is fitted it reports evidence and warns;
+# see docs/KNOWN_LIMITATIONS.md. Do not re-tune this band to restore the v2
+# numbers without re-running the sweep and recording the result.
+KNOWN_EDGE_BYTES_PER_SEC_WARN = 1500.0
+KNOWN_EDGE_BYTES_PER_SEC_ALERT = 1800.0
 EXFIL_BYTES_WARN = 75_000.0  # absolute window-bytes floor
 EXFIL_BYTES_ALERT = 150_000.0
 LATERAL_LOOKBACK = 5  # windows of recent history for new-edge detection
@@ -390,6 +410,20 @@ def detect_recon(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding
     flows = max(1.0, state.features.get("flow_event_count", 0.0))
     rst_ratio = min(1.0, state.features.get("rst_count", 0.0) / flows)
     probability = _band_score(rst_ratio, RST_RATIO_WARN, RST_RATIO_ALERT)
+    # A share estimated from three flows is not a measurement. Before the v3
+    # generator, benign windows were uniformly small and quiet, so a 20% RST
+    # share implied probes; v3 benign windows include real health checks and
+    # misconfigured clients, and a three-flow window is then unstable in both
+    # directions. Require a sample before scoring the ratio at all.
+    if flows < RST_RATIO_MIN_FLOWS:
+        probability = 0.0
+        warnings = [
+            f"only {flows:.0f} flow(s) in this window — too few to estimate a probe "
+            f"share (need >={RST_RATIO_MIN_FLOWS:.0f}); reconnaissance scored 0.0 "
+            "rather than from an unstable ratio"
+        ]
+    else:
+        warnings = []
     evidence = [
         _evidence("rst_probe_ratio", "SYN+RST probe share of flows", round(rst_ratio, 3)),
         _evidence(
@@ -397,7 +431,7 @@ def detect_recon(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding
         ),
         _evidence("max_source_fanout", "unique destinations from one source", _max_fanout(state)),
     ]
-    return _finding("reconnaissance", ctx, probability, evidence, [], thresholds.recon)
+    return _finding("reconnaissance", ctx, probability, evidence, warnings, thresholds.recon)
 
 
 def _max_fanout(state: NetworkState) -> int:
@@ -556,7 +590,24 @@ def detect_lateral(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFindi
 
 
 def detect_exfil(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding:
-    """Transfer-volume spike vs benign history (zone-aware once a registry exists)."""
+    """Transfer-volume spike vs benign history (zone-aware once a registry exists).
+
+    **A volume z-score is not trustworthy without a real baseline, and this rule
+    now says so instead of guessing.** Window transfer volume is heavy-tailed:
+    backups, exports and file pulls sit two orders of magnitude above a browse
+    window. A z-score over the 3-6 windows the product actually supplies
+    (``live.py`` passes ``history=3``) treats "a backup just ran" as an
+    anomaly whenever the preceding minutes happened to be quiet, and silent
+    whenever one of them was large. The synthetic data before ``v3`` never
+    produced a large benign window, so this never showed up.
+
+    So the z-score is reported as evidence and the rule stays sub-alert until a
+    ``DeploymentBaseline`` is fitted for the network in question. This is the
+    same posture ``detect_lateral`` takes when ``baseline is None``, applied to
+    the second of the two volume rules that shared the flaw. An explicit
+    threat-intel match still raises the finding, because that signal does not
+    depend on a baseline.
+    """
     state, warnings = ctx.state, []
     if ctx.asset_registry is None:
         warnings.append(
@@ -569,7 +620,11 @@ def detect_exfil(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding
     # The absolute floor is a cold-start aid only: with a benign baseline the
     # z-score decides, because busy-but-benign minutes can exceed the floor.
     floor = _band_score(window_bytes, EXFIL_BYTES_WARN, EXFIL_BYTES_ALERT)
-    if len(ctx.history) < MIN_HISTORY:
+    verdict = _intel_verdict(ctx)
+    baseline = ctx.deployment_baseline
+    if baseline is not None:
+        probability = max(z_part, baseline.score(window_bytes / _window_seconds(ctx.state)))
+    elif len(ctx.history) < MIN_HISTORY:
         probability = min(max(z_part, floor), 0.5)  # sub-alert without a baseline
         warnings.append(
             f"benign history is too short for a bytes baseline "
@@ -577,13 +632,21 @@ def detect_exfil(ctx: DetectorContext, thresholds: DetectorSet) -> AttackFinding
             "score capped sub-alert"
         )
     else:
-        probability = z_part
+        # Enough history for a z-score, but no per-network reference period, and
+        # the volume distribution is heavy-tailed. Report the anomaly; do not
+        # alert on it.
+        probability = min(max(z_part, floor), 0.5)
+        warnings.append(
+            "no deployment baseline fitted — window volume is heavy-tailed, so a "
+            "z-score over this many windows cannot separate a backup from a "
+            "transfer. Score capped sub-alert; fit a DeploymentBaseline from a "
+            "clean reference period for this network to enable alerting."
+        )
     evidence = [
         _evidence("window_bytes", "total bytes transferred in window", round(window_bytes, 0))
     ]
     if z != 0.0:
         evidence.append(_evidence("bytes_zscore", "bytes vs benign baseline", round(z, 2)))
-    verdict = _intel_verdict(ctx)
     if verdict is not None and verdict.known_malicious:
         probability = min(1.0, max(probability, 0.9))
         evidence.append(
