@@ -300,6 +300,241 @@ with real artifacts set `SENTINEL_ARTIFACTS_DIR` to a volume mount instead.
 3. The Space serves `/health`, `/docs` (interactive OpenAPI), and all `/v1/*`
    endpoints on port 7860.
 
+## Public read surface and CORS
+
+Two environment variables widen the API for browser callers — the hosted
+landing page is one. Both default **off**, so local and authenticated
+behaviour is unchanged.
+
+| Variable | Effect |
+|---|---|
+| `SENTINEL_PUBLIC_READ` | `1` opens `PUBLIC_READ_PATHS` in `src/sentinel/api/app.py` without a key |
+| `SENTINEL_CORS_ORIGINS` | Comma-separated origin allowlist, e.g. `https://sentinel.vercel.app` |
+
+The public surface is an **explicit allowlist**, never "every GET":
+
+- Open: `/model`, `/v1/compliance`, `/v1/registry`, `/v1/live`,
+  `/v1/attack-coverage`, `/v1/attack-coverage/navigator`, `/v1/predict/next`
+- Already open by convention: `/health`, `/metrics`
+- **Stays keyed: `/v1/alerts` and `/v1/cases`** — they return the last 20
+  ledger records and the incident case store. Making them keyless would
+  publish incident history, so they are not in the allowlist.
+- Every write stays keyed, and the CORS layer permits `GET`/`OPTIONS` only,
+  so a browser on an allowed origin cannot POST even holding a valid key.
+
+`GET /health` reports `public_read` and `cors_origins` so a client can tell
+which mode a deployment is running.
+
+## Vercel (live, no card required)
+
+Both tiers run on Vercel's free Hobby plan. No payment method is involved, so
+this path works without the billing account that Cloud Run requires.
+
+| tier | URL | project |
+|---|---|---|
+| Landing page | https://landing-blond-one.vercel.app | `landing` |
+| Analyst console | https://sentinel-console-nine.vercel.app | `sentinel-console` |
+| REST API | https://sentinel-api-pearl.vercel.app | `sentinel-api` |
+
+Three separate projects so a broken container in one cannot take the others
+down. Redeploy with `make deploy-api`, `make deploy-console`,
+`make deploy-landing`.
+
+The console is a container too, which means Streamlit runs as a Vercel
+Function. That works — the websocket to `/_stcore/stream` upgrades, all ten
+tabs render — but the cost is a cold start: measured **16.9 s** cold and
+**5.1 s** warm. Streamlit Cloud has no card requirement either and is the more
+purpose-built host; the Vercel route was chosen so the whole demo lives in one
+place with one set of credentials.
+
+`Dockerfile` therefore passes `--server.port=${PORT:-8501}` at runtime.
+`ENV` cannot expand `$PORT` at build time, and the local Compose stack still
+gets 8501 from the fallback.
+
+The API is a container built from `Dockerfile.api` (reached through the
+`Dockerfile.vercel` symlink) and serves `models/release/real-cic-v1`, so it
+answers with the same real bundle the console does.
+
+### Project environment
+
+| Variable | Value |
+|---|---|
+| `SENTINEL_PUBLIC_READ` | `1` |
+| `SENTINEL_ARTIFACTS_DIR` | `/app/models/release/real-cic-v1` |
+| `SENTINEL_CORS_ORIGINS` | `https://landing-blond-one.vercel.app` |
+| `SENTINEL_AUTH_DIR` | `/tmp/sentinel-state` |
+
+### Four things that will bite you
+
+1. **`.vercelignore` is mandatory.** The CLI uploads the directory before
+   building, and the repo has ~27,000 files once `research/` and `video/` are
+   counted. That is over Vercel's 15,000-file limit, and it failed the deploy
+   with `files should NOT have more than 15000 items`. `.vercelignore` keeps it
+   to ~820 files. Add `--archive=tgz` for good measure.
+
+2. **The container `entrypoint` must be a blessed filename.** `Dockerfile.api`
+   is rejected with `INVALID_SERVICE_CONFIG`. Only `Dockerfile`,
+   `Containerfile`, `Dockerfile.vercel` and `Containerfile.vercel` are accepted,
+   so `Dockerfile.vercel` is a symlink to `Dockerfile.api` — one real file, no
+   drift between two copies.
+
+3. **Two projects in one repo need `--project` every time.** Running
+   `vercel deploy` from inside `landing/` resolves the *root* project link and
+   publishes the landing build into `sentinel-api`, which takes the API down
+   with a 404. Always pass both:
+
+   ```bash
+   vercel deploy --prod --archive=tgz --project sentinel-api          # from repo root
+   vercel deploy --prod --project landing --cwd landing               # landing page
+   ```
+
+4. **Local disk is ephemeral and is not a system of record.** Keys, the audit
+   log, the alert ledger and cases are written under `SENTINEL_AUTH_DIR`, so
+   they are lost when an instance is recycled. Fine for the keyless read
+   surface, which is what the demo uses; do not treat a hosted write as durable.
+
+Verify a deploy is sane before trusting it:
+
+```bash
+curl -s https://sentinel-api-pearl.vercel.app/health | python3 -m json.tool
+```
+
+`dataset_id` should read `cic-ids2017-trafficlabelling-derived-v1`. If it is
+absent, the container fell back to bootstrap demo artifacts.
+
+## Landing page (`landing/`)
+
+A dependency-free static page — no build step, no npm — that Vercel serves
+as plain files. It carries the measured results table, states the real-data
+weakness explicitly, and polls the API's keyless `/health` for a live status
+pill.
+
+```bash
+# every outbound URL is in one file, so deploys never edit HTML
+$EDITOR landing/config.js   # consoleUrl, apiUrl, repoUrl, docsUrl
+```
+
+With `apiUrl` empty the status panel reads "not deployed" rather than showing
+a false failure. With it set, the probe uses a 25 s budget so a container
+that scaled to zero reports **"waking up"** instead of "unreachable" — a
+5 s timeout would mislabel every sleeping service as down.
+
+Deploy: import the repository on Vercel, set **Root Directory** to `landing`.
+No build command, no output directory, no install step.
+
+## Cloud Run (not yet deployed)
+
+The free tier is 2M requests/month, 360K GiB-seconds RAM and 180K
+vCPU-seconds, always-free with no expiry. At 1.5 GiB that is roughly 66
+instance-hours per month, so **`--min-instances 0` matters** — an
+always-warm instance exhausts it in about four days.
+
+```bash
+gcloud auth login
+gcloud config set project sentinel-510119
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com
+
+gcloud run deploy sentinel-api --source . \
+  --region asia-south1 \
+  --memory 1.5Gi --cpu 1 \
+  --min-instances 0 --max-instances 1 \
+  --no-cpu-throttling \
+  --allow-unauthenticated \
+  --set-env-vars "SENTINEL_PUBLIC_READ=1,SENTINEL_CORS_ORIGINS=https://YOUR-VERCEL-DOMAIN,SENTINEL_ARTIFACTS_DIR=/app/models/release/real-cic-v1"
+```
+
+`Dockerfile.api` binds `${PORT:-${SENTINEL_PORT}}`, so Cloud Run's injected
+`$PORT` takes precedence over the HF Spaces default of 7860.
+
+**Serve the same model as the console.** `scripts/bootstrap_api_artifacts.py`
+generates *synthetic demo* artifacts, so a default deploy would answer with
+demo data while the Streamlit console shows the real bundle. No `COPY` is
+needed — `.dockerignore` already re-includes `models/release/**`, so the
+bundle ships in the image. Set:
+
+```
+SENTINEL_ARTIFACTS_DIR=/app/models/release/real-cic-v1
+```
+
+and confirm the answer with `GET /health`:
+
+```json
+{ "bundle": "real-cic-v1",
+  "dataset_id": "cic-ids2017-trafficlabelling-derived-v1",
+  "threshold": 0.05 }
+```
+
+Check `dataset_id`, not `model_version`: the real and synthetic bundles both
+report `logistic-regression-baseline-v1`, so only the manifest id tells you
+which one is live. The thresholds also differ (real `0.05`, synthetic `0.45`,
+bootstrap demo `0.5`), but one number is too thin a thread to hang the claim on.
+
+Kaggle is not an option: it has no inbound connectivity and no public IP, and
+sessions are capped at 12 hours with a manual restart.
+
+## The model follows the dataset
+
+The console used to load one fixed bundle (`real-cic-v1`) while the dataset
+selector defaulted to a synthetic replay, so the two facts in the header
+contradicted each other and, worse, the model scored the wrong data. On the
+Live tab that showed `Lateral 1.00 critical` from the rule detectors beside
+`P(infiltration) 0.00 / Below Threshold` from the model — both true, and
+together they read as a broken model rather than a mismatched pair.
+
+`bundle_for_mode` now pairs the data with the model trained on it:
+
+| Selected dataset | Bundle | Test F1 |
+|---|---|---|
+| CIC-IDS2017 (pre-windowed or raw) | `models/release/real-cic-v1` | 0.242 |
+| Synthetic replay | `models/release/v1` | 0.892 |
+
+`v1` is not a fallback being hidden; it is the model for that dataset. An
+explicit `--artifacts` or `SENTINEL_ARTIFACTS_DIR` still wins, because being
+told "these are your artifacts" and silently getting a different bundle is
+worse than an error.
+
+## Running attacks from the hosted console
+
+The **Force Attack** panel runs `scripts/full_attack.py`, which makes real
+HTTP requests against a target and pushes the derived events to the API at
+`/v1/events`. On a hosted console the target has to exist, and it is started
+*inside the console container* on loopback:
+
+```dockerfile
+CMD ["sh", "-c", "(python apps/vulnerable/app.py >/tmp/demo-target.log 2>&1 &) ; exec uv run --no-sync streamlit run streamlit_app.py ..."]
+```
+
+That keeps a deliberately vulnerable app off the public internet entirely — it
+is only reachable from the container that runs it. Required project env on
+`sentinel-console`:
+
+| Variable | Value |
+|---|---|
+| `SENTINEL_DEMO_TARGET` | `http://127.0.0.1:5000` |
+| `SENTINEL_TARGET_HOST` / `SENTINEL_TARGET_PORT` | `127.0.0.1` / `5000` |
+| `SENTINEL_API_URL` | the public API base URL |
+| `SENTINEL_API_KEY` | a demo key |
+
+and on `sentinel-api`, `SENTINEL_BOOTSTRAP_KEY` set to the same value, so
+`POST /v1/events` authenticates. **`push()` is not wrapped in a try/except**,
+so an unreachable or unauthorised API makes the whole script exit non-zero and
+the "Data extracted from the target" table never renders — a 401 looks
+identical to a broken target from the browser.
+
+Vercel env vars apply only to **new** deployments. Adding the key without
+redeploying leaves the live instance still returning 401.
+
+Two honest limits of this demo:
+
+- The attack suite is written against Idurar ERP; the bundled target is a
+  small Flask app, so many requests land on routes it does not serve and the
+  table shows `no HTTP response`. Events are still derived and scored.
+- `alert_status` comes back `below-threshold`. The real-CIC bundle is a weak
+  classifier (F1 0.242) and scores these synthetic attack events near zero —
+  the same weakness the landing page states. The incident path still fires
+  (risk 0.94, critical) because it is rule-based rather than model-based.
+
 ## Observability stack (local pilot)
 
 Prometheus scrapes the API's `/metrics` endpoint and Grafana renders the

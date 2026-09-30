@@ -53,6 +53,22 @@ demo-live:  ## console + API + vulnerable target + sensors (docker)
 demo-path:  ## headless golden-path demo: prints the six-beat narrative, no clicking
 	uv run python scripts/demo_script.py --output $(BENCH)/demo_script
 
+# ── Deploying ───────────────────────────────────────────────────────────
+# Three separate Vercel projects, so a broken container in one cannot take the
+# others down. `--cwd` does NOT isolate vercel.json discovery, so the console
+# deploy swaps the config in and restores it afterwards.
+deploy-api:  ## Vercel: the REST API container (project sentinel-api)
+	vercel deploy --prod --archive=tgz --project sentinel-api
+
+deploy-console:  ## Vercel: the Streamlit console container (project sentinel-console)
+	@cp vercel.json vercel.json.api.bak
+	@cp vercel.console.json vercel.json
+	@vercel deploy --prod --archive=tgz --project sentinel-console; st=$$?; \
+	 mv vercel.json.api.bak vercel.json; exit $$st
+
+deploy-landing:  ## Vercel: the static landing page (project landing)
+	vercel deploy --prod --project landing --cwd landing
+
 # ── Reproducing results ─────────────────────────────────────────────────
 train:  ## full reproducible benchmark (baseline, temporal, world model, replay)
 	uv run python scripts/run_benchmark.py --config $(CONFIG) --output $(BENCH)

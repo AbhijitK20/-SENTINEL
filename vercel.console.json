@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "console": { "root": ".", "runtime": "container", "entrypoint": "Dockerfile" }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": { "service": "console" } }]
+}
