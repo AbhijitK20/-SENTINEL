@@ -39,7 +39,6 @@
   link("foot-docs", cfg.docsUrl);
   link("console-link", cfg.consoleUrl, cfg.consoleUrl ? "Open the console →" : "Console not yet deployed");
   link("cta-console", cfg.consoleUrl, cfg.consoleUrl ? "Open the console" : "Open the console (coming soon)");
-  link("cta-api", cfg.apiUrl, cfg.apiUrl ? "API reference" : "API (coming soon)");
 
   if (!cfg.apiUrl) {
     set("unconfigured", "not deployed", "", "Set apiUrl in config.js once the Cloud Run service exists.");

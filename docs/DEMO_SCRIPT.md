@@ -1,9 +1,31 @@
 # Demo voiceover — read straight down
 
-~650 words, about 4 minutes 30 at a normal pace. Bracketed lines are stage
-directions — skip them when you read. Everything else is said out loud, in
-order, top to bottom. Don't stop to think. If you lose your place, the last
-sentence you remember is always the one that matters.
+Read it top to bottom, out loud, in order. Bracketed lines are stage directions —
+skip them when you read. Nothing else is a note to yourself.
+
+**Recorded against the live console on 2026-09-30.** Every value quoted below
+was read off the screen that day.
+
+---
+
+## Before you press record — three things that will bite you
+
+1. **The Forecast tab opens on the wrong window.** It defaults to window 72 of
+   72, which reads `PEAK PROBABILITY 0.239`, `PREDICTED STAGE Benign`,
+   `FORECAST LEAD not crossed`. That is a boring frame. **Drag the "Forecast
+   from window" slider left, to about 40, before you talk.** A rerun takes a few
+   seconds — wait for the numbers to change.
+2. **This release bundle has no temporal model.** The Forecast tab says so
+   itself: *"Temporal model artifacts were not provided; the probability
+   timeline is a baseline-only decay estimate."* Do not say "GRU forecast" on
+   camera. Say what the panel says.
+3. **The console runs `synthetic-recon-lateral-v2`.** That is the corpus
+   `hackathon/harden` replaces — the one where a single feature scores ROC-AUC
+   0.9833 and 97 of 98 features are decoration. If a judge opens PR #9 and sees
+   this, the demo is over. **Land PR #9 and redeploy before you record.**
+
+Cold start is about 17 seconds. Start recording before you switch tabs and leave
+the silence in — it looks deliberate and it saves you a re-record.
 
 ---
 
@@ -11,151 +33,186 @@ sentence you remember is always the one that matters.
 
 [black screen, type on screen: "is this flow malicious?"]
 
-That's the question an intrusion detection system answers. One flow, one score.
+One flow. One score. Malicious, or not.
 
-And it's the right question. It's just a bad question to *stop* at. Because by
-the time a system has decided that this flow is malicious — the data has already
-left.
+That's the whole question. And notice what it can't do. It can't tell the
+difference between a hundred failed logins inside four seconds and one person
+mistyping a password. It can't tell you what's coming. And — this is the one that
+should worry you — it cannot tell you that it *doesn't know*. Every one of those
+systems will confidently say "low" when what they actually mean is "I never
+looked."
 
-SENTINEL asks the next one. Not what is happening. What happens next, and why.
+SENTINEL separates three answers. High risk. Low risk. *I don't know.* And it
+never lets the third one quietly collapse into the second.
 
-## Provenance
+It also does something else, before you ask. It tells you what it was given.
 
-[cold start is about seventeen seconds — start talking over the title card, not the console]
+[console, header line visible]
 
-Here's the console. Before I touch anything, look at the header. It says what
-dataset this is, how many windows, what the model was trained on, how many
-features it reads. Nothing was trained just now. It loaded a bundle that was
-built once, and checksummed.
+SENTINEL — network attack forecasting. And that header says, in plain words, that
+this traffic is synthetic. Generated, not captured. It volunteers that, because
+the whole point of the next four minutes is that the numbers you're about to see
+are real measurements — and the data underneath them isn't.
 
-[point at the header — don't read the numbers]
-
-One more thing you'll see everywhere. Every panel is labelled *observed* or
+And one more thing you'll see everywhere. Every panel is labelled *observed* or
 *forecast*, and they are never the same colour. That's a rule, not a taste
 thing. The one thing you cannot afford in this field is confusing a measurement
 with a guess.
 
-## Split
+## The split
 
 [Overview tab]
 
-The split comes before the score. Scenarios go into train, validation and test
-*whole*. So no window from an attack the model studied ever shows up in the
-number you're about to see.
+The split comes before the score. Whole scenarios go into train, validation or
+test *before a single window is built*. So no window from an attack the model
+studied ever appears in the number you're about to see.
 
-That sounds fussy. It isn't. If you train on a split and then measure on windows
-from the same attack, you didn't measure a detector. You measured your own
-memory.
+That sounds fussy. It isn't. Train on a split, then measure on windows from the
+same attack, and you didn't measure a detector — you measured your own memory.
 
-## Forecast
+## The forecast
 
-[Forecast tab — this is the centre of the video, pause and let it breathe]
+[Forecast tab — **you have already dragged the slider to ~40**]
 
-One window of traffic in. Out comes a probability timeline — five horizons out.
+One window of traffic in. Out comes a probability timeline, five horizons ahead.
 
-Under it, the stage. Not "suspicious". Lateral movement. With the MITRE
+Under it, the stage. Not "suspicious" — a named stage, with the MITRE
 technique number next to it.
 
-[show the attribution panel]
+[point at the stage block]
 
-And under that — the why. These are the driving features, ranked by how much
-each one actually moved the probability. Not a story written after the fact.
-These are the model's own contributions.
+And here — read this line with me, because it's the one that matters. It says:
+*"No documented stage rule fired on the current window. This is not a low-risk
+reading."*
 
-[point at the warning on the panel]
+Think about that. The system has three options here: high risk, low risk, or I
+don't know. It picked the third one. And it refused to let you read "I don't
+know" as "probably fine." That's the behaviour you actually want from a thing
+whose job is to wake someone up.
 
-And one caveat, which is printed on the panel and which I'm going to say out
-loud anyway. This capture was flow-only. The packet-level features weren't
-available, so the forecast says so. It does not quietly substitute a zero for
-something it never measured. If we can't see it, it tells you it's missing.
+[driving features]
 
-## Ledger
+And under that — the why. Each feature, how far from normal it is, and which
+direction it pushed. It says exactly what it is: *exact local attribution for a
+linear model, not SHAP.* Not a story written after the fact. The model's own
+arithmetic.
 
-[ledger panel on the same tab]
+## The ledger
 
-Press *Record alert*. It's written to an append-only hash chain, and every
-record commits to the one before it. Read the integrity stat.
+[Trust ledger block]
 
-Now — I want to be exact about that, because it's the kind of word that gets
-stretched. It is a local hash chain. It is not a blockchain. A full rewrite and
-re-hash would pass. What it buys you is that casual tampering doesn't go
-unnoticed.
+Press *Record alert*. Every alert is chained to the one before it by a hash.
+
+[press Verify, then Simulate tampering, then Reset]
+
+Now read the integrity stat before and after.
+
+And I'll be exact, because this is the kind of word that gets stretched — it's a
+local hash chain. It is not a blockchain. A determined rewrite would pass. What
+it buys you is that *casual* tampering doesn't go unnoticed.
 
 ## Live
 
 [Live tab]
 
-Enough replay. This is live detection.
+Enough replay. This is live.
 
-[attack-type risk grid]
+[Event source is already "Synthetic attack replay" — press ▶ Start, wait for the risk grid]
 
-Nine rules, each mapped to a technique, each with a measured threshold. Here's
-the whole attack surface at once — every attack type, every probability, side by
-side — instead of one alert at a time.
+Same trained models, same threshold. Nine rules, each mapped to a technique.
 
-[correlated incidents]
+Here's the whole attack surface at once — every attack type, every probability,
+side by side — instead of one alert at a time.
 
-And this. The system groups them. One intrusion, the likely path through it, and
-the assets in scope. An analyst doesn't get nineteen alerts. They get: this is
-one thing, here's how it moves, here's what it can reach.
+[point at Correlated incidents]
 
-[Force Attack]
+And this. The system groups them. One intrusion, the likely path through it, the
+assets in scope. An analyst doesn't get nineteen alerts. They get: this is one
+thing, here's how it moves, here's what it can reach.
 
-And this button doesn't simulate anything. It runs the actual attack scripts and
-detects the result. The target is deliberately vulnerable and it listens on
-loopback inside this container, so it's never on the internet.
+[scroll to Force Attack]
 
-## World model
+And this button doesn't simulate. Nine of them, one per phase, each labelled
+with the technique it's aimed at. They fire real HTTP requests at a deliberately
+vulnerable target — on loopback, inside this container, never on the internet.
+
+## The world model
 
 [World model tab]
 
-This one's different. Most of this is score forecasting. This learns the dynamics
-of the network state and imagines forward with *no observations at all*. Then we
-score it on states it had to invent.
+This one's different. Everything so far forecasts a score. This learns the
+*dynamics* of the network state and imagines forward with no observations at all.
+Then we score it on states it had to invent.
 
-[show the skill figure — pause]
+[point at the metrics row, then the chart]
 
-And here's the part a normal demo would cut. Open-loop skill — how much better it
-is than just repeating the last window — is negative right now. It doesn't beat
-the trivial baseline. We hoped it would.
+And here's the part a normal demo cuts. Open-loop skill — how much better it is
+than just repeating the last window — is around zero, and it goes *negative* as
+you push further out. It does not reliably beat the trivial baseline.
 
-The number's on screen because we didn't tune it away.
+We hoped it would. The number's on screen because we didn't tune it away.
 
 ## Shipped
 
-[landing page, then /health]
+[landing page, then the API /health response]
 
-This isn't running on my laptop. Same build that's live there. The API is
-authenticated — health is open, everything else needs a key, and the published
-demo key is rejected. That's on purpose.
+This isn't on my laptop. Same build. The API is authenticated — health is open,
+everything else needs a key, and the published demo key is rejected. That's on
+purpose.
 
 ## Close
 
 [limitations card]
 
-So what is this? It's a research prototype. Synthetic replay — which shows the
-pipeline learns structure instead of a shortcut. There's no field-validated
-detection rate here and I won't claim one. Forecast lead time on this data is
-zero windows: nothing fires before an attack starts. That's a property of the
-dataset, not the architecture.
+So what is this? A research prototype. Synthetic traffic, generated not captured —
+the header says so in those words. No field-validated detection rate, and I
+won't claim one. Lead time on this data is zero windows: nothing fires before an
+attack starts. That's a property of the dataset, not the architecture.
 
-What it does have is a probability that says where it came from, a stage with a
-MITRE reference, an explanation you can check against the features, and an alert
-history that resists casual tampering.
+What it does have is a probability that says where it came from, a stage that
+refuses to guess, an explanation you can check against the features, and an
+alert history that resists casual tampering.
 
 Thanks.
 
 ---
 
+## If you're cut short — the 90 second version
+
+**Open → The split → The forecast → Close.** Four sections.
+
+Drop the ledger, live, world model and shipped. If you only keep two sentences,
+keep these:
+
+> *"It picked 'I don't know' — and it refused to let you read that as
+> 'probably fine'."*
+
+> *"Open-loop skill is around zero. We hoped it would. The number's on screen
+> because we didn't tune it away."*
+
+---
+
+## What to show, what to skip
+
+| Screen | Show? | Why |
+|---|---|---|
+| Overview | yes | the split argument |
+| **Forecast** | **yes, hero shot** | stage + attribution + the honesty line |
+| World model | yes | the unflattering number |
+| Live | yes | press Start first, or the risk grid never renders |
+| Trust ledger | yes | three button presses, ten seconds |
+| Metrics | one line | point at the Split audit — "disjoint scenarios: yes" |
+| Replay | skip | needs a button press, same ground as Forecast |
+| States | skip | raw features, no argument |
+| Comparison | skip | model-vs-model table |
+| Demo | skip | overlaps Live |
+| Attack story | skip | pretty, not load-bearing |
+
 ## Cut list
 
-Don't show these: Replay, States, Comparison, Metrics, Demo, Attack story. Same
-ground as tabs above, no new argument. Attack story is fine as outro B-roll if
-you need to reach five minutes.
-
-**Ninety-second version:** Open → Split → Forecast → Close. Keep the attribution
-in Forecast and keep the negative skill in Close. Drop everything else. Those two
-are the difference between a pitch and evidence.
+Do not show: the sidebar dataset expander (invites "which dataset?" mid-demo),
+the `Replay` walk-forward, or anything under `States`. Do not read the feature
+names aloud — there are ninety-eight and they mean nothing out loud.
 
 ## Pre-flight
 
@@ -164,13 +221,29 @@ uv run pytest -q
 uv run python scripts/check_claims.py
 ```
 
-Then click through the console once yourself. Don't record a build you haven't
-seen.
+Still frames, captioned, of every screen this script mentions:
+`docs/shots/index.html` — regenerate with
+`uv run --with playwright python scripts/capture_demo_frames.py core`, then
+`live`, then `deck`.
 
-## The only four things you may say out loud
+Then, in the browser, on the deployed console:
 
-Console cold start is about **17 seconds**. Health returns **`status: ok`**. The
-API **rejects the demo key**. Open-loop skill is **negative**.
+- [ ] Header line reads `SYNTHETIC — generated, not captured traffic`
+- [ ] Forecast tab: drag the window slider, confirm the stage block fills in
+- [ ] Live tab: press ▶ Start, confirm the risk grid appears
+- [ ] Force Attack: press one button, confirm it responds — **this one pushes to
+      the hosted API, which needs a key. If it errors, cut it.**
+- [ ] Trust ledger: Record alert → Verify → Simulate tampering → Reset
 
-Everything else — point at it. Never recite a number you can't see on screen at
-the moment you're saying it.
+## Numbers that are safe to say out loud
+
+Only these five were measured on the deployed console on 2026-09-30:
+
+- Cold start **~17 s**.
+- Header: **432 windows**, **98 features**, **seed 42**.
+- Forecast threshold on the release bundle: **0.45**.
+- World model: **test reconMSE 0.3447**, **stage macro-F1 0.985**.
+- Open-loop skill: **around zero, negative at longer horizons**.
+
+Everything else — point at it. Never say a number you cannot see on screen at
+the moment you're saying it. That rule is the whole project.
