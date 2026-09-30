@@ -1,0 +1,9 @@
+{
+  "baseline_version": "deployment-baseline-v1",
+  "median_bytes_per_sec": 41022.683333333334,
+  "mad_bytes_per_sec": 30627.300000000003,
+  "samples": 939,
+  "reference_label": "benign",
+  "alert_sigma": 6.0,
+  "warn_sigma": 3.0
+}

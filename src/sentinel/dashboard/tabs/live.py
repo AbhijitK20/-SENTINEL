@@ -60,6 +60,26 @@ def _live_poll_fragment() -> None:
     _render_live_status(engine.poll())
 
 
+def live_timeline_layout() -> dict:
+    """Layout kwargs for the live probability chart.
+
+    Split out so a test can hand them to Plotly itself. The layout only
+    validates when a window actually arrives, so an invented property name like
+    the old ``transitions`` survived every other check and then raised
+    ``Bad property path`` in front of a user mid-attack.
+    """
+    return plotly_layout(
+        title="Live probability timeline",
+        xaxis={"title": {"text": "event time"}},
+        yaxis={"range": [0, 1], "title": {"text": "P(infiltration)"}},
+        height=380,
+        # uirevision keeps the camera still while new windows arrive, so the
+        # trace animates in without the view jumping.
+        uirevision="live-timeline",
+        transition_duration=0,
+    )
+
+
 def _render_live_status(status: Any) -> None:
     """Draw one LiveStatus snapshot. OBSERVED = window features, FORECAST = model."""
     latest = status.history[-1] if status.history else None
@@ -143,18 +163,7 @@ def _render_live_status(status: Any) -> None:
                 )
             )
         fig.add_hline(y=status.threshold, line_dash="dot", annotation_text="threshold")
-        fig.update_layout(
-            **plotly_layout(
-                title="Live probability timeline",
-                xaxis={"title": {"text": "event time"}},
-                yaxis={"range": [0, 1], "title": {"text": "P(infiltration)"}},
-                height=380,
-                # uirevision keeps the camera still while new windows arrive, so
-                # the trace animates in without the view jumping.
-                uirevision="live-timeline",
-                transitions={"x": {"duration": 0}, "y": {"duration": 0}},
-            )
-        )
+        fig.update_layout(**live_timeline_layout())
         st.plotly_chart(fig, width="stretch", key="live-timeline", config=LIVE_CHART_CONFIG)
 
         with st.expander("Stage evidence (latest window)", expanded=alert):

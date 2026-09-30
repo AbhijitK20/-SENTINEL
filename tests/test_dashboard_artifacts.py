@@ -10,6 +10,7 @@ loads the right one until the numbers disagree.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -35,6 +36,10 @@ def _load_resolver():
 
 resolve_artifact_dir, _ns = _load_resolver()
 RELEASE_BUNDLE = _ns["RELEASE_BUNDLE"]
+SYNTHETIC_BUNDLE = _ns["SYNTHETIC_BUNDLE"]
+#: The licensed CIC-IDS2017 source CSVs. Not in the repository: the presence of
+#: this directory is what decides whether the raw-CSV option can work at all.
+CIC_CSV_DIR = _ns["ROOT"] / "data" / "raw" / "cic-ids2017" / "TrafficLabelling"
 
 
 def test_explicit_flag_wins(tmp_path, monkeypatch) -> None:
@@ -98,6 +103,48 @@ def test_a_stale_bundle_is_skipped_not_fatal(tmp_path, monkeypatch) -> None:
     assert resolver([]) is None, "an unloadable bundle must be skipped, not fatal"
 
 
+def test_the_default_served_bundle_is_the_real_cic_trained_one() -> None:
+    """Pin *which* bundle the console serves, not just that it describes it.
+
+    The provenance test above reads RELEASE_BUNDLE out of the app, so it would
+    pass just as happily if the app were pointed at the synthetic bundle - it
+    checks the header is truthful, not that the answer is the one we want. This
+    is the test that fails if someone reverts RELEASE_BUNDLE to `v1` and thereby
+    quietly turns "trained on CIC-IDS2017" back into a claim about a generator.
+    """
+    manifest = json.loads((RELEASE_BUNDLE / "MANIFEST.json").read_text(encoding="utf-8"))
+    assert manifest["dataset_id"] == "cic-ids2017-trafficlabelling-derived-v1", (
+        f"the default bundle must be the one trained on real CIC-IDS2017 windows; "
+        f"RELEASE_BUNDLE points at {RELEASE_BUNDLE.name}, whose dataset_id is "
+        f"{manifest.get('dataset_id')!r}"
+    )
+    assert manifest["windows"] == 4899
+    assert RELEASE_BUNDLE.name == "real-cic-v1"
+
+
+def test_the_synthetic_bundle_is_kept_as_a_reachable_fallback() -> None:
+    """The higher-scoring bundle stays shipped and selectable.
+
+    Dropping it would make the F1 gap unrecoverable without a retrain, and would
+    discard a bundle this project already verified. It is a fallback, not dead
+    weight: --artifacts and SENTINEL_ARTIFACTS_DIR both reach it.
+    """
+    from sentinel.predict import load_artifacts
+
+    assert SYNTHETIC_BUNDLE.is_dir(), "the synthetic bundle must stay in the repository"
+    loaded = load_artifacts(SYNTHETIC_BUNDLE)
+    assert loaded.baseline_result.feature_schema.width > 0
+
+    # And it must be genuinely better, or calling it a fallback is a fiction.
+    real_f1 = load_artifacts(RELEASE_BUNDLE).baseline_result.metrics["test"].f1
+    synthetic_f1 = loaded.baseline_result.metrics["test"].f1
+    assert synthetic_f1 > real_f1, (
+        "the synthetic bundle is documented as the higher-F1 fallback; if that "
+        f"reverses, the docs and this test both need revisiting (synthetic "
+        f"{synthetic_f1:.3f} vs real {real_f1:.3f})"
+    )
+
+
 def test_the_console_renders_from_the_bundle_without_training(monkeypatch) -> None:
     """The whole point: opening the console must not retrain anything.
 
@@ -107,11 +154,166 @@ def test_the_console_renders_from_the_bundle_without_training(monkeypatch) -> No
     """
     from streamlit.testing.v1 import AppTest
 
+    from sentinel.predict import load_artifacts
+
     monkeypatch.setenv("SENTINEL_ARTIFACTS_DIR", str(RELEASE_BUNDLE))
     at = AppTest.from_file(str(_APP), default_timeout=180)
     at.run()
 
     assert not at.exception, f"console raised: {[e.value for e in at.exception]}"
     header = " ".join(markdown.value for markdown in at.markdown)
-    assert "98 features" in header
+    # The feature count is read from the bundle rather than restated here. It
+    # used to be the literal "98 features", which is the synthetic generator's
+    # width; the served bundle is trained on the real aggregate and has a
+    # different one, so a hardcoded number would have failed for the wrong reason.
+    width = load_artifacts(RELEASE_BUNDLE).baseline_result.feature_schema.width
+    assert f"{width} features" in header
     assert "artifacts" in header, "the console must say which artifacts it loaded"
+
+
+def test_the_header_names_the_dataset_the_served_bundle_was_trained_on(monkeypatch) -> None:
+    """A real-trained model must never be labelled synthetic, or the reverse.
+
+    The header used to carry a hardcoded "synthetic generator (no real-trained
+    bundle is shipped)" string. That stayed true only until a real-trained bundle
+    was committed, at which point the console was lying to every visitor with no
+    test failing. The claim is now derived from the bundle's MANIFEST, and this
+    test pins that the two agree.
+    """
+    from streamlit.testing.v1 import AppTest
+
+    manifest = json.loads((RELEASE_BUNDLE / "MANIFEST.json").read_text(encoding="utf-8"))
+    dataset_id = manifest.get("dataset_id")
+    assert dataset_id, (
+        "the served bundle must record its dataset_id; the header reads the model "
+        "provenance from the manifest and cannot state an origin that is not there"
+    )
+
+    monkeypatch.setenv("SENTINEL_ARTIFACTS_DIR", str(RELEASE_BUNDLE))
+    at = AppTest.from_file(str(_APP), default_timeout=180)
+    at.run()
+
+    assert not at.exception, f"console raised: {[e.value for e in at.exception]}"
+    header = " ".join(markdown.value for markdown in at.markdown)
+    assert dataset_id in header, (
+        "the header must name the dataset the served model was trained on, read "
+        f"from MANIFEST.json; expected {dataset_id!r}"
+    )
+    assert "no real-trained bundle is shipped" not in header, (
+        "that string is false now that a real-trained bundle ships, and must not come back"
+    )
+
+
+def test_a_bundle_without_a_manifest_still_names_something(tmp_path) -> None:
+    """Missing or incomplete manifests degrade to a stated name, not a guess.
+
+    Reporting "synthetic" because the manifest was missing would be inventing an
+    origin, which is the failure this whole change exists to prevent. The two
+    degraded cases are different facts - absent versus present-but-silent - so
+    they get different wording.
+    """
+    source = _APP.read_text(encoding="utf-8")
+    start = source.index("def _model_provenance")
+    end = source.index("\ntry:\n    if use_derived", start)
+    ns: dict = {"json": json, "Path": Path}
+    exec(compile(source[start:end], str(_APP), "exec"), ns)  # noqa: S102
+    describe = ns["_model_provenance"]
+
+    # No manifest at all: say the manifest was unreadable, name the directory.
+    assert "manifest unreadable" in describe(tmp_path, "some-dataset")
+    assert "some-dataset" not in describe(tmp_path, "some-dataset")
+
+    # A manifest that exists but records no dataset_id: the synthetic bundle
+    # predates that field, and guessing its generator is exactly the drift this
+    # function removes.
+    (tmp_path / "MANIFEST.json").write_text(json.dumps({"bundle": "v1"}), encoding="utf-8")
+    assert "not recorded" in describe(tmp_path, "some-dataset")
+    assert "synthetic" not in describe(tmp_path, "some-dataset")
+
+    # No bundle loaded at all: the model was trained in this session, on the
+    # dataset named by the caller.
+    assert describe(None, "some-dataset") == "trained in this session on some-dataset"
+
+
+def test_cloud_hides_the_raw_csv_dataset_and_readonly_disables_retraining(monkeypatch) -> None:
+    """The hosted surface must match what the host can actually provide.
+
+    The licensed CSVs are not in the repository, so offering a raw-CSV option on
+    Cloud leads to a 15-20 minute windowing attempt that then fails. These env
+    vars were set by the entry shim and read by nothing at all.
+    """
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("SENTINEL_ARTIFACTS_DIR", str(RELEASE_BUNDLE))
+    monkeypatch.setenv("SENTINEL_CLOUD", "1")
+    monkeypatch.setenv("SENTINEL_READONLY", "1")
+    at = AppTest.from_file(str(_APP), default_timeout=180)
+    at.run()
+
+    assert not at.exception, f"console raised: {[e.value for e in at.exception]}"
+
+    # The dataset picker is a radio, so its options are the surface to assert on.
+    # An earlier version of this test scanned sidebar markdown, where the option
+    # never appears - it passed whether or not the guard existed.
+    dataset_options = [
+        option for radio in at.sidebar.radio if radio.label == "Dataset" for option in radio.options
+    ]
+    assert not any("1.2 GB" in option for option in dataset_options), (
+        "the raw-CSV dataset must be hidden when SENTINEL_CLOUD=1; the licensed "
+        f"CSVs are not in the repository, so it would fail after a 15-20 minute "
+        f"windowing attempt. Got: {dataset_options}"
+    )
+    # The committed pre-windowed aggregate is the real-data path and must survive.
+    assert any("pre-windowed" in option for option in dataset_options), (
+        f"Cloud must still offer the committed real CIC-IDS2017 aggregate: {dataset_options}"
+    )
+
+    retrain = [b for b in at.sidebar.button if "Train / retrain" in b.label]
+    assert retrain and all(b.disabled for b in retrain), (
+        "the retrain control must be disabled when SENTINEL_READONLY=1"
+    )
+
+
+def test_local_runs_keep_both_the_raw_dataset_and_retraining(monkeypatch, tmp_path) -> None:
+    """The guards above must be cloud-only.
+
+    A local checkout has a working trainer, so retraining must stay available
+    when SENTINEL_READONLY is unset. The raw-CSV option additionally needs the
+    licensed CSVs, which are not in the repository - so its presence is asserted
+    only where that dataset actually is, rather than making a fresh clone fail a
+    test about a 1.2 GB download it was never meant to require.
+    """
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.delenv("SENTINEL_CLOUD", raising=False)
+    monkeypatch.delenv("SENTINEL_READONLY", raising=False)
+    monkeypatch.setenv("SENTINEL_ARTIFACTS_DIR", str(RELEASE_BUNDLE))
+    at = AppTest.from_file(str(_APP), default_timeout=180)
+    at.run()
+
+    assert not at.exception, f"console raised: {[e.value for e in at.exception]}"
+
+    dataset_options = [
+        option for radio in at.sidebar.radio if radio.label == "Dataset" for option in radio.options
+    ]
+    # The committed aggregate is in the repository, so it is always offered.
+    assert any("pre-windowed" in option for option in dataset_options), (
+        f"the committed real CIC-IDS2017 aggregate must always be selectable: {dataset_options}"
+    )
+
+    raw = [option for option in dataset_options if "1.2 GB" in option]
+    if CIC_CSV_DIR.is_dir() and any(CIC_CSV_DIR.glob("*.csv")):
+        assert raw, (
+            "this machine has the licensed CSVs, so the raw-CSV option must stay "
+            f"available when SENTINEL_CLOUD is unset: {dataset_options}"
+        )
+    else:
+        assert not raw, (
+            "without the licensed CSVs the raw-CSV option cannot work and must "
+            f"not be offered: {dataset_options}"
+        )
+
+    retrain = [b for b in at.sidebar.button if "Train / retrain" in b.label]
+    assert retrain and not any(b.disabled for b in retrain), (
+        "retraining must stay available when SENTINEL_READONLY is unset"
+    )

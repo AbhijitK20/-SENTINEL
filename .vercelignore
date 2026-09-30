@@ -1,0 +1,44 @@
+# Vercel upload ignore.
+#
+# The CLI uploads the project directory before building, so 2.1 GB of research
+# clones and 800 MB of video renders were being sent to Vercel only for
+# .dockerignore to drop them at build time. That pushed the upload past Vercel's
+# 15,000-file limit. Keeping this in step with .dockerignore means the network
+# is sent once and the build context stays the same.
+
+.git
+.github
+.venv
+__pycache__
+.pytest_cache
+.ruff_cache
+*.py[cod]
+
+# Local-only trees, large and irrelevant to a hosted run.
+research
+video
+graphify-out
+.agents
+.codewhale
+brag-output*
+deliverables
+dist
+
+# Licensed source data and training artifacts. models/release is re-included
+# below because the container image is built from it.
+data/raw
+data/interim
+data/processed
+reports/generated
+reports/live
+*.pcap
+*.pcapng
+*.csv
+!models/release
+!models/release/**
+
+# The landing page is a separate Vercel project rooted at landing/; its config
+# must not be pulled into the API container build.
+landing
+.vercel
+.env.local

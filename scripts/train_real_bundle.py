@@ -363,7 +363,11 @@ Regenerate with `scripts/export_derived_windows.py` then this script.
             )
         },
         "files": {
-            str(p.relative_to(args.out)): {"sha256": _sha256(p), "bytes": p.stat().st_size}
+            # `size_bytes`, not `bytes`: this is the key both
+            # export_release_artifacts.py writes and verify_release_artifacts.py
+            # reads. Writing `bytes` here produced a bundle that the project's own
+            # integrity check could not read.
+            str(p.relative_to(args.out)): {"sha256": _sha256(p), "size_bytes": p.stat().st_size}
             for p in files
         },
     }

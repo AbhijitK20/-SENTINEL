@@ -346,3 +346,22 @@ def test_csv_replay_source_ordered_and_terminated(tmp_path: Path) -> None:
     assert len(collected) == 3
     timestamps = [event.timestamp for event in collected]
     assert timestamps == sorted(timestamps)
+
+
+def test_live_timeline_layout_is_a_valid_plotly_layout() -> None:
+    """Plotly only validates layout on a real render, so a typo'd property name
+    (the old `transitions`) passed every other check and then raised
+    `Bad property path` in the middle of a running attack."""
+    import plotly.graph_objects as go
+
+    from sentinel.dashboard.tabs.live import live_timeline_layout
+
+    layout = live_timeline_layout()
+    assert layout["uirevision"] == "live-timeline"
+    # Zero-duration transition: new windows must not animate the view.
+    assert layout["transition_duration"] == 0
+
+    # The real assertion: hand it to Plotly and let it validate.
+    fig = go.Figure()
+    fig.update_layout(**layout)
+    assert fig.layout.uirevision == "live-timeline"

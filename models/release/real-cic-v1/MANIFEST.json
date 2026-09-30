@@ -1,0 +1,103 @@
+{
+  "bundle": "real-cic-v1",
+  "dataset_id": "cic-ids2017-trafficlabelling-derived-v1",
+  "derived_version": "derived-windows-v1",
+  "windows": 4899,
+  "features": 67,
+  "window_seconds": 60,
+  "stride_seconds": 30,
+  "seed": 42,
+  "git_sha": "ae0e29a7e7074c7f67eb15a634bb8c4642dd2e84",
+  "python": "3.12.13",
+  "generated_at": "2026-09-29T15:59:43+00:00",
+  "citation": "Sharafaldin, Lashkari & Ghorbani, 'Towards Generating New Intrusion Detection Datasets and Intrusion Traffic Characterization', ICISSP 2018. https://www.unb.ca/cic/datasets/ids-2017.html",
+  "split_stage_coverage": {
+    "train": [
+      "Benign",
+      "Command and Control",
+      "Credential Access",
+      "Denial of Service",
+      "Initial Access",
+      "Lateral Movement",
+      "Reconnaissance"
+    ],
+    "validation": [
+      "Command and Control",
+      "Denial of Service",
+      "Initial Access",
+      "Lateral Movement"
+    ],
+    "test": [
+      "Benign",
+      "Command and Control",
+      "Credential Access",
+      "Reconnaissance"
+    ]
+  },
+  "files": {
+    "PROVENANCE.md": {
+      "sha256": "13bb7e67cfe77b00345f9618d3095b98e7f557af2db67ce130cabcd99adf9d13",
+      "size_bytes": 866
+    },
+    "baseline_model.joblib": {
+      "sha256": "fb4e6014f0b36112a58fc861c5c1f7a07d5bc0264706a1eb1bd1c965d4a7967b",
+      "size_bytes": 1375
+    },
+    "baseline_report.md": {
+      "sha256": "05283b4a4b34df57aede81f0e4fa27b67d528e756b707f717cde273cb9546e94",
+      "size_bytes": 3627
+    },
+    "baseline_result.json": {
+      "sha256": "2af1c92abd135f75aac491263cf28448dc16717d093c1cb7fde3374d396e775e",
+      "size_bytes": 13328
+    },
+    "calibration.json": {
+      "sha256": "2e124cd55058d6ae7c3cc9e3f8ac8e880c3ba6f0acbbe257c3ad5728525ae514",
+      "size_bytes": 4702
+    },
+    "deployment_baseline.json": {
+      "sha256": "905a540b6e4e9c19de3d96a017f17f54700a9a8daf0a82f6cc1f5ca53ebf4389",
+      "size_bytes": 232
+    },
+    "temporal_report.md": {
+      "sha256": "549a3aca80e4e98c700e958f735fc88cfe79bfbe10189edab40dab6ed5190737",
+      "size_bytes": 2756
+    },
+    "temporal_result.json": {
+      "sha256": "97e5118bb9b0ada8e308b1325b6c6553901f0064bcce8a6b49f3afac33bbc14c",
+      "size_bytes": 15480
+    },
+    "weights/model_h1.pt": {
+      "sha256": "cf0c20f51b99cf919d7ff12899d6617deb414b69c7822b7e4bad8d0ec4ff2a00",
+      "size_bytes": 41953
+    },
+    "weights/model_h2.pt": {
+      "sha256": "c474e3e29dffad0e1f5e48516b4d8048511619bd8be19946e1884fca9f5733b2",
+      "size_bytes": 41953
+    },
+    "weights/model_h3.pt": {
+      "sha256": "6b9038f1f8afa846f5716d41d42e87850a77a5d73309856904f4893e5b4a104a",
+      "size_bytes": 41953
+    },
+    "weights/model_h4.pt": {
+      "sha256": "025e8fa128a7971ff187ad68461ca3e82c4d36a597328f7cada011a470f50b93",
+      "size_bytes": 41953
+    },
+    "weights/model_h5.pt": {
+      "sha256": "d829c693d2811607d44ec5e6d616a2e0267f162351edf0b02d40844d68058044",
+      "size_bytes": 41953
+    },
+    "world_model.json": {
+      "sha256": "70ba69d59f394e994ce2d4d3eff062528b61406b4d686d8406a3bda73639d138",
+      "size_bytes": 17211
+    },
+    "world_model.pt": {
+      "sha256": "842f511b604318eaa97ed7536f03c5992217b47380b86b5a502e3f5d3f768d5e",
+      "size_bytes": 303895
+    },
+    "world_model_report.md": {
+      "sha256": "46d5a6e9a7f59086956e79dfdc0b15d898cdef223c61d557f257e28fd55b91e7",
+      "size_bytes": 2299
+    }
+  }
+}

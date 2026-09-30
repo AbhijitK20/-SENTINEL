@@ -87,11 +87,21 @@ def test_observed_and_forecast_are_distinguished(painted: AppTest) -> None:
 
 
 def test_world_model_tab_is_opt_in_and_explains_itself(painted: AppTest) -> None:
+    """The tab must never fit an RSSM without being asked.
+
+    Two acceptable states: it offers the training control because the bundle
+    ships no world model, or it loaded the shipped weights and said so. What it
+    must not do is start training on its own, which is minutes of wall clock on
+    a shared host.
+    """
     assert any(tab.label == "World model" for tab in painted.tabs)
-    assert any(c.label == "Train world model" for c in painted.checkbox), (
-        "world model tab has no training control"
+    text = _text(painted)
+    assert "imagin" in text.lower() or "open-loop" in text.lower()
+    offers_training = any(c.label == "Train world model" for c in painted.checkbox)
+    loaded_shipped = "loaded from the release bundle" in text.lower()
+    assert offers_training or loaded_shipped, (
+        "world model tab neither offers training nor says it loaded the shipped model"
     )
-    assert "imagin" in _text(painted).lower() or "open-loop" in _text(painted).lower()
 
 
 def test_sidebar_exposes_the_data_source_choice(painted: AppTest) -> None:

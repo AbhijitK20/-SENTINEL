@@ -265,3 +265,111 @@ def test_every_authenticated_request_is_audited(env) -> None:
     assert env["analyst_raw"] not in "\n".join(
         line for line in (env["auth_dir"] / "audit.jsonl").read_text().splitlines()
     )
+
+
+# --- keyless read-only surface (SENTINEL_PUBLIC_READ) -----------------------
+#
+# The hosted landing page polls /health and /model from a browser with no API
+# key. Only the explicit PUBLIC_READ_PATHS allowlist opens up: the alert
+# ledger and case store carry incident data and must stay keyed, and no write
+# ever becomes keyless.
+
+PUBLIC_ORIGIN = "https://sentinel.example.com"
+
+
+@pytest.fixture(scope="module")
+def public_env(tmp_path_factory):
+    """Auth-on app with public read + CORS, mirroring a hosted deploy."""
+    tmp = tmp_path_factory.mktemp("auth-public")
+    labelled = generate_labelled_states(
+        [f"pub{i}" for i in range(5)], seed=24, window_seconds=60, stride_seconds=60
+    )
+    samples = build_sequence_samples(labelled, sequence_length=2, horizon=1)
+    manifest = make_split_manifest([f"pub{i}" for i in range(5)], seed=24)
+    run = train_baseline(
+        labelled,
+        samples,
+        manifest,
+        config=BaselineConfig(decision_threshold=DECISION_THRESHOLD),
+        seed=24,
+    )
+    save_baseline_artifacts(run, tmp / "baseline")
+    auth_dir = tmp / "auth"
+    app = create_app(
+        tmp / "baseline",
+        auth_dir=auth_dir,
+        public_read=True,
+        cors_origins=[PUBLIC_ORIGIN],
+    )
+    client = TestClient(app)
+    analyst_raw, _ = ApiKeyStore(auth_dir / "keys.jsonl").create("analyst")
+    return {
+        "client": client,
+        "analyst": {"X-API-Key": analyst_raw},
+    }
+
+
+def test_public_read_allows_allowlisted_get_without_a_key(public_env) -> None:
+    for path in ("/model", "/v1/compliance", "/v1/registry"):
+        response = public_env["client"].get(path)
+        assert response.status_code == 200, f"{path} -> {response.status_code}"
+
+
+def test_public_read_does_not_open_the_ledger_or_case_store(public_env) -> None:
+    for path in ("/v1/alerts", "/v1/cases"):
+        response = public_env["client"].get(path)
+        assert response.status_code == 401, f"{path} leaked without a key"
+        assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_public_read_does_not_open_any_write(public_env) -> None:
+    response = public_env["client"].post(
+        "/v1/alerts",
+        json={"forecast": _forecast().model_dump(mode="json")},
+    )
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_public_read_is_off_by_default(env) -> None:
+    """The existing fixture has no public_read, so GET /model stays keyed."""
+    assert env["client"].get("/model").status_code == 401
+
+
+def test_cors_preflight_allows_get_from_the_landing_origin(public_env) -> None:
+    response = public_env["client"].options(
+        "/model",
+        headers={
+            "Origin": PUBLIC_ORIGIN,
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == PUBLIC_ORIGIN
+    assert "GET" in response.headers["access-control-allow-methods"]
+
+
+def test_cors_preflight_from_an_unlisted_origin_is_refused(public_env) -> None:
+    response = public_env["client"].options(
+        "/model",
+        headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"},
+    )
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_cors_does_not_permit_writes(public_env) -> None:
+    """A browser on the allowed origin still cannot POST, even with a key."""
+    response = public_env["client"].options(
+        "/v1/forecast",
+        headers={
+            "Origin": PUBLIC_ORIGIN,
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert "POST" not in response.headers.get("access-control-allow-methods", "")
+
+
+def test_health_advertises_the_public_read_mode(public_env) -> None:
+    body = public_env["client"].get("/health").json()
+    assert body["public_read"] is True
+    assert body["cors_origins"] == [PUBLIC_ORIGIN]

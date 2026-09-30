@@ -70,3 +70,15 @@ research/repos/
 
 # agent/editor tool state
 .codewhale/
+
+# Vercel CLI project links and local secrets (added by `vercel link`).
+.vercel
+.env*
+# The documented template is the one env file that belongs in the repo.
+!.env.example
+
+# Byproducts of running the demo target (apps/vulnerable) directly. The app
+# writes these next to itself by default; see paths.py.
+apps/vulnerable/access.log
+apps/vulnerable/blocklist.jsonl
+apps/vulnerable/*.db

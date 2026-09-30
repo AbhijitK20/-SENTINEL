@@ -547,3 +547,46 @@ def test_imagined_risk_weight_ships_off_because_it_was_measured_worse() -> None:
 
     assert WorldModelConfig().imagined_risk_weight == 0.0
     assert WorldModelConfig(imagined_risk_weight=1.0).imagined_risk_weight == 1.0
+
+
+def test_shipped_world_model_loads_from_the_release_bundle() -> None:
+    """The World Model tab must be able to load the RSSM the bundle ships.
+
+    It used to fit the model in the browser instead, which is minutes of wall
+    clock on a shared 2-vCPU host. This asserts the artifact the tab depends on
+    is actually present and loadable, so a bundle edit cannot silently push the
+    tab back onto the slow path.
+    """
+    from sentinel.world_model.model import RSSMCore
+    from sentinel.world_model.train import (
+        WorldModelResult,
+        load_world_model,
+        world_model_weights_path,
+    )
+
+    bundle = Path(__file__).parents[1] / "models" / "release" / "real-cic-v1"
+    weights = world_model_weights_path(bundle)
+    assert weights.is_file(), f"release bundle ships no world model at {weights}"
+    result_path = bundle / "world_model.json"
+    assert result_path.is_file()
+
+    result = WorldModelResult.model_validate_json(result_path.read_text(encoding="utf-8"))
+    core = load_world_model(result, bundle)
+    assert isinstance(core, RSSMCore)
+    # load_state_dict is strict, so a successful load already proves the saved
+    # weights match the architecture recorded in the result.
+    assert result.observation_dim == 67
+    assert not core.training
+
+
+def test_world_model_tab_loads_the_shipped_model() -> None:
+    from sentinel.dashboard.tabs.world_model import _load_shipped_world_model
+
+    bundle = Path(__file__).parents[1] / "models" / "release" / "real-cic-v1"
+    loaded = _load_shipped_world_model(bundle)
+    assert loaded is not None, "tab would fall back to training"
+    core, result = loaded
+    assert core is not None and result.observation_dim > 0
+
+    # A directory with no world model must return None, not raise.
+    assert _load_shipped_world_model(None) is None

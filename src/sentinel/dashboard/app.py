@@ -12,6 +12,7 @@ colour or a radius.
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import sys
@@ -41,17 +42,38 @@ ROOT = Path(__file__).resolve().parents[3]
 SCENARIO_COUNT_DEFAULT = 6
 TRAINABLE_HORIZONS = 5
 
-# The committed release bundle, and the last real-data run, in preference order.
+# The committed release bundles, and the last real-data run, in preference order.
 # Opening the console should not require training anything: if a verified bundle
 # is on disk, the console uses it and says so. Training in-app stays available
 # for exploring a different dataset, but it is no longer the default path.
-RELEASE_BUNDLE = ROOT / "models" / "release" / "v1"
+#
+# `real-cic-v1` is trained on the 4,899 real CIC-IDS2017 windows, so it is the one
+# that answers "is this trained on CIC-IDS data". It is also the weaker model by
+# every measured number (test F1 0.242 vs 0.892), because CIC-IDS2017 puts each
+# attack type in a short burst inside one day, leaving the held-out split few
+# attack windows across few stages. `v1` stays committed and reachable via
+# --artifacts / SENTINEL_ARTIFACTS_DIR for anyone who wants the higher number.
+RELEASE_BUNDLE = ROOT / "models" / "release" / "real-cic-v1"
+#: The synthetic-trained bundle, kept as a selectable fallback rather than a
+#: deleted alternative. Both are honest; they answer different questions.
+SYNTHETIC_BUNDLE = ROOT / "models" / "release" / "v1"
 #: Committed pre-windowed CIC-IDS2017 aggregate. See data/derived/PROVENANCE.md.
 DERIVED_CIC = ROOT / "data" / "derived" / "cicids2017_windows.parquet"
 FALLBACK_ARTIFACT_DIRS = (
     ROOT / "reports" / "generated" / "real-benchmark" / "baseline",
     ROOT / "reports" / "generated" / "benchmark" / "pipeline" / "baseline",
 )
+
+# Cloud sets these; Streamlit Community Cloud serves one repo to many users, and
+# the two surface differences below are the ones that would otherwise be broken
+# by the absence of data/raw/ rather than by anything the visitor did.
+CLOUD = os.environ.get("SENTINEL_CLOUD") == "1"
+READONLY = os.environ.get("SENTINEL_READONLY") == "1"
+
+
+#: Set by resolve_artifact_dir when --artifacts / SENTINEL_ARTIFACTS_DIR named
+#: the bundle. An explicit choice outranks the dataset-driven selection below.
+_ARTIFACTS_EXPLICIT = False
 
 
 def resolve_artifact_dir(argv: list[str] | None = None) -> Path | None:
@@ -84,6 +106,8 @@ def resolve_artifact_dir(argv: list[str] | None = None) -> Path | None:
                 f"artifacts directory not found: {candidate}. Check the path; the "
                 "console will not substitute a different bundle."
             )
+        global _ARTIFACTS_EXPLICIT
+        _ARTIFACTS_EXPLICIT = True
         return candidate
 
     from sentinel.predict import load_artifacts
@@ -97,6 +121,33 @@ def resolve_artifact_dir(argv: list[str] | None = None) -> Path | None:
             continue
         return candidate
     return None
+
+
+def bundle_for_mode(mode: str, derived_label: str) -> Path:
+    """The release bundle trained on the data the visitor actually selected.
+
+    One fixed bundle made the two facts contradict each other: the console
+    defaulted to a synthetic replay but scored it with the real-CIC model, and
+    that model returns ~0 probability on synthetic attack traffic. The rule
+    detectors still fired, so the Live tab showed "Lateral 1.00 critical"
+    beside "P(infiltration) 0.00 / Below Threshold" — both true, and together
+    they read as a broken model rather than a mismatched pair.
+
+    Each committed bundle answers the question it was trained for. Real traffic
+    gets the real-trained bundle; synthetic replay gets the synthetic-trained
+    one. `v1` is not a fallback to hide, it is the model for that dataset.
+
+    An explicitly supplied artifacts directory is never overridden: being told
+    "these are your artifacts" and silently getting a different bundle is worse
+    than an error.
+    """
+    if _ARTIFACTS_EXPLICIT:
+        return resolve_artifact_dir() or RELEASE_BUNDLE
+    if mode == derived_label and RELEASE_BUNDLE.is_dir():
+        return RELEASE_BUNDLE
+    if SYNTHETIC_BUNDLE.is_dir():
+        return SYNTHETIC_BUNDLE
+    return RELEASE_BUNDLE
 
 
 try:
@@ -323,13 +374,19 @@ def train_models(labelled, samples, manifest, seed, forecast_horizon, full_train
 # ── Sidebar ─────────────────────────────────────────────────────────────
 
 available = _available_days()
+# The licensed source CSVs are not in the repository, so the raw-CSV path cannot
+# work on a hosted deployment no matter what the visitor picks. Hide the option
+# rather than offer one that would fail after a 15-20 minute windowing attempt.
+if CLOUD:
+    available = []
 with st.sidebar:
     ui.header("SENTINEL", "analyst console")
 
     st.caption(
-        "Model: the committed release bundle. Nothing is trained on open, and the "
-        "controls below re-window the displayed data, not the model."
-        if RELEASE_BUNDLE.is_dir()
+        "Model: the committed release bundle trained on the dataset selected below. "
+        "Nothing is trained on open, and the window controls re-window the displayed "
+        "data, not the model."
+        if RELEASE_BUNDLE.is_dir() and SYNTHETIC_BUNDLE.is_dir()
         else "No verified bundle found: this console trains on open. Pick a dataset below."
     )
 
@@ -344,6 +401,9 @@ with st.sidebar:
             + ([raw_label] if available else [])
         )
         mode = st.radio("Dataset", mode_options, index=0)
+        # The model has to be the one trained on the selected data, and both the
+        # header provenance and the model load below read this same value.
+        artifact_dir = bundle_for_mode(mode, derived_label)
 
         selected_days: list[str] = []
         if mode == raw_label:
@@ -387,10 +447,18 @@ with st.sidebar:
         full_training = st.checkbox(
             "Full temporal training",
             value=False,
+            disabled=READONLY,
             help="Trains every horizon to convergence. Slower; needed only for the "
             "published benchmark numbers.",
         )
-        train_clicked = st.button("Train / retrain", type="primary")
+        if READONLY:
+            # The committed bundle is the model. A hosted visitor cannot replace
+            # it, and a button that silently does nothing is worse than none.
+            st.caption(
+                "Hosted read-only: the committed bundle is the model. Retraining "
+                "is available from a local checkout."
+            )
+        train_clicked = st.button("Train / retrain", type="primary", disabled=READONLY)
 
     st.divider()
     st.caption(f"Python {sys.version.split()[0]} · {platform.system()} · offline")
@@ -408,6 +476,34 @@ if st.session_state.get("fingerprint") != fingerprint:
     for stale in ("baseline_run", "temporal_run", "replay_eval"):
         st.session_state.pop(stale, None)
     st.session_state["fingerprint"] = fingerprint
+
+
+def _model_provenance(artifact_dir: Path | None, in_memory_dataset_id: str) -> str:
+    """Where the *model* was trained, read from the bundle rather than restated.
+
+    This used to be a hardcoded string, which is how a console ended up claiming
+    "no real-trained bundle is shipped" while a real-trained bundle sat on disk.
+    The manifest is the record; a sentence typed next to it is a copy that can
+    go stale without anything failing.
+    """
+    if artifact_dir is None:
+        return f"trained in this session on {in_memory_dataset_id}"
+    manifest_path = artifact_dir / "MANIFEST.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return f"loaded from {artifact_dir.name} (manifest unreadable)"
+    dataset = manifest.get("dataset_id")
+    windows = manifest.get("windows")
+    bundle = manifest.get("bundle", artifact_dir.name)
+    if not dataset:
+        # The synthetic bundle predates dataset_id in its manifest. Say that
+        # rather than guessing which generator produced it.
+        return f"{bundle} (dataset id not recorded in the manifest)"
+    scope = f", {windows:,} windows" if isinstance(windows, int) else ""
+    return f"{dataset}{scope} ({bundle})"
+
+
 try:
     if use_derived:
         labelled, samples, manifest, dataset_id, derived_windowing = derived_cic_dataset(
@@ -418,10 +514,6 @@ try:
         dataset_provenance = (
             f"REAL CIC-IDS2017 — pre-windowed aggregate, committed ({derived_windowing})"
         )
-        # The shipped bundle is trained on the synthetic generator, so real
-        # windows are scored by a model that has never seen a network. That is a
-        # real caveat and belongs in the header, not in a caveats file.
-        model_trained_on = "synthetic generator (no real-trained bundle is shipped)"
     elif use_raw:
         labelled, samples, manifest, dataset_id, derived_windowing = cic_dataset(
             tuple(sorted(selected_days)),
@@ -432,7 +524,6 @@ try:
             forecast_horizon,
         )
         dataset_provenance = "REAL CIC-IDS2017 — windowed from source CSVs"
-        model_trained_on = "synthetic generator (no real-trained bundle is shipped)"
     else:
         labelled, samples, manifest, dataset_id, derived_windowing = synthetic_dataset(
             scenario_count,
@@ -443,7 +534,10 @@ try:
             forecast_horizon,
         )
         dataset_provenance = "SYNTHETIC — generated, not captured traffic"
-        model_trained_on = "synthetic generator (matches the shipped bundle)"
+    # The model and the displayed data are separate facts and are stated
+    # separately. Reading it off the bundle means a real-trained model can never
+    # be described as synthetic, or the reverse.
+    model_trained_on = _model_provenance(artifact_dir, dataset_id)
 except Exception as error:  # a bad dataset must not take the app down
     ui.header("SENTINEL", "analyst console")
     ui.banner(
@@ -458,10 +552,18 @@ except Exception as error:  # a bad dataset must not take the app down
 
 # A verified artifact directory short-circuits in-app training, so opening the
 # console shows the shipped model rather than retraining one first.
-if artifact_dir is not None:
+if artifact_dir is not None and artifact_dir.is_dir():
     from sentinel.predict import load_artifacts
 
-    st.session_state["loaded_artifacts"] = load_artifacts(artifact_dir)
+    # Reuse across reruns, but re-load when the visitor switches dataset so the
+    # model never keeps scoring one dataset's events with another's model.
+    if st.session_state.get("loaded_artifacts") is None or st.session_state.get(
+        "loaded_bundle_dir"
+    ) != str(artifact_dir):
+        st.session_state["loaded_artifacts"] = load_artifacts(artifact_dir)
+        st.session_state["loaded_bundle_dir"] = str(artifact_dir)
+        # The live engine caches windows scored by the previous model.
+        st.session_state.pop("live_engine", None)
     st.session_state["artifact_dir"] = str(artifact_dir)
     needs_training = False
 else:
@@ -556,6 +658,7 @@ with tabs[2]:
         manifest=manifest,
         schema=schema,
         loaded=loaded,
+        artifact_dir=artifact_dir,
         sequence_length=sequence_length,
         forecast_horizon=forecast_horizon,
         seed=seed,

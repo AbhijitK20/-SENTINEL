@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SENTINEL — attack-progression forecasting for network telemetry</title>
+    <meta
+      name="description"
+      content="SENTINEL forecasts how a network intrusion will progress across MITRE stages, and reports how well that holds up on real CIC-IDS2017 traffic."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header>
+      <div class="wrap">
+        <div class="brand">
+          <span>SENTINEL</span>
+          <span class="tag">attack-progression forecasting</span>
+        </div>
+        <nav aria-label="Primary">
+          <a href="#results">Results</a>
+          <a href="#status">Status</a>
+          <a id="nav-repo" href="#">Repository</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <div class="wrap">
+        <div class="hero">
+          <h1>It forecasts where the attack goes next.</h1>
+          <p>
+            Most intrusion tooling answers &ldquo;is this bad?&rdquo; SENTINEL answers
+            &ldquo;what happens next, how soon, and on what evidence?&rdquo; &mdash; a
+            K-step open-loop forecast across seven MITRE stages, scored against real
+            CIC-IDS2017 traffic rather than only synthetic replay.
+          </p>
+          <div class="cta">
+            <a class="btn btn-primary" id="cta-console" href="#status">Open the console</a>
+            <a class="btn btn-ghost" id="cta-api" href="#status">API reference</a>
+          </div>
+        </div>
+      </div>
+
+      <section>
+        <div class="wrap">
+          <h2>What it actually does</h2>
+          <p class="section-note">
+            Four properties that decide whether a forecast is worth an analyst&rsquo;s
+            attention.
+          </p>
+          <div class="cards">
+            <article class="card">
+              <h3>K-step open-loop rollout</h3>
+              <p>
+                Given a window of flow features, the world model rolls forward several
+                steps with no further input, so the forecast is a claim about the
+                future &mdash; not a smoothing of the present.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Observed and forecast never blend</h3>
+              <p>
+                Confirmed attack evidence sits outside the risk colour ramp on purpose.
+                You can always tell what the network did from what the model expects.
+              </p>
+            </article>
+            <article class="card">
+              <h3>A deployment baseline, not a global mean</h3>
+              <p>
+                Detectors score against a median/MAD baseline fitted on disjoint benign
+                reference traffic, so &ldquo;unusual&rdquo; is relative to this network
+                rather than to a constant every network shares.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Generalisation is measured, not assumed</h3>
+              <p>
+                Leave-one-entity-out over real windows, with per-stage breakdown, so an
+                unseen-stage number cannot hide behind a pooled average.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="results">
+        <div class="wrap">
+          <h2>Measured results</h2>
+          <p class="section-note">
+            Every figure names the method that produced it. The real-data and
+            synthetic numbers come from the same pipeline on different inputs, and
+            they are not comparable to each other.
+          </p>
+          <table class="results">
+            <caption>
+              Produced by <code>scripts/train_real_bundle.py</code>,
+              <code>scripts/run_loeo_benchmark.py</code> and
+              <code>scripts/measure_real_detectors.py</code>.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Result</th>
+                <th scope="col">Value</th>
+                <th scope="col">Method</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">F1, real CIC-IDS2017 test split</th>
+                <td class="num">0.242</td>
+                <td class="method">Logistic regression, 67 features, 32 blocks</td>
+              </tr>
+              <tr>
+                <th scope="row">Recall, real test split</th>
+                <td class="num">0.610</td>
+                <td class="method">Same run</td>
+              </tr>
+              <tr>
+                <th scope="row">False-positive rate, real test split</th>
+                <td class="num">0.181</td>
+                <td class="method">Same run</td>
+              </tr>
+              <tr>
+                <th scope="row">F1, synthetic replay</th>
+                <td class="num">0.892</td>
+                <td class="method">Same pipeline, generated states</td>
+              </tr>
+              <tr>
+                <th scope="row">AUC, unseen attack stage</th>
+                <td class="num">0.645</td>
+                <td class="method">Leave-one-entity-out, 983 real windows</td>
+              </tr>
+              <tr>
+                <th scope="row">Lateral-movement alerts, benign traffic</th>
+                <td class="num">6.0%</td>
+                <td class="method">Median/MAD baseline on real benign reference</td>
+              </tr>
+              <tr>
+                <th scope="row">Lateral-movement alerts, attack traffic</th>
+                <td class="num">16.1%</td>
+                <td class="method">Same baseline</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="caveat">
+            <strong>Read the 0.242 before the 0.892.</strong>
+            <p>
+              On real traffic this model is evidence for a human analyst, not a
+              blocking control. A 0.242 F1 and a 16.1% lateral-movement alert rate mean
+              the network still catches most attacks by hand, and the synthetic figure
+              is both the larger number and the one that generalises worse. The
+              deployment baseline exists because the raw detector flagged 99.2% of
+              benign traffic; it is mitigation, not resolution.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="status">
+        <div class="wrap">
+          <h2>Live services</h2>
+          <p class="section-note">
+            Both tiers run on free cloud tiers, so both sleep when idle. A cold start
+            is normal and reported as such rather than as an outage.
+          </p>
+          <div class="status-grid">
+            <div class="status-card">
+              <div class="label">API</div>
+              <div id="api-status" class="pill unconfigured">
+                <span class="dot" aria-hidden="true"></span>
+                <span id="api-status-text">checking&hellip;</span>
+              </div>
+              <div class="detail" id="api-detail"></div>
+              <p class="hint" id="api-hint"></p>
+            </div>
+            <div class="status-card">
+              <div class="label">Console</div>
+              <div class="pill unconfigured">
+                <span class="dot" aria-hidden="true"></span>
+                <span>manual check</span>
+              </div>
+              <p class="hint">
+                The console sends no CORS headers, so a browser cannot read a health
+                probe for it. Open it instead &mdash; expect a wake-up screen on the
+                first visit.
+              </p>
+              <p><a id="console-link" href="#">Open the console &rarr;</a></p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <p>
+          SENTINEL &mdash; offline-first network intrusion forecasting.
+          <a id="foot-repo" href="#">Repository</a> &middot;
+          <a id="foot-docs" href="#">Deployment notes</a>
+        </p>
+      </div>
+    </footer>
+
+    <script src="config.js"></script>
+    <script src="status.js"></script>
+  </body>
+</html>

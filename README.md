@@ -1,10 +1,10 @@
 ---
 title: SENTINEL - SIH26153
-emoji: Shield
+emoji: 🛰️
 colorFrom: blue
 colorTo: indigo
-sdk: docker
-app_port: 8501
+sdk: streamlit
+app_file: streamlit_app.py
 pinned: false
 ---
 

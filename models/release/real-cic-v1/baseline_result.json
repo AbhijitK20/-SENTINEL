@@ -1,0 +1,629 @@
+{
+  "model_version": "logistic-regression-baseline-v1",
+  "seed": 42,
+  "horizon": 5,
+  "config": {
+    "excluded_features": [
+      "source_port",
+      "destination_port",
+      "protocol",
+      "tcp_flags"
+    ],
+    "regularization_c": 1.0,
+    "class_weight": "balanced",
+    "max_iterations": 1000,
+    "decision_threshold": 0.5
+  },
+  "feature_schema": {
+    "version": "state-features-v1",
+    "names": [
+      "ack_count",
+      "ack_count_mean",
+      "ack_count_sum",
+      "bytes",
+      "bytes_max",
+      "bytes_mean",
+      "bytes_p90",
+      "bytes_std",
+      "bytes_sum",
+      "destination_port_nunique",
+      "dst_port_entropy",
+      "dst_port_low_share",
+      "dst_port_nunique",
+      "dst_port_randomness",
+      "dst_port_sequential_score",
+      "dst_port_wellknown_share",
+      "duration",
+      "duration_max",
+      "duration_mean",
+      "duration_std",
+      "event_count",
+      "external_destination_count",
+      "fin_count",
+      "fin_count_mean",
+      "fin_count_sum",
+      "flag_ack_ratio",
+      "flag_fin_ratio",
+      "flag_no_ack_share",
+      "flag_psh_ratio",
+      "flag_rst_ratio",
+      "flag_syn_ack_ratio",
+      "flag_syn_ratio",
+      "flag_urg_ratio",
+      "flag_xmas_share",
+      "flow_event_count",
+      "flow_iat_mean_ms",
+      "frag_df_share",
+      "frag_mf_share",
+      "frag_offset_nunique",
+      "high_port_ratio",
+      "iat_cv",
+      "iat_max",
+      "iat_mean",
+      "iat_min",
+      "iat_p90",
+      "iat_var",
+      "packet_event_count",
+      "packets",
+      "packets_max",
+      "packets_mean",
+      "packets_sum",
+      "ports_per_host_max",
+      "proto_icmp_share",
+      "proto_tcp_share",
+      "proto_udp_share",
+      "psh_count",
+      "retransmission_count",
+      "retransmission_rate",
+      "rst_count",
+      "rst_count_mean",
+      "rst_count_sum",
+      "source_port_nunique",
+      "src_port_ephemeral_share",
+      "syn_count",
+      "syn_count_mean",
+      "syn_count_sum",
+      "ttl_nunique_per_src"
+    ],
+    "excluded": [],
+    "means": [
+      370.4257731958763,
+      0.3291414180271294,
+      370.4257731958763,
+      23872552.082474228,
+      16491512.870103093,
+      25421.72464316372,
+      6854.630549828175,
+      560364.4487410409,
+      23872552.082474228,
+      214.43367697594502,
+      3.6470923071272248,
+      0.08044406033875215,
+      214.43367697594502,
+      0.8755822759684466,
+      0.12441772403155253,
+      0.7743260794147543,
+      10.851211973307889,
+      118.83374708350476,
+      10.851211973307889,
+      28.2305888692253,
+      1184.089003436426,
+      0.0,
+      29.40790378006873,
+      0.019855168842771335,
+      29.40790378006873,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1184.089003436426,
+      1397636322.5789418,
+      0.0,
+      0.0,
+      0.0,
+      0.7781057837680765,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      26661.66975945017,
+      12831.617869415808,
+      27.497373083185167,
+      26661.66975945017,
+      65.1020618556701,
+      0.0,
+      0.0,
+      0.0,
+      343.19621993127146,
+      0.0,
+      0.0,
+      0.2632302405498282,
+      0.0004755032902263568,
+      0.2632302405498282,
+      796.0896907216495,
+      0.565873934116665,
+      60.86013745704467,
+      0.06593775134925464,
+      60.86013745704467,
+      0.0
+    ],
+    "scales": [
+      737.6899830938793,
+      0.13194346183166597,
+      737.6899830938793,
+      96980602.1233481,
+      87143820.44429736,
+      124607.27605890461,
+      8079.421275497836,
+      2995019.789758708,
+      96980602.1233481,
+      247.03175269258372,
+      1.1052113049989691,
+      0.0929080192860539,
+      247.03175269258372,
+      0.059046973469682455,
+      0.05904697346968251,
+      0.11729468589418497,
+      5.439671953258404,
+      6.705522156195562,
+      5.439671953258404,
+      6.8827917489896215,
+      1438.36734669456,
+      1.0,
+      179.7338265078075,
+      0.021094714357738704,
+      179.7338265078075,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1438.36734669456,
+      4168571651.2886753,
+      1.0,
+      1.0,
+      1.0,
+      0.10590455153701302,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      75709.97757135348,
+      66889.29896506746,
+      97.25907231436865,
+      75709.97757135348,
+      227.31233390098984,
+      1.0,
+      1.0,
+      1.0,
+      607.9165747381635,
+      1.0,
+      1.0,
+      1.4615772720753393,
+      0.003000340009493522,
+      1.4615772720753393,
+      835.1423410151478,
+      0.14174732446824828,
+      54.30860676141482,
+      0.045773726768809794,
+      54.30860676141482,
+      1.0
+    ],
+    "missing_value": 0.0
+  },
+  "split_manifest": {
+    "seed": 42,
+    "train_scenarios": [
+      "friday-am-b1",
+      "friday-pm-ddos-b1",
+      "friday-pm-ddos-b2",
+      "friday-pm-portscan-b1",
+      "friday-pm-portscan-b2",
+      "friday-pm-portscan-b3",
+      "monday-b0",
+      "monday-b1",
+      "monday-b2",
+      "monday-b3",
+      "thursday-am-b0",
+      "thursday-am-b3",
+      "thursday-pm-b0",
+      "thursday-pm-b2",
+      "tuesday-b0",
+      "tuesday-b1",
+      "tuesday-b2",
+      "wednesday-b0",
+      "wednesday-b2"
+    ],
+    "validation_scenarios": [
+      "friday-am-b2",
+      "friday-am-b3",
+      "thursday-am-b1",
+      "thursday-am-b2",
+      "thursday-pm-b1",
+      "wednesday-b1"
+    ],
+    "test_scenarios": [
+      "friday-am-b0",
+      "friday-pm-ddos-b0",
+      "friday-pm-ddos-b3",
+      "friday-pm-portscan-b0",
+      "thursday-pm-b3",
+      "tuesday-b3",
+      "wednesday-b3"
+    ]
+  },
+  "split_audit": {
+    "sample_counts": {
+      "train": 2910,
+      "validation": 787,
+      "test": 818
+    },
+    "positive_counts": {
+      "train": 599,
+      "validation": 290,
+      "test": 41
+    },
+    "scenario_counts": {
+      "train": 19,
+      "validation": 6,
+      "test": 7
+    },
+    "disjoint_scenarios": true,
+    "disjoint_state_keys": true,
+    "unassigned_scenarios": []
+  },
+  "metrics": {
+    "train": {
+      "sample_count": 2910,
+      "positive_count": 599,
+      "precision": 0.5005537098560354,
+      "recall": 0.7545909849749582,
+      "f1": 0.6018641810918776,
+      "false_positive_rate": 0.19515361315447857,
+      "pr_auc": 0.6602744303383127,
+      "counts": {
+        "true_positive": 452,
+        "false_positive": 451,
+        "true_negative": 1860,
+        "false_negative": 147
+      }
+    },
+    "validation": {
+      "sample_count": 787,
+      "positive_count": 290,
+      "precision": 0.488,
+      "recall": 0.2103448275862069,
+      "f1": 0.29397590361445786,
+      "false_positive_rate": 0.12877263581488935,
+      "pr_auc": 0.45146256779275873,
+      "counts": {
+        "true_positive": 61,
+        "false_positive": 64,
+        "true_negative": 433,
+        "false_negative": 229
+      }
+    },
+    "test": {
+      "sample_count": 818,
+      "positive_count": 41,
+      "precision": 0.15060240963855423,
+      "recall": 0.6097560975609756,
+      "f1": 0.2415458937198068,
+      "false_positive_rate": 0.18146718146718147,
+      "pr_auc": 0.27154271748322784,
+      "counts": {
+        "true_positive": 25,
+        "false_positive": 141,
+        "true_negative": 636,
+        "false_negative": 16
+      }
+    }
+  },
+  "feature_weights": [
+    {
+      "name": "dst_port_entropy",
+      "coefficient": 5.270701372683417
+    },
+    {
+      "name": "dst_port_wellknown_share",
+      "coefficient": 3.2991656575671504
+    },
+    {
+      "name": "source_port_nunique",
+      "coefficient": 1.9870037902437945
+    },
+    {
+      "name": "destination_port_nunique",
+      "coefficient": -1.9287604887117056
+    },
+    {
+      "name": "dst_port_nunique",
+      "coefficient": -1.9287604887117056
+    },
+    {
+      "name": "psh_count",
+      "coefficient": -1.5162871472782067
+    },
+    {
+      "name": "ports_per_host_max",
+      "coefficient": 1.1127851994824003
+    },
+    {
+      "name": "ack_count_sum",
+      "coefficient": 1.0679978929604255
+    },
+    {
+      "name": "ack_count",
+      "coefficient": 1.0679978929604255
+    },
+    {
+      "name": "packets_max",
+      "coefficient": -1.058898000768561
+    },
+    {
+      "name": "flow_iat_mean_ms",
+      "coefficient": 0.8600021921389152
+    },
+    {
+      "name": "high_port_ratio",
+      "coefficient": 0.8020473716249182
+    },
+    {
+      "name": "rst_count_mean",
+      "coefficient": -0.7205347656110243
+    },
+    {
+      "name": "dst_port_low_share",
+      "coefficient": 0.6659220344269444
+    },
+    {
+      "name": "bytes_p90",
+      "coefficient": -0.655851674253955
+    },
+    {
+      "name": "bytes_std",
+      "coefficient": 0.6034192798031871
+    },
+    {
+      "name": "fin_count_sum",
+      "coefficient": -0.5329559572364011
+    },
+    {
+      "name": "fin_count",
+      "coefficient": -0.5329559572364011
+    },
+    {
+      "name": "bytes_mean",
+      "coefficient": -0.5036196842277847
+    },
+    {
+      "name": "duration_max",
+      "coefficient": 0.4978072094766492
+    },
+    {
+      "name": "syn_count",
+      "coefficient": 0.4353921903539878
+    },
+    {
+      "name": "syn_count_sum",
+      "coefficient": 0.43539219035394566
+    },
+    {
+      "name": "duration_std",
+      "coefficient": -0.3578162816222941
+    },
+    {
+      "name": "packets_sum",
+      "coefficient": 0.32836607785215793
+    },
+    {
+      "name": "packets",
+      "coefficient": 0.32836607785215793
+    },
+    {
+      "name": "rst_count",
+      "coefficient": 0.2534095607443615
+    },
+    {
+      "name": "rst_count_sum",
+      "coefficient": 0.2534095607443615
+    },
+    {
+      "name": "fin_count_mean",
+      "coefficient": -0.25229175364754886
+    },
+    {
+      "name": "duration_mean",
+      "coefficient": 0.19301590282706857
+    },
+    {
+      "name": "duration",
+      "coefficient": 0.19301590282706857
+    },
+    {
+      "name": "syn_count_mean",
+      "coefficient": -0.15385299568180974
+    },
+    {
+      "name": "packets_mean",
+      "coefficient": 0.1370658107650731
+    },
+    {
+      "name": "src_port_ephemeral_share",
+      "coefficient": -0.10879530397483729
+    },
+    {
+      "name": "bytes",
+      "coefficient": 0.10855378613666376
+    },
+    {
+      "name": "bytes_sum",
+      "coefficient": 0.10855378613666376
+    },
+    {
+      "name": "ack_count_mean",
+      "coefficient": -0.06435448541521142
+    },
+    {
+      "name": "dst_port_sequential_score",
+      "coefficient": -0.04543914910521907
+    },
+    {
+      "name": "dst_port_randomness",
+      "coefficient": 0.04543914910520017
+    },
+    {
+      "name": "event_count",
+      "coefficient": 0.018843488826382652
+    },
+    {
+      "name": "flow_event_count",
+      "coefficient": 0.018843488826382652
+    },
+    {
+      "name": "bytes_max",
+      "coefficient": 0.005548316471046273
+    },
+    {
+      "name": "ttl_nunique_per_src",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_urg_ratio",
+      "coefficient": 0.0
+    },
+    {
+      "name": "iat_p90",
+      "coefficient": 0.0
+    },
+    {
+      "name": "iat_var",
+      "coefficient": 0.0
+    },
+    {
+      "name": "packet_event_count",
+      "coefficient": 0.0
+    },
+    {
+      "name": "iat_min",
+      "coefficient": 0.0
+    },
+    {
+      "name": "retransmission_count",
+      "coefficient": 0.0
+    },
+    {
+      "name": "proto_icmp_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "proto_udp_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "proto_tcp_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "retransmission_rate",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_xmas_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "frag_mf_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "frag_df_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "frag_offset_nunique",
+      "coefficient": 0.0
+    },
+    {
+      "name": "iat_mean",
+      "coefficient": 0.0
+    },
+    {
+      "name": "iat_max",
+      "coefficient": 0.0
+    },
+    {
+      "name": "iat_cv",
+      "coefficient": 0.0
+    },
+    {
+      "name": "external_destination_count",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_syn_ratio",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_rst_ratio",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_syn_ack_ratio",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_psh_ratio",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_no_ack_share",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_fin_ratio",
+      "coefficient": 0.0
+    },
+    {
+      "name": "flag_ack_ratio",
+      "coefficient": 0.0
+    }
+  ],
+  "training_seconds": 0.02663798399953521,
+  "inference_microseconds_per_sample": 0.2505140649675622,
+  "runtime": {
+    "python": "3.12.13",
+    "scikit_learn": "1.9.0",
+    "numpy": "2.5.3",
+    "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43"
+  },
+  "model_sha256": "fb4e6014f0b36112a58fc861c5c1f7a07d5bc0264706a1eb1bd1c965d4a7967b",
+  "conformal": {
+    "conformal_version": "conformal-prediction-v1",
+    "coverage": 0.9,
+    "quantiles": {
+      "5": 0.8527509431122802
+    },
+    "calibration_sizes": {
+      "5": 787
+    },
+    "pooled_quantile": 0.8527509431122802,
+    "pooled_size": 787
+  },
+  "conformal_coverage": 0.9
+}
