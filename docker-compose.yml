@@ -190,6 +190,12 @@ services:
       dockerfile: Dockerfile
     environment:
       VITE_PROXY_TARGET: http://idurar-target:8888/
+    # Serve the production bundle, not the Vite dev server. The dev server
+    # re-optimises deps on start and its hashed pre-bundle URLs change, so any
+    # browser holding the old ones 404s on React and hangs on the loader
+    # forever. A built bundle has content-hashed assets and never drifts.
+    command: >
+      sh -c "npm run build && npx vite preview --host 0.0.0.0 --port 3002"
     ports:
       - "3002:3002"
     depends_on:
