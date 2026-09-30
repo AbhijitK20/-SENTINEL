@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -284,3 +285,39 @@ def test_attack_coverage_says_when_its_history_is_a_suffix(client: TestClient) -
     assert body["findings_evicted"] == 0
     assert body["coverage_is_partial"] is False
     assert body["findings_retained"] >= 0
+
+
+def test_health_names_the_dataset_the_loaded_bundle_was_trained_on(client: TestClient) -> None:
+    """The real and synthetic bundles share a model_version, so /health must
+    disambiguate them by manifest dataset_id rather than leave it ambiguous."""
+    body = client.get("/health").json()
+    assert "dataset_id" in body
+    assert body["bundle"]
+
+
+def test_bundle_provenance_reads_the_manifest(tmp_path) -> None:
+    from sentinel.api.app import _bundle_provenance
+
+    artifact_dir = tmp_path / "bundle"
+    artifact_dir.mkdir()
+    (artifact_dir / "MANIFEST.json").write_text(
+        json.dumps({"bundle": "real-cic-v1", "dataset_id": "cic-ids2017-derived-v1"}),
+        encoding="utf-8",
+    )
+    assert _bundle_provenance(artifact_dir) == {
+        "bundle": "real-cic-v1",
+        "dataset_id": "cic-ids2017-derived-v1",
+    }
+
+
+def test_bundle_provenance_tolerates_a_missing_or_broken_manifest(tmp_path) -> None:
+    from sentinel.api.app import _bundle_provenance
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _bundle_provenance(empty) == {"bundle": "empty", "dataset_id": ""}
+
+    broken = tmp_path / "broken"
+    broken.mkdir()
+    (broken / "MANIFEST.json").write_text("{not json", encoding="utf-8")
+    assert _bundle_provenance(broken) == {"bundle": "broken", "dataset_id": ""}

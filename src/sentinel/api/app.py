@@ -11,6 +11,7 @@ Run: ``uv run uvicorn sentinel.api:create_app --factory --port 8100``
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections import defaultdict
@@ -20,6 +21,7 @@ from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -38,6 +40,44 @@ from sentinel.state_builder import build_network_states
 from sentinel.threat_intel import ThreatIntelFeed
 
 DEFAULT_ASSETS_DIR = Path("reports/generated/real-benchmark/baseline")
+
+# GET routes readable without an API key when SENTINEL_PUBLIC_READ is on.
+# An explicit allowlist, never "every GET": /v1/alerts returns the last 20
+# ledger records and /v1/cases returns incident cases, so neither is public
+# by accident. Writes are excluded entirely.
+PUBLIC_READ_PATHS = frozenset(
+    {
+        "/model",
+        "/v1/compliance",
+        "/v1/registry",
+        "/v1/live",
+        "/v1/attack-coverage",
+        "/v1/attack-coverage/navigator",
+        "/v1/predict/next",
+    }
+)
+
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _bundle_provenance(artifact_dir: Path) -> dict[str, str]:
+    """Which dataset the loaded bundle was trained on, read from its manifest.
+
+    Mirrors the console's provenance badge. The real and synthetic bundles both
+    report ``model_version == "logistic-regression-baseline-v1"``, so without
+    this a deployed service cannot say which one it is serving, and the
+    threshold alone is too thin a thread to hang that claim on.
+    """
+    try:
+        manifest = json.loads((artifact_dir / "MANIFEST.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"bundle": artifact_dir.name, "dataset_id": ""}
+    return {
+        "bundle": str(manifest.get("bundle") or artifact_dir.name),
+        "dataset_id": str(manifest.get("dataset_id") or ""),
+    }
+
+
 DEFAULT_AUTH_DIR = Path("reports/api")
 
 
@@ -195,14 +235,31 @@ def create_app(
     auth_enabled: bool = True,
     auth_dir: str | Path | None = None,
     threat_feed_file: str | Path | None = None,
+    public_read: bool = False,
+    cors_origins: list[str] | None = None,
 ) -> FastAPI:
     """Build the API app against one artifacts directory.
 
     ``threshold=None`` uses the artifact-calibrated threshold, then 0.5 —
     the same resolution chain as every other inference path.
+
+    ``public_read`` opens the read-only allowlist in ``PUBLIC_READ_PATHS``
+    without a key. Writes and the ledger/case stores stay keyed. ``cors_origins``
+    adds a CORS middleware for browser callers (the hosted landing page). Both
+    default off, so the local/authenticated behaviour is unchanged.
     """
     # Env-var fallbacks keep the factory signature deployment-friendly
-    # (HF Spaces / Fly.io configure via environment, not code).
+    # (HF Spaces / Cloud Run configure via environment, not code).
+    public_read_enabled = (
+        public_read or os.environ.get("SENTINEL_PUBLIC_READ", "").strip().lower() in _TRUTHY
+    )
+    origins = cors_origins
+    if origins is None:
+        origins = [
+            origin.strip()
+            for origin in os.environ.get("SENTINEL_CORS_ORIGINS", "").split(",")
+            if origin.strip()
+        ]
     resolved_dir = Path(
         artifacts_dir or os.environ.get("SENTINEL_ARTIFACTS_DIR") or DEFAULT_ASSETS_DIR
     )
@@ -253,6 +310,18 @@ def create_app(
         description="Attack-progression forecasting and attack-type detection over unified events.",
     )
 
+    if origins:
+        # Read-only surface: GET/OPTIONS only, so a browser on an allowed origin
+        # can poll status without being able to write via CORS even if a key
+        # leaks. No allow_credentials — the public surface is keyless.
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_methods=["GET", "OPTIONS"],
+            allow_headers=["Content-Type", "X-API-Key"],
+            max_age=600,
+        )
+
     @app.exception_handler(ValidationError)
     async def _validation_handler(_: Request, exc: ValidationError) -> JSONResponse:
         return _error("invalid_payload", str(exc.errors()[:3]), 422)
@@ -284,6 +353,16 @@ def create_app(
             x_api_key: str | None = Header(default=None, alias="X-API-Key"),
         ) -> ApiKeyRecord | None:
             if keys is None:
+                return None
+            # Keyless read-only: match on the real request path, not the `path`
+            # argument — some routes share a permission scope (e.g. the
+            # Navigator export passes "/v1/attack-coverage"), so the scope alone
+            # would under- or over-match the allowlist.
+            if (
+                public_read_enabled
+                and method in {"GET", "HEAD"}
+                and request.url.path in PUBLIC_READ_PATHS
+            ):
                 return None
             if not x_api_key:
                 raise HTTPException(status_code=401, detail="missing X-API-Key header")
@@ -324,6 +403,9 @@ def create_app(
             "model_version": artifacts.baseline_result.model_version,
             "threshold": effective_threshold,
             "auth_enabled": auth_enabled,
+            "public_read": public_read_enabled,
+            "cors_origins": origins,
+            **_bundle_provenance(resolved_dir),
             "time": datetime.now(UTC).isoformat(),
         }
 
