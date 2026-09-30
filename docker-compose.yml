@@ -149,18 +149,35 @@ services:
     profiles: ["lab"]
     networks: [lab-net]
 
+  mongo:
+    image: mongo:6
+    environment:
+      MONGO_INITDB_DATABASE: idurar
+    volumes:
+      - mongo-data:/data/db
+    networks: [lab-net]
+    restart: unless-stopped
+    profiles: ["lab"]
+
   idurar-target:
     build:
       context: ../idurar-erp-crm/backend
       dockerfile: Dockerfile
     environment:
-      DATABASE: mongodb://host.docker.internal:27017/idurar
+      DATABASE: mongodb://mongo:27017/idurar
       JWT_SECRET: ${IDURAR_JWT_SECRET:-sentinel-idurar-lab-secret}
       NODE_ENV: development
       OPENSSL_CONF: /dev/null
       PUBLIC_SERVER_FILE: http://idurar-target:8888/
-    extra_hosts:
-      - host.docker.internal:host-gateway
+    volumes:
+      # Idurar 4.1.0 ships no signup route, so a fresh Mongo volume can never
+      # authenticate anyone and /login 401s forever. This seeds the lab admin on
+      # every start so the target is actually reachable in a browser.
+      - ./lab/seed_admin.js:/app/seed_admin.js:ro
+    command: >
+      sh -c "node /app/seed_admin.js || true && node src/server.js"
+    depends_on:
+      - mongo
     expose:
       - "8888"
     networks: [lab-net]
@@ -173,6 +190,12 @@ services:
       dockerfile: Dockerfile
     environment:
       VITE_PROXY_TARGET: http://idurar-target:8888/
+    # Serve the production bundle, not the Vite dev server. The dev server
+    # re-optimises deps on start and its hashed pre-bundle URLs change, so any
+    # browser holding the old ones 404s on React and hangs on the loader
+    # forever. A built bundle has content-hashed assets and never drifts.
+    command: >
+      sh -c "npm run build && npx vite preview --host 0.0.0.0 --port 3002"
     ports:
       - "3002:3002"
     depends_on:
@@ -300,3 +323,4 @@ networks:
 
 volumes:
   demo-logs:
+  mongo-data:

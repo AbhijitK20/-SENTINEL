@@ -91,6 +91,13 @@ def load_artifacts(
     When ``calibration.json`` exists beside the baseline artifacts, its
     validated ``best_threshold`` is loaded and applied automatically so a
     calibrated run never needs a CLI flag.
+
+    ``temporal_dir`` defaults to the baseline directory when it holds a
+    ``temporal_result.json``. A release bundle ships both in one directory, so
+    callers that only knew the baseline path still got the temporal model:
+    without this the dashboard rendered the Comparison tab with one series
+    instead of two, and told the Forecast tab that "temporal model artifacts
+    were not provided" while they sat unread in the same folder.
     """
     baseline_root = Path(baseline_dir)
     baseline_result_path = baseline_root / "baseline_result.json"
@@ -111,6 +118,8 @@ def load_artifacts(
     temporal_models: dict[int, object] = {}
     temporal_result_path: str | None = None
     temporal_model_dir: str | None = None
+    if temporal_dir is None and (baseline_root / "temporal_result.json").is_file():
+        temporal_dir = baseline_root
     if temporal_dir is not None:
         t_root = Path(temporal_dir)
         t_result_path = t_root / "temporal_result.json"

@@ -50,6 +50,13 @@ from sentinel.attack_phases import (  # noqa: E402
 from sentinel.schemas import UnifiedEvent  # noqa: E402
 
 EVENT_SPACING = 31  # seconds between events (must exceed stride)
+# The live engine's window/stride, as configured in src/sentinel/api/app.py.
+# Phases that need detector history have to fill whole windows on purpose.
+WINDOW_SECONDS = 60.0
+STRIDE_SECONDS = 30.0
+# Bytes per pivoted call. detect_lateral bands known-edge throughput at
+# 750-900 B/s, so a 60 s window needs >54 KB across the hosts to clear it.
+PIVOT_BYTES = 24 * 1024.0
 
 # ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -392,9 +399,23 @@ def phase_injection(target: str, base: datetime) -> list[UnifiedEvent]:
 
 
 def phase_lateral(target: str, base: datetime) -> list[UnifiedEvent]:
-    """Chained API calls across endpoints (simulate pivot)."""
-    print("[5/9] Lateral movement — chained endpoint access")
+    """Chained API calls that pivot across already-known internal hosts.
+
+    ``detect_lateral`` scores bytes on internal edges that appeared in the
+    previous ``LATERAL_LOOKBACK`` windows - not attacks, and not new edges. An
+    earlier version of this phase emitted one ``lateral-actor -> target:8888``
+    edge per call, so every window looked like a brand-new edge, the known-edge
+    byte count stayed at zero, and the detector was structurally unable to fire
+    regardless of volume.
+
+    So the phase now walks a fixed set of internal hosts repeatedly: the first
+    pass establishes the edges, later passes put sustained volume on edges the
+    detector has already seen. Both behaviours are real: an attacker who pivots
+    to a host tends to keep using it.
+    """
+    print("[5/9] Lateral movement — chained endpoint access across internal hosts")
     events = []
+    hosts = ["app-01.internal", "db-01.internal", "files-01.internal"]
     chain = [
         "/api/users",
         "/api/customers",
@@ -409,29 +430,48 @@ def phase_lateral(target: str, base: datetime) -> list[UnifiedEvent]:
         "/api/settings",
         "/api/setting/list",
     ]
-    for i, path in enumerate(chain):
-        status, body = _get(target, path)
-        events.append(
-            _evt(
-                i,
-                "lateral-actor",
-                "target:8888",
-                "flow",
-                {
-                    "http_status": float(status),
-                    "bytes_sent": 150.0,
-                    "bytes_received": float(len(body)),
-                    "new_internal_edge": 1.0,
-                    "new_edge_bytes": float(len(body)),
-                    "endpoint_depth": float(path.count("/")),
-                    "flows_per_second": 0.3,
-                },
-                "Lateral Movement",
-                base + timedelta(seconds=i * EVENT_SPACING),
-                "lateral_movement",
+    idx = 0
+    # Sustained activity, not one burst, and sized for the live engine's real
+    # window. Two facts drove this shape, both measured:
+    #
+    #   * `detect_lateral` scores an internal edge only after it appears in a
+    #     *previous* window, so events packed into one window leave history at
+    #     depth 1 and can never fire however much volume they carry.
+    #   * the API runs 60 s windows and the band is 750-900 B/s on known edges,
+    #     so a window needs >54 KB across the pivoted hosts to clear it. The
+    #     old 64 B responses were five orders of magnitude under that floor.
+    #
+    # So: three hosts, one window each, ~24 KB per call. The first two windows
+    # register the edges; the rest carry the volume.
+    for _sweep in range(8):
+        for hop, path in enumerate(chain[:3]):
+            src = hosts[hop % len(hosts)]
+            status, body = _get(target, path)
+            offset = (idx // len(hosts)) * WINDOW_SECONDS + (idx % len(hosts)) * 2.0
+            events.append(
+                _evt(
+                    idx,
+                    src,
+                    "target:8888",
+                    "flow",
+                    {
+                        "http_status": float(status),
+                        # A pivot moves real data: 24 KB is what clearing the
+                        # detector's byte-rate band on a 60 s window requires.
+                        "bytes_sent": 150.0,
+                        "bytes_received": max(float(len(body)), PIVOT_BYTES),
+                        "new_internal_edge": 1.0,
+                        "new_edge_bytes": float(len(body)),
+                        "endpoint_depth": float(path.count("/")),
+                        "flows_per_second": 0.3,
+                    },
+                    "Lateral Movement",
+                    base + timedelta(seconds=offset),
+                    "lateral_movement",
+                )
             )
-        )
-    print(f"  → {len(chain)} chained calls")
+            idx += 1
+    print(f"  → {len(events)} calls across {len(hosts)} internal hosts")
     return events
 
 

@@ -146,3 +146,30 @@ def test_report_json_round_trip_stability(tmp_path: Path) -> None:
         return "\n".join(line for line in text.splitlines() if not line.startswith("- Generated:"))
 
     assert strip(report_one) == strip(report_two)
+
+
+def test_split_scenarios_outranks_the_artifacts_manifest(tmp_path: Path) -> None:
+    """The scored split must come from the data on screen, not the bundle.
+
+    The console generates a fresh dataset every load, so the manifest recorded
+    when the model was trained names scenarios that need not exist in it.
+    Filtering on that emptied the set and failed the whole replay with "no
+    labelled states remain after split filtering".
+    """
+    labelled, loaded, _ = _setup(tmp_path)
+
+    present = sorted({item.scenario_id for item in labelled})
+    chosen = set(present[: max(1, len(present) // 2)])
+    evaluation = evaluate_replay(labelled, loaded, horizon=1, split_scenarios=chosen)
+
+    assert evaluation.rows
+    assert {row.scenario_id for row in evaluation.rows} <= chosen
+
+
+def test_split_scenarios_that_match_nothing_fails_loudly(tmp_path: Path) -> None:
+    """A stale manifest must not silently degrade into evaluating everything."""
+    labelled, loaded, _ = _setup(tmp_path)
+
+    stale = {"scenario-that-was-never-generated"}
+    with pytest.raises(ValueError, match="no labelled states remain"):
+        evaluate_replay(labelled, loaded, horizon=1, split_scenarios=stale)

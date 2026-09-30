@@ -24,7 +24,7 @@ from sentinel.dashboard.state import LEDGER_PATH
 from sentinel.evaluation import evaluate_replay
 from sentinel.features import vectorize_states
 from sentinel.frontend import ui
-from sentinel.frontend.tokens import color, plotly_layout
+from sentinel.frontend.tokens import PLOTLY_CONFIG, color, plotly_layout
 from sentinel.ledger import AlertLedger
 from sentinel.predict import DECISION_THRESHOLD, forecast
 from sentinel.report import render_report
@@ -176,7 +176,7 @@ def overview(ctx: ScreenContext) -> None:
             )
         )
         figure.update_layout(**plotly_layout(height=260, yaxis={"title": {"text": "windows"}}))
-        st.plotly_chart(figure, width="stretch")
+        st.plotly_chart(figure, width="stretch", config=PLOTLY_CONFIG)
     with columns[1]:
         stage_counts: dict[str, int] = {}
         for item in ctx.labelled:
@@ -196,7 +196,7 @@ def overview(ctx: ScreenContext) -> None:
             )
         )
         figure.update_layout(**plotly_layout(height=260))
-        st.plotly_chart(figure, width="stretch")
+        st.plotly_chart(figure, width="stretch", config=PLOTLY_CONFIG)
     ui.end_panel()
 
     ui.stats(
@@ -367,7 +367,7 @@ def _walk_forward(ctx: ScreenContext, scenario: str, states: list, cut: int) -> 
             xaxis={"title": {"text": "window position"}},
         )
     )
-    st.plotly_chart(figure, width="stretch")
+    st.plotly_chart(figure, width="stretch", config=PLOTLY_CONFIG)
     ui.end_panel()
 
 
@@ -498,7 +498,7 @@ def states_screen(ctx: ScreenContext) -> None:
     )
     figure.update_yaxes(type="log")
     figure.update_layout(**plotly_layout(height=340, xaxis={"tickangle": -45}, margin={"b": 90}))
-    st.plotly_chart(figure, width="stretch")
+    st.plotly_chart(figure, width="stretch", config=PLOTLY_CONFIG)
     ui.end_panel()
 
     ui.panel("This window inside the scenario", "Moving the slider moves the marker.")
@@ -530,7 +530,7 @@ def states_screen(ctx: ScreenContext) -> None:
     figure.add_vline(x=state.window_start, line_dash="dot", line_color=color("risk-severe"))
     figure.update_yaxes(type="log")
     figure.update_layout(**plotly_layout(height=300, yaxis={"title": {"text": "value (log)"}}))
-    st.plotly_chart(figure, width="stretch")
+    st.plotly_chart(figure, width="stretch", config=PLOTLY_CONFIG)
     ui.end_panel()
 
     with st.expander(f"Edges in this window ({len(state.edge_summary)})"):
@@ -628,7 +628,7 @@ def comparison_screen(ctx: ScreenContext) -> None:
         figure.update_layout(
             **plotly_layout(height=300, yaxis={"range": [0, 1.05], "title": {"text": "score"}})
         )
-        st.plotly_chart(figure, width="stretch")
+        st.plotly_chart(figure, width="stretch", config=PLOTLY_CONFIG)
         ui.end_panel()
 
 
@@ -646,7 +646,15 @@ def replay_screen(ctx: ScreenContext) -> None:
         "the horizon. Lead time is only credited when the forecast crossed the "
         "threshold no later than the realised onset."
     )
-    signature = (ctx.dataset_fingerprint, ctx.forecast_horizon, "test", 8)
+    # The split on screen, not the one recorded when the model was trained.
+    replay_scenarios = set(ctx.manifest.test_scenarios or ())
+    signature = (
+        ctx.dataset_fingerprint,
+        ctx.forecast_horizon,
+        "test",
+        8,
+        tuple(sorted(replay_scenarios)),
+    )
     if st.session_state.get("replay_signature") != signature:
         st.session_state.pop("replay_eval", None)
         st.session_state["replay_signature"] = signature
@@ -664,6 +672,7 @@ def replay_screen(ctx: ScreenContext) -> None:
                     ctx.loaded,
                     horizon=ctx.forecast_horizon,
                     split_filter="test",
+                    split_scenarios=replay_scenarios or None,
                     max_history=8,
                 )
             except ValueError as error:
@@ -871,7 +880,7 @@ def metrics_screen(ctx: ScreenContext) -> None:
             height=420, xaxis={"title": {"text": "coefficient"}}, yaxis={"autorange": "reversed"}
         )
     )
-    st.plotly_chart(figure, width="stretch")
+    st.plotly_chart(figure, width="stretch", config=PLOTLY_CONFIG)
     ui.end_panel()
 
     ui.panel("Split audit", "The mechanical check that the holdout is a holdout.")
@@ -953,7 +962,11 @@ def story_screen(ctx: ScreenContext) -> None:
 
     ui.panel("1 · Network topology", "Links are observed communication, not proof of compromise.")
     nodes, edges = replay_topology(phase_index, contained=contained)
-    st.plotly_chart(topology_figure(nodes, edges, active_labels={phase.name}), width="stretch")
+    st.plotly_chart(
+        topology_figure(nodes, edges, active_labels={phase.name}),
+        width="stretch",
+        config=PLOTLY_CONFIG,
+    )
     ui.end_panel()
 
     ui.panel("2 · Attack workflow")
@@ -988,7 +1001,11 @@ def story_screen(ctx: ScreenContext) -> None:
     from sentinel.sequence_detector import ATTACK_TRANSITIONS
 
     active_types = {item.attack_type for item in phases[:phase_index]}
-    st.plotly_chart(kill_chain_figure(ATTACK_TRANSITIONS, active=active_types), width="stretch")
+    st.plotly_chart(
+        kill_chain_figure(ATTACK_TRANSITIONS, active=active_types),
+        width="stretch",
+        config=PLOTLY_CONFIG,
+    )
     ui.end_panel()
 
     ui.panel("5 · Analyst response workflow")

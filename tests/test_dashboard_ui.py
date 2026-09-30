@@ -29,6 +29,7 @@ TAB_LABELS = [
     "Metrics",
     "Demo",
     "Attack story",
+    "Targets",
 ]
 
 

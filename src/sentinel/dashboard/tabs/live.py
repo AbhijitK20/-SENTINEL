@@ -20,7 +20,7 @@ from sentinel.attack_phases import PHASE_NAMES, PHASES, parse_summary
 from sentinel.dashboard.live_artifacts import select_live_artifacts
 from sentinel.feedback import VERDICTS as FEEDBACK_VERDICTS
 from sentinel.feedback import FeedbackStore
-from sentinel.frontend.tokens import color, plotly_layout
+from sentinel.frontend.tokens import PLOTLY_CONFIG, color, plotly_layout
 from sentinel.live import (
     CsvReplaySource,
     EventReplaySource,
@@ -43,9 +43,7 @@ LOCAL_ATTACK_SPEED = 2.0
 # cutting to it, and the camera is held still so the eye can follow the shape of
 # the curve instead of re-finding it.
 LIVE_CHART_CONFIG = {
-    "displayModeBar": False,
-    "scrollZoom": False,
-    "doubleClick": False,
+    **PLOTLY_CONFIG,
     "transition": {"duration": 500, "easing": "cubic-in-out"},
     "frame": {"duration": 420, "redraw": False},
 }

@@ -29,7 +29,7 @@ DURING_ATTACK detection is a separate capability metric.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -104,14 +104,20 @@ def evaluate_replay(
     horizon: int,
     threshold: float | None = None,
     split_filter: str | None = "test",
+    split_scenarios: Collection[str] | None = None,
     max_history: int | None = None,
     min_history: int = 2,
     forecast_fn: Callable[..., Forecast] | None = None,
 ) -> ReplayEvaluation:
     """Walk forward through each scenario and score every forecast.
 
-    ``split_filter`` restricts evaluation to one split ("test" by default)
-    using the artifacts' recorded split manifest; pass ``None`` to evaluate
+    ``split_scenarios`` names the scenarios to score and outranks
+    ``split_filter``. The caller usually wants the split of the data actually on
+    screen, which is not the split recorded when the model was trained: the
+    console generates a fresh dataset on every load, so the artifacts' manifest
+    names scenarios that need not exist in it, and filtering on that emptied the
+    set and failed the whole run. Pass ``None`` to fall back to ``split_filter``
+    against the artifacts' manifest; pass ``None`` for ``split_filter`` to evaluate
     every state. ``max_history`` truncates the history fed to the temporal
     models, which were trained with a fixed sequence length.
 
@@ -131,13 +137,21 @@ def evaluate_replay(
     if not labelled_states:
         raise ValueError("at least one labelled state is required")
 
-    allowed_scenarios = _allowed_scenarios(artifacts, split_filter)
+    allowed_scenarios = (
+        set(split_scenarios) if split_scenarios else _allowed_scenarios(artifacts, split_filter)
+    )
     by_scenario: dict[str, list[LabelledState]] = {}
     for item in labelled_states:
         if allowed_scenarios is None or item.scenario_id in allowed_scenarios:
             by_scenario.setdefault(item.scenario_id, []).append(item)
     if not by_scenario:
-        raise ValueError("no labelled states remain after split filtering")
+        present = sorted({item.scenario_id for item in labelled_states})
+        raise ValueError(
+            "no labelled states remain after split filtering. "
+            f"Asked for {sorted(allowed_scenarios or [])}; the data holds {present}. "
+            "The split comes from the dataset on screen, so this means the split "
+            "and the data disagree - regenerate the split for this dataset."
+        )
 
     rows: list[ReplayRow] = []
     warnings: list[str] = []
