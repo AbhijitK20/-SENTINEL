@@ -169,6 +169,13 @@ services:
       NODE_ENV: development
       OPENSSL_CONF: /dev/null
       PUBLIC_SERVER_FILE: http://idurar-target:8888/
+    volumes:
+      # Idurar 4.1.0 ships no signup route, so a fresh Mongo volume can never
+      # authenticate anyone and /login 401s forever. This seeds the lab admin on
+      # every start so the target is actually reachable in a browser.
+      - ./lab/seed_admin.js:/app/seed_admin.js:ro
+    command: >
+      sh -c "node /app/seed_admin.js || true && node src/server.js"
     depends_on:
       - mongo
     expose:
