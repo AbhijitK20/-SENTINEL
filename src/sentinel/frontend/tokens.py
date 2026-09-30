@@ -291,6 +291,19 @@ def css_variables() -> dict[str, str]:
     return variables
 
 
+PLOTLY_CONFIG = {
+    # Hide the modebar. Its PNG/SVG download buttons call Plotly's
+    # `requireServerUri`, which needs a live WebSocket back to Streamlit; on a
+    # serverless host that socket reconnects and the click raises
+    # "not connected to a server!" in the browser console. Disabling the modebar
+    # removes the only UI that can trigger it.
+    "displayModeBar": False,
+    "scrollZoom": False,
+    "doubleClick": False,
+    "staticPlot": False,
+}
+
+
 def plotly_layout(**overrides) -> dict:
     """A Plotly layout that inherits the token palette.
 

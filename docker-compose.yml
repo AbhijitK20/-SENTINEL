@@ -149,18 +149,28 @@ services:
     profiles: ["lab"]
     networks: [lab-net]
 
+  mongo:
+    image: mongo:6
+    environment:
+      MONGO_INITDB_DATABASE: idurar
+    volumes:
+      - mongo-data:/data/db
+    networks: [lab-net]
+    restart: unless-stopped
+    profiles: ["lab"]
+
   idurar-target:
     build:
       context: ../idurar-erp-crm/backend
       dockerfile: Dockerfile
     environment:
-      DATABASE: mongodb://host.docker.internal:27017/idurar
+      DATABASE: mongodb://mongo:27017/idurar
       JWT_SECRET: ${IDURAR_JWT_SECRET:-sentinel-idurar-lab-secret}
       NODE_ENV: development
       OPENSSL_CONF: /dev/null
       PUBLIC_SERVER_FILE: http://idurar-target:8888/
-    extra_hosts:
-      - host.docker.internal:host-gateway
+    depends_on:
+      - mongo
     expose:
       - "8888"
     networks: [lab-net]
@@ -300,3 +310,4 @@ networks:
 
 volumes:
   demo-logs:
+  mongo-data:

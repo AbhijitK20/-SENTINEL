@@ -26,6 +26,7 @@ from sentinel.cic_ids2017 import build_labelled_states, flow_labels_from_events,
 from sentinel.config import BaselineConfig
 from sentinel.dashboard.screens import SCREENS, ScreenContext
 from sentinel.dashboard.tabs import live as live_tab
+from sentinel.dashboard.tabs import targets as targets_tab
 from sentinel.dashboard.tabs import world_model as world_model_tab
 from sentinel.frontend import ui
 from sentinel.frontend.theme import apply_theme
@@ -645,6 +646,7 @@ tabs = st.tabs(
         "Metrics",
         "Demo",
         "Attack story",
+        "Targets",
     ]
 )
 
@@ -677,3 +679,5 @@ with tabs[8]:
     SCREENS["demo"](ctx)
 with tabs[9]:
     SCREENS["story"](ctx)
+with tabs[10]:
+    targets_tab.render()

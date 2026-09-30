@@ -392,9 +392,23 @@ def phase_injection(target: str, base: datetime) -> list[UnifiedEvent]:
 
 
 def phase_lateral(target: str, base: datetime) -> list[UnifiedEvent]:
-    """Chained API calls across endpoints (simulate pivot)."""
-    print("[5/9] Lateral movement — chained endpoint access")
+    """Chained API calls that pivot across already-known internal hosts.
+
+    ``detect_lateral`` scores bytes on internal edges that appeared in the
+    previous ``LATERAL_LOOKBACK`` windows - not attacks, and not new edges. An
+    earlier version of this phase emitted one ``lateral-actor -> target:8888``
+    edge per call, so every window looked like a brand-new edge, the known-edge
+    byte count stayed at zero, and the detector was structurally unable to fire
+    regardless of volume.
+
+    So the phase now walks a fixed set of internal hosts repeatedly: the first
+    pass establishes the edges, later passes put sustained volume on edges the
+    detector has already seen. Both behaviours are real: an attacker who pivots
+    to a host tends to keep using it.
+    """
+    print("[5/9] Lateral movement — chained endpoint access across internal hosts")
     events = []
+    hosts = ["app-01.internal", "db-01.internal", "files-01.internal"]
     chain = [
         "/api/users",
         "/api/customers",
@@ -409,29 +423,36 @@ def phase_lateral(target: str, base: datetime) -> list[UnifiedEvent]:
         "/api/settings",
         "/api/setting/list",
     ]
-    for i, path in enumerate(chain):
-        status, body = _get(target, path)
-        events.append(
-            _evt(
-                i,
-                "lateral-actor",
-                "target:8888",
-                "flow",
-                {
-                    "http_status": float(status),
-                    "bytes_sent": 150.0,
-                    "bytes_received": float(len(body)),
-                    "new_internal_edge": 1.0,
-                    "new_edge_bytes": float(len(body)),
-                    "endpoint_depth": float(path.count("/")),
-                    "flows_per_second": 0.3,
-                },
-                "Lateral Movement",
-                base + timedelta(seconds=i * EVENT_SPACING),
-                "lateral_movement",
+    idx = 0
+    # Two passes: pass 0 registers each host->target edge, pass 1 revisits them.
+    for _sweep in range(2):
+        for hop, path in enumerate(chain):
+            src = hosts[hop % len(hosts)]
+            status, body = _get(target, path)
+            events.append(
+                _evt(
+                    idx,
+                    src,
+                    "target:8888",
+                    "flow",
+                    {
+                        "http_status": float(status),
+                        # A pivot moves real data. 150 B was below what the
+                        # detector's byte-rate band can ever register.
+                        "bytes_sent": 150.0,
+                        "bytes_received": max(float(len(body)), 4096.0),
+                        "new_internal_edge": 1.0,
+                        "new_edge_bytes": float(len(body)),
+                        "endpoint_depth": float(path.count("/")),
+                        "flows_per_second": 0.3,
+                    },
+                    "Lateral Movement",
+                    base + timedelta(seconds=idx * EVENT_SPACING),
+                    "lateral_movement",
+                )
             )
-        )
-    print(f"  → {len(chain)} chained calls")
+            idx += 1
+    print(f"  → {len(events)} calls across {len(hosts)} internal hosts")
     return events
 
 
