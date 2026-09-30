@@ -71,6 +71,11 @@ CLOUD = os.environ.get("SENTINEL_CLOUD") == "1"
 READONLY = os.environ.get("SENTINEL_READONLY") == "1"
 
 
+#: Set by resolve_artifact_dir when --artifacts / SENTINEL_ARTIFACTS_DIR named
+#: the bundle. An explicit choice outranks the dataset-driven selection below.
+_ARTIFACTS_EXPLICIT = False
+
+
 def resolve_artifact_dir(argv: list[str] | None = None) -> Path | None:
     """Where to load artifacts from, or ``None`` to train in-app.
 
@@ -101,6 +106,8 @@ def resolve_artifact_dir(argv: list[str] | None = None) -> Path | None:
                 f"artifacts directory not found: {candidate}. Check the path; the "
                 "console will not substitute a different bundle."
             )
+        global _ARTIFACTS_EXPLICIT
+        _ARTIFACTS_EXPLICIT = True
         return candidate
 
     from sentinel.predict import load_artifacts
@@ -114,6 +121,33 @@ def resolve_artifact_dir(argv: list[str] | None = None) -> Path | None:
             continue
         return candidate
     return None
+
+
+def bundle_for_mode(mode: str, derived_label: str) -> Path:
+    """The release bundle trained on the data the visitor actually selected.
+
+    One fixed bundle made the two facts contradict each other: the console
+    defaulted to a synthetic replay but scored it with the real-CIC model, and
+    that model returns ~0 probability on synthetic attack traffic. The rule
+    detectors still fired, so the Live tab showed "Lateral 1.00 critical"
+    beside "P(infiltration) 0.00 / Below Threshold" — both true, and together
+    they read as a broken model rather than a mismatched pair.
+
+    Each committed bundle answers the question it was trained for. Real traffic
+    gets the real-trained bundle; synthetic replay gets the synthetic-trained
+    one. `v1` is not a fallback to hide, it is the model for that dataset.
+
+    An explicitly supplied artifacts directory is never overridden: being told
+    "these are your artifacts" and silently getting a different bundle is worse
+    than an error.
+    """
+    if _ARTIFACTS_EXPLICIT:
+        return resolve_artifact_dir() or RELEASE_BUNDLE
+    if mode == derived_label and RELEASE_BUNDLE.is_dir():
+        return RELEASE_BUNDLE
+    if SYNTHETIC_BUNDLE.is_dir():
+        return SYNTHETIC_BUNDLE
+    return RELEASE_BUNDLE
 
 
 try:
@@ -349,9 +383,10 @@ with st.sidebar:
     ui.header("SENTINEL", "analyst console")
 
     st.caption(
-        "Model: the committed release bundle. Nothing is trained on open, and the "
-        "controls below re-window the displayed data, not the model."
-        if RELEASE_BUNDLE.is_dir()
+        "Model: the committed release bundle trained on the dataset selected below. "
+        "Nothing is trained on open, and the window controls re-window the displayed "
+        "data, not the model."
+        if RELEASE_BUNDLE.is_dir() and SYNTHETIC_BUNDLE.is_dir()
         else "No verified bundle found: this console trains on open. Pick a dataset below."
     )
 
@@ -366,6 +401,9 @@ with st.sidebar:
             + ([raw_label] if available else [])
         )
         mode = st.radio("Dataset", mode_options, index=0)
+        # The model has to be the one trained on the selected data, and both the
+        # header provenance and the model load below read this same value.
+        artifact_dir = bundle_for_mode(mode, derived_label)
 
         selected_days: list[str] = []
         if mode == raw_label:
@@ -514,10 +552,18 @@ except Exception as error:  # a bad dataset must not take the app down
 
 # A verified artifact directory short-circuits in-app training, so opening the
 # console shows the shipped model rather than retraining one first.
-if artifact_dir is not None:
+if artifact_dir is not None and artifact_dir.is_dir():
     from sentinel.predict import load_artifacts
 
-    st.session_state["loaded_artifacts"] = load_artifacts(artifact_dir)
+    # Reuse across reruns, but re-load when the visitor switches dataset so the
+    # model never keeps scoring one dataset's events with another's model.
+    if st.session_state.get("loaded_artifacts") is None or st.session_state.get(
+        "loaded_bundle_dir"
+    ) != str(artifact_dir):
+        st.session_state["loaded_artifacts"] = load_artifacts(artifact_dir)
+        st.session_state["loaded_bundle_dir"] = str(artifact_dir)
+        # The live engine caches windows scored by the previous model.
+        st.session_state.pop("live_engine", None)
     st.session_state["artifact_dir"] = str(artifact_dir)
     needs_training = False
 else:
@@ -612,6 +658,7 @@ with tabs[2]:
         manifest=manifest,
         schema=schema,
         loaded=loaded,
+        artifact_dir=artifact_dir,
         sequence_length=sequence_length,
         forecast_horizon=forecast_horizon,
         seed=seed,
