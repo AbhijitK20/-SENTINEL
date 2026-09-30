@@ -646,7 +646,15 @@ def replay_screen(ctx: ScreenContext) -> None:
         "the horizon. Lead time is only credited when the forecast crossed the "
         "threshold no later than the realised onset."
     )
-    signature = (ctx.dataset_fingerprint, ctx.forecast_horizon, "test", 8)
+    # The split on screen, not the one recorded when the model was trained.
+    replay_scenarios = set(ctx.manifest.test_scenarios or ())
+    signature = (
+        ctx.dataset_fingerprint,
+        ctx.forecast_horizon,
+        "test",
+        8,
+        tuple(sorted(replay_scenarios)),
+    )
     if st.session_state.get("replay_signature") != signature:
         st.session_state.pop("replay_eval", None)
         st.session_state["replay_signature"] = signature
@@ -664,6 +672,7 @@ def replay_screen(ctx: ScreenContext) -> None:
                     ctx.loaded,
                     horizon=ctx.forecast_horizon,
                     split_filter="test",
+                    split_scenarios=replay_scenarios or None,
                     max_history=8,
                 )
             except ValueError as error:
