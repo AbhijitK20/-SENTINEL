@@ -199,7 +199,7 @@ def test_lateral_phase_pivots_across_repeated_internal_hosts(monkeypatch) -> Non
     for src in sources:
         assert sum(1 for e in events if e.source_entity == src) > 1, src
     # and the volume has to clear the detector's byte-rate band
-    assert max(e.features.get("bytes", 0.0) for e in events) >= 4096.0
+    assert max(e.features.get("bytes", 0.0) for e in events) >= full_attack.PIVOT_BYTES
 
 
 def test_lateral_phase_is_detected_by_the_lateral_rule(monkeypatch) -> None:
@@ -225,3 +225,39 @@ def test_lateral_phase_is_detected_by_the_lateral_rule(monkeypatch) -> None:
         history.append(state)
 
     assert alerts, "lateral movement was not detected by its own detector"
+
+
+def test_lateral_phase_spans_enough_windows_for_detector_history(monkeypatch) -> None:
+    """Lateral must occupy several windows, not one burst.
+
+    `detect_lateral` scores an edge only after it has been seen in a previous
+    window, so a phase whose events all land inside a single window leaves
+    history at depth 1 and can never fire however much volume it carries. The
+    phase therefore has to fill several whole windows.
+    """
+    from datetime import UTC, datetime
+
+    from sentinel.state_builder import build_network_states
+
+    monkeypatch.setattr(full_attack, "_get", lambda target, path: (200, b"x" * 8192))
+    events = full_attack.phase_lateral("http://target", datetime.now(UTC))
+    # the same 60 s / 30 s geometry the API's push engine runs
+    states = build_network_states(events, window_seconds=60.0, stride_seconds=30.0)
+
+    assert len(states) >= 4, f"only {len(states)} window(s); history cannot reach MIN_HISTORY"
+
+
+def test_lateral_phase_carries_enough_bytes_to_clear_the_band(monkeypatch) -> None:
+    """Lateral volume has to exceed detect_lateral's 750-900 B/s band.
+
+    The phase used to emit 64 B responses. Against a 60 s window that is five
+    orders of magnitude under the floor, so the rule could not score above zero
+    no matter how many windows the phase spanned.
+    """
+    from sentinel.detectors import KNOWN_EDGE_BYTES_PER_SEC_ALERT
+
+    window_bytes = full_attack.PIVOT_BYTES * 3  # three pivoted hosts
+    rate = window_bytes / full_attack.WINDOW_SECONDS
+    assert rate >= KNOWN_EDGE_BYTES_PER_SEC_ALERT, (
+        f"{rate:.0f} B/s is under the {KNOWN_EDGE_BYTES_PER_SEC_ALERT:g} B/s alert floor"
+    )

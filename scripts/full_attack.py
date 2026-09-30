@@ -50,6 +50,13 @@ from sentinel.attack_phases import (  # noqa: E402
 from sentinel.schemas import UnifiedEvent  # noqa: E402
 
 EVENT_SPACING = 31  # seconds between events (must exceed stride)
+# The live engine's window/stride, as configured in src/sentinel/api/app.py.
+# Phases that need detector history have to fill whole windows on purpose.
+WINDOW_SECONDS = 60.0
+STRIDE_SECONDS = 30.0
+# Bytes per pivoted call. detect_lateral bands known-edge throughput at
+# 750-900 B/s, so a 60 s window needs >54 KB across the hosts to clear it.
+PIVOT_BYTES = 24 * 1024.0
 
 # ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -424,11 +431,23 @@ def phase_lateral(target: str, base: datetime) -> list[UnifiedEvent]:
         "/api/setting/list",
     ]
     idx = 0
-    # Two passes: pass 0 registers each host->target edge, pass 1 revisits them.
-    for _sweep in range(2):
-        for hop, path in enumerate(chain):
+    # Sustained activity, not one burst, and sized for the live engine's real
+    # window. Two facts drove this shape, both measured:
+    #
+    #   * `detect_lateral` scores an internal edge only after it appears in a
+    #     *previous* window, so events packed into one window leave history at
+    #     depth 1 and can never fire however much volume they carry.
+    #   * the API runs 60 s windows and the band is 750-900 B/s on known edges,
+    #     so a window needs >54 KB across the pivoted hosts to clear it. The
+    #     old 64 B responses were five orders of magnitude under that floor.
+    #
+    # So: three hosts, one window each, ~24 KB per call. The first two windows
+    # register the edges; the rest carry the volume.
+    for _sweep in range(8):
+        for hop, path in enumerate(chain[:3]):
             src = hosts[hop % len(hosts)]
             status, body = _get(target, path)
+            offset = (idx // len(hosts)) * WINDOW_SECONDS + (idx % len(hosts)) * 2.0
             events.append(
                 _evt(
                     idx,
@@ -437,17 +456,17 @@ def phase_lateral(target: str, base: datetime) -> list[UnifiedEvent]:
                     "flow",
                     {
                         "http_status": float(status),
-                        # A pivot moves real data. 150 B was below what the
-                        # detector's byte-rate band can ever register.
+                        # A pivot moves real data: 24 KB is what clearing the
+                        # detector's byte-rate band on a 60 s window requires.
                         "bytes_sent": 150.0,
-                        "bytes_received": max(float(len(body)), 4096.0),
+                        "bytes_received": max(float(len(body)), PIVOT_BYTES),
                         "new_internal_edge": 1.0,
                         "new_edge_bytes": float(len(body)),
                         "endpoint_depth": float(path.count("/")),
                         "flows_per_second": 0.3,
                     },
                     "Lateral Movement",
-                    base + timedelta(seconds=idx * EVENT_SPACING),
+                    base + timedelta(seconds=offset),
                     "lateral_movement",
                 )
             )
