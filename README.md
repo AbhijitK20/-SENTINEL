@@ -68,10 +68,12 @@ positive beats repeating the last window. See
 
 | Transition model | +1 | +2 | +3 | +4 | +5 | Mean skill |
 |---|---:|---:|---:|---:|---:|---:|
-| **World model (RSSM)** | 0.305 | 0.321 | 0.348 | 0.386 | 0.433 | **+0.189** |
+| **World model (RSSM)** | 0.305 | 0.321 | 0.348 | 0.386 | 0.433 | **+0.189** † |
 | Linear transition (stabilized ridge) | 0.616 | 0.616 | 0.617 | 0.619 | 0.627 | −0.429 |
 | Same net, no open-loop objective | 0.482 | 0.451 | 0.452 | 0.474 | 0.513 | −0.095 |
 | Persistence (repeat last) | 0.307 | 0.451 | 0.470 | 0.487 | 0.530 | 0.000 |
+
+† This table is the 5-horizon **core-comparison** run (`make bench-world`), whose report lands in gitignored `reports/generated/`. The number a reviewer can re-derive from a committed artifact is the 3-horizon release-bundle figure: **mean skill +0.160 on synthetic, -0.171 on real CIC-IDS2017**. Prefer that one when quoting a result.
 
 Three results worth the table:
 
@@ -95,21 +97,71 @@ payload distribution).
 | Recall | 0.917 | 0.917 |
 | F1 | 0.892 | 0.957 |
 | False-positive rate | 0.060 | 0.000 |
-| PR-AUC | 0.978 | 1.000 |
+| PR-AUC | 0.978 | 0.995 |
 
-### Real-data forecast (CIC-IDS2017, 5 attack families)
+### Real-data forecast (CIC-IDS2017)
 
-Trains on Tuesday (FTP/SSH-Patator), validates on Thursday morning (Web Attacks), tests each day separately.
+The licensed CIC-IDS2017 run is committed as a **derived windowed aggregate** —
+`data/derived/cicids2017_windows.parquet`, 4,899 windows x 67 features built from
+all eight day CSVs (2,830,743 flows). Aggregates only, no raw flows; citation and
+licence terms in `data/derived/PROVENANCE.md`.
 
-| Attack Family | Flows | Windows | Lead (0.50) | Crossing | False Early |
-|---|---|---|---|---|---|
-| Infiltration (Thu PM) | 286K | 97 | **0.5 win (75 s)** | 15% | 11% |
-| DDoS (Fri PM) | 225K | 37 | 0.0 | 36% | 9% |
-| PortScan (Fri PM) | 286K | 60 | None | 16% | 16% |
-| Botnet (Fri AM) | 191K | 97 | 0.0 | 20% | 10% |
-| DoS (Wed) | 692K | 204 | 0.0 | 32% | 12% |
+On the real test split (818 windows, 41 positive, threshold 0.05) the pipeline is
+**worse than its own baseline**:
 
-The per-horizon model demonstrates **75-second predictive lead time on Infiltration**. Other families show 0.0 lead — the model doesn't predict them ahead of time with current training data. This is an honest result: the architecture works for Infiltration; diverse dwell-time data is needed for other families.
+| Metric | Baseline (logistic) | Temporal (GRU h+1) |
+|---|---|---|
+| Precision | 0.151 | 0.121 |
+| Recall | 0.610 | 0.311 |
+| F1 | 0.242 | 0.174 |
+| False-positive rate | 0.181 | 0.127 |
+| PR-AUC | 0.272 | 0.202 |
+
+The temporal model is worse than the baseline at every horizon. No real-trained
+forecasting bundle is shipped for exactly that reason, and the console header
+states that the model is synthetic-trained.
+
+What does hold up on real traffic is generalisation to attack stages that were
+never in training — leave-one-attack-out over 983 windows at 300 s / 150 s
+(698 benign, 285 attack), threshold calibrated on a chronological slice of the
+training folds only:
+
+| Held-out stage | Windows | AUC | Benign FPR |
+|---|---:|---:|---:|
+| Lateral Movement | 28 | 0.780 | 0.7% |
+| Credential Access | 58 | 0.772 | 1.1% |
+| Reconnaissance | 24 | 0.754 | 4.4% |
+| Command and Control | 84 | 0.600 | 2.9% |
+| Denial of Service | 53 | 0.564 | 0.1% |
+| Initial Access | 38 | 0.401 | 0.0% |
+
+**Mean unseen-stage AUC 0.645, worst benign FPR 4.4%.** Read the AUC column, not
+the detection counts: balanced class weights miscalibrate the threshold for a
+stage that never appeared in training, so a detection rate in that regime
+measures a calibration artifact rather than a capability.
+
+### Withdrawn: the 75-second lead time
+
+Earlier versions of this README published a cross-day lead-time and false-early
+table across five CIC-IDS2017 attack families, headed by a **75-second predictive
+lead time on Infiltration**. That table is deleted rather than restated, for two
+reasons.
+
+1. **It was not reproducible.** The run depended on the licensed raw CSVs, which
+   are not committed. No clone could re-derive it, and a number that only one
+   machine ever produced is not a result — it is an anecdote.
+2. **The committed real-data measurement contradicts it.** The aggregate that *is*
+   in this repository puts the temporal model at F1 0.174 against a 0.242
+   baseline. A model that loses to its own baseline on real windows does not also
+   lead real traffic by half a window, and where the two disagree we publish the
+   one a reviewer can re-run.
+
+Every figure on this page comes from a committed artifact. Regenerate them all
+with:
+
+```bash
+uv run python scripts/export_benchmarks.py
+```
 
 ### Real-traffic detector validation (lab HTTP attacks)
 
@@ -238,11 +290,11 @@ docker compose logs -f demo-sensor demo-attacker
 ## Honest Limitations
 
 - Synthetic replay validates pipeline behavior, not production detection performance
-- World-model open-loop skill is measured on synthetic replay only. It degrades with horizon and no horizon is free
-- Imagination does not add lead time on the synthetic set: it matches during-attack detection with a zero false-early rate, but never fires before the attack starts — the per-horizon nowcast is what warns early
-- The linear transition baseline cannot simulate: both the one-step and the new multi-step fits are wildly expansive, and the stability projection discards ~99.999% of either, so the shipped linear map is close to a constant predictor. **The world model's +0.189 open-loop skill is therefore not a like-for-like comparison** — it beats a broken reference, and `rollout_forecast` now emits that caveat on the forecast itself. See `docs/KNOWN_LIMITATIONS.md`
+- **World-model open-loop skill is +0.160 on the synthetic release bundle and -0.171 on the real CIC-IDS2017 aggregate** (mean over +1..+3 against persistence). On real traffic it does not beat repeating the last window; it is negative at step +1 on both datasets and only turns positive as persistence itself degrades. No horizon is free
+- Imagination does not add lead time on the synthetic set: it matches during-attack detection with a zero false-early rate, but never fires before the attack starts. **No lead-time claim of any kind is made for real traffic** — see the withdrawn section above
+- The linear transition baseline cannot simulate: both the one-step and the new multi-step fits are wildly expansive, and the stability projection discards ~99.999% of either, so the shipped linear map is close to a constant predictor. **the world model's open-loop skill is therefore not a like-for-like comparison** — it beats a broken reference, and `rollout_forecast` now emits that caveat on the forecast itself. See `docs/KNOWN_LIMITATIONS.md`
 - Packet-level features only reach the model when the input actually contains packet events; a flow CSV produces flow features only and the forecast says so
-- **The CIC-IDS2017 dataset is not in this repository and is not downloaded by it.** `data/raw/` is gitignored. The real-data protocol is implemented and exercised on a generated CIC-schema fixture, which proves the code path but measures nothing. Real numbers require the licensed CSVs, and `run_real_benchmark.py` derives its claim status from the input so a fixture run can never be quoted as a result
+- **Only the derived CIC-IDS2017 aggregate is committed, never the raw CSVs.** `data/raw/` is gitignored, so `data/derived/cicids2017_windows.parquet` (4,899 windows x 67 features, from 2,830,743 flows) is what ships. That aggregate is enough to reproduce every real-data figure above. Re-running the windowing pass itself, or any benchmark needing packet fields, still requires the licensed CSVs under the dataset's research-use terms — `run_real_benchmark.py` derives its claim status from the input, so a fixture run can never be quoted as a result
 - The trust ledger is a hash chain, not a blockchain — it's the integration seam for a future permissioned chain
 - The vulnerable app, attack scripts, and blocklist are local training components — never expose to untrusted networks
 
